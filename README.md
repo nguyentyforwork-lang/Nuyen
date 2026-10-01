@@ -1,4 +1,4 @@
-# KPI App Ecomdy
+# UA Reporting
 
 Dashboard spend và ROAS IAA D0 theo app cho các camp TikTok có chữ "Ecomdy".
 
