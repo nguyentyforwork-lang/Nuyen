@@ -2,8 +2,8 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Apero Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KPI App Ecomdy</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -59,6 +59,7 @@
   .group-head .sub { color: var(--muted); font-size: 20px; }
 
   .grid {
+    align-items: start;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
     gap: 24px;
@@ -168,12 +169,25 @@
   .fields .hint { font-weight: 400; font-size: 12px; }
   .dlg-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
   .dlg-actions .spacer { flex: 1; }
+  .toast {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    background: var(--text); color: var(--card); padding: 10px 16px; border-radius: 10px;
+    font-size: 14px; max-width: calc(100vw - 32px); box-shadow: 0 6px 20px rgba(0,0,0,.18);
+  }
+  .sync { font-size: 13px; color: var(--muted); align-self: center; margin-right: auto; }
+  body:not(.synced) .sync.db, body.synced .sync.local { display: none; }
+  body.readonly [data-act="add-group"], body.readonly [data-act="add-app"], body.readonly [data-act="edit-group"],
+  body.readonly [data-act="edit-app"], body.readonly [data-act="import"], body.readonly [data-act="clear"] { display: none; }
+  .tb:focus-visible, .btn:focus-visible, .icon:focus-visible, .empty:focus-visible { outline: 2px solid var(--line); outline-offset: 2px; }
   @media (max-width: 520px) { .fields { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="toolbar">
+    <span class="sync db">Đã đồng bộ: lưu trên server, mở máy nào cũng thấy</span>
+    <span class="sync local">Lưu trong trình duyệt này. Dùng Xuất JSON để sao lưu</span>
     <button class="tb primary" data-act="add-group">+ Thêm nhóm</button>
     <button class="tb" data-act="export">Xuất JSON</button>
     <button class="tb" data-act="import">Nhập JSON</button>
@@ -223,44 +237,95 @@
   </form>
 </dialog>
 
+<dialog id="confirmDlg">
+  <form method="dialog">
+    <p style="margin:0 0 4px;font-size:16px;line-height:1.5"></p>
+    <div class="dlg-actions">
+      <button class="tb" value="cancel">Hủy</button>
+      <button class="tb danger" value="ok">Xóa</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+
 <script>
 /* ---------- Mô hình dữ liệu ----------
    group: { name, note, apps: [app] }
    app:   { name, os, kpi, campaign, account, spend, prevSpend, budget,
             daily: [{ date?, roas, spend? }] }   // cũ -> mới, phần tử cuối = hiện tại
-   Lưu trong localStorage của trình duyệt; dùng Xuất/Nhập JSON để sao lưu.
+
+   Lưu trữ:
+   - Mở trên Claude: database của trang (lưu trên server, máy nào cũng thấy).
+   - Mở ở nơi khác (GitHub Pages, file trên máy): localStorage của trình duyệt.
+   Dùng Xuất/Nhập JSON để sao lưu hoặc chuyển dữ liệu.
 */
 const STORE_KEY = "apero-dashboard-v1";
+const DB_DOC = "dashboard/main";
 const GOOD_RATIO = 0.9; // >= 90% KPI -> màu nâu, dưới -> đỏ
 
-const SAMPLE = [{
-  name: "Apero", note: "chỉ camp Ecomdy",
-  apps: [
-    { name: "AI Chat", kpi: 1, campaign: "APB508_Global_ROAS_Ecomdy", account: "7542372674190934023", spend: 728, prevSpend: 1486, budget: 1500,
-      daily: [1.12, 1.02, 1.03, 0.99, 1.06, 1.02, 1.01, 0.97, 1.00, 1.04, 1.00, 1.00, 0.95, 0.906].map(roas => ({ roas })) },
-    { name: "Elyra", kpi: 1, campaign: "Ecomdy_Elyra", account: "7660741366342991879", spend: 343, prevSpend: 174,
-      daily: [0.99, 0.92, 0.97, 0.94, 1.00, 0.96, 0.93, 0.97, 0.95, 0.91, 1.05, 1.03, 0.97, 0.957].map(roas => ({ roas })) },
-    { name: "Photo Editor (APL389)", kpi: 1, campaign: "APL389_Ecomdy", account: "7546063697488691217", spend: 299, prevSpend: 498, budget: 500,
-      daily: [1.00, 0.97, 0.96, 0.75, 1.03, 1.02, 0.92, 0.94, 1.01, 0.91, 0.63, 0.99, 1.01, 0.929].map(roas => ({ roas })) },
-    { name: "TutorMe", kpi: 1, campaign: "Ecomdy_TutorMe", account: "7660741366342991879", spend: 271, prevSpend: 207,
-      daily: [0.89, 0.88, 0.89, 0.90, 0.89, 0.89, 0.87, 0.89, 0.93, 0.92, 0.88, 0.84, 0.85, 0.802].map(roas => ({ roas })) },
-    { name: "Cast to TV", kpi: 1, campaign: "AIP805_Global_ROAS_Ecomdy", account: "7542372674190934023", spend: 94.31, prevSpend: 496, budget: 500,
-      daily: [0.70, 0.69, 0.63, 0.66, 0.10, 0.66, 0.62, 0.65, 0.66, 1.15, 0.80, 0.55, 0.53, 0.431].map(roas => ({ roas })) },
-  ],
-}];
+let groups = loadLocal();
+let dbRef = null;        // khi có database
+let readOnly = false;
+let writing = Promise.resolve();
 
-let groups = load();
-
-function load() {
+function loadLocal() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) {}
-  return structuredClone(SAMPLE);
+  return [];
 }
+
 function save() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(groups)); } catch (e) {}
   render();
+  const snapshot = structuredClone(groups);
+  if (!dbRef) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(snapshot)); }
+    catch (e) { toast("Trình duyệt không cho lưu dữ liệu. Hãy Xuất JSON để giữ lại."); }
+    return;
+  }
+  // Mỗi lần chỉ một lệnh ghi vào tài liệu.
+  writing = writing.then(() => dbRef.set({ groups: snapshot, updatedAt: new Date().toISOString() }))
+    .catch(err => {
+      if (err?.code === "invalid_argument") { readOnly = true; render(); toast("Bạn chỉ có quyền xem, thay đổi không được lưu."); }
+      else if (err?.code === "quota_exceeded") toast("Dữ liệu quá lớn để lưu. Hãy bớt số ngày hoặc xóa app cũ.");
+      else toast("Chưa lưu được thay đổi. Kiểm tra kết nối rồi thử lại.");
+    });
+}
+
+async function connectDb() {
+  const db = await window.claude?.use?.("db");
+  if (!db) return; // không có database: dùng localStorage
+  dbRef = db.doc(DB_DOC);
+  groups = [];
+  document.body.classList.add("synced");
+  render();
+  dbRef.onSnapshot(snap => {
+    if (snap.metadata.hasPendingWrites) return;
+    groups = snap.exists ? structuredClone(snap.data().groups || []) : [];
+    render();
+  }, () => { toast("Mất kết nối dữ liệu. Tải lại trang để tiếp tục."); });
+  try {
+    const user = await window.claude.use("user");
+    const can = await user?.can?.("data.write");
+    if (can === false) { readOnly = true; render(); }
+  } catch (e) {}
+}
+
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 4000);
+}
+
+/* Hộp xác nhận trong trang (confirm() bị chặn trong trang Claude) */
+function ask(message, okLabel = "Xóa") {
+  const dlg = document.getElementById("confirmDlg");
+  dlg.querySelector("p").textContent = message;
+  dlg.querySelector('[value="ok"]').textContent = okLabel;
+  dlg.returnValue = "";
+  dlg.showModal();
+  return new Promise(res => dlg.addEventListener("close", () => res(dlg.returnValue === "ok"), { once: true }));
 }
 
 /* ---------- Helpers ---------- */
@@ -353,8 +418,11 @@ function card(app, gi, ai) {
 
 function render() {
   const el = document.getElementById("app");
+  document.body.classList.toggle("readonly", readOnly);
   if (!groups.length) {
-    el.innerHTML = `<button class="empty" style="width:100%" data-act="add-group">Chưa có dữ liệu — bấm để thêm nhóm đầu tiên</button>`;
+    el.innerHTML = readOnly
+      ? `<div class="empty" style="width:100%">Chưa có dữ liệu.</div>`
+      : `<button class="empty" style="width:100%" data-act="add-group">Chưa có dữ liệu. Bấm để thêm nhóm đầu tiên (vd. Apero), rồi thêm app vào nhóm.</button>`;
     return;
   }
   el.innerHTML = groups.map((g, gi) => {
@@ -426,8 +494,8 @@ groupDlg.addEventListener("close", () => {
     if (gi == null) groups.push({ ...data, apps: [] });
     else Object.assign(groups[gi], data);
     save();
-  } else if (groupDlg.returnValue === "delete" && confirm(`Xóa nhóm "${groups[gi].name}" và toàn bộ app trong đó?`)) {
-    groups.splice(gi, 1); save();
+  } else if (groupDlg.returnValue === "delete") {
+    ask(`Xóa nhóm "${groups[gi].name}" và toàn bộ app trong đó?`).then(ok => { if (ok) { groups.splice(gi, 1); save(); } });
   }
 });
 
@@ -447,17 +515,25 @@ appDlg.addEventListener("close", () => {
     };
     if (ai == null) groups[gi].apps.push(app); else groups[gi].apps[ai] = app;
     save();
-  } else if (appDlg.returnValue === "delete" && confirm(`Xóa app "${groups[gi].apps[ai].name}"?`)) {
-    groups[gi].apps.splice(ai, 1); save();
+  } else if (appDlg.returnValue === "delete") {
+    ask(`Xóa app "${groups[gi].apps[ai].name}"?`).then(ok => { if (ok) { groups[gi].apps.splice(ai, 1); save(); } });
   }
 });
 
 /* ---------- Import / export ---------- */
-function exportJson() {
-  const blob = new Blob([JSON.stringify(groups, null, 2)], { type: "application/json" });
+async function exportJson() {
+  const filename = `dashboard-${new Date().toISOString().slice(0, 10)}.json`;
+  const json = JSON.stringify(groups, null, 2);
+  const downloads = await window.claude?.use?.("downloads");
+  if (downloads) {
+    try { await downloads.save({ filename, data: json }); }
+    catch (err) { if (err?.code !== "declined") toast("Không xuất được file lúc này."); }
+    return;
+  }
+  const blob = new Blob([json], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `dashboard-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -467,8 +543,9 @@ document.getElementById("importFile").addEventListener("change", async e => {
   try {
     const data = JSON.parse(await file.text());
     if (!Array.isArray(data)) throw new Error("File phải là mảng các nhóm");
-    groups = data; save();
-  } catch (err) { alert("Không đọc được file: " + err.message); }
+    if (groups.length && !(await ask("Nhập file sẽ thay toàn bộ dữ liệu hiện tại. Tiếp tục?", "Nhập"))) return;
+    groups = data; save(); toast("Đã nhập dữ liệu.");
+  } catch (err) { toast("Không đọc được file: " + err.message); }
 });
 
 /* ---------- Events ---------- */
@@ -491,12 +568,13 @@ document.addEventListener("click", e => {
     case "export": exportJson(); break;
     case "import": document.getElementById("importFile").click(); break;
     case "clear":
-      if (confirm("Xóa toàn bộ dữ liệu? (Nên Xuất JSON trước để sao lưu)")) { groups = []; save(); }
+      ask("Xóa toàn bộ dữ liệu? Nên Xuất JSON trước để sao lưu.", "Xóa hết").then(ok => { if (ok) { groups = []; save(); } });
       break;
   }
 });
 
 render();
+connectDb();
 </script>
 </body>
 </html>
