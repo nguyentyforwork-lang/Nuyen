@@ -356,7 +356,7 @@
     <h2>Nhóm tài khoản</h2>
     <div class="fields">
       <label class="full">Tên nhóm<input name="name" id="g-name" required placeholder="Apero"></label>
-      <label class="full">Lọc camp có chữ<input name="keyword" id="g-keyword" required value="Ecomdy"></label>
+      <label class="full">Lọc camp có chữ <span class="hint">(để trống = lấy mọi camp)</span><input name="keyword" id="g-keyword" value="Ecomdy" placeholder="Để trống = mọi camp"></label>
       <fieldset class="full groupby"><legend>Gom thẻ theo</legend>
         <div class="opts">
           <label class="opt"><input type="radio" name="groupBy" value="app" checked>
@@ -365,7 +365,7 @@
             <span class="opt-title">Tài khoản</span><span class="opt-desc">1 tài khoản 1 app · mỗi tài khoản 1 thẻ</span></label>
         </div>
       </fieldset>
-      <label class="full">ID tài khoản quảng cáo <span class="hint">(mỗi dòng 1 ID)</span>
+      <label class="full">ID tài khoản quảng cáo <span class="hint">(mỗi dòng 1 ID · muốn lọc riêng: <code>ID | từ khóa</code>, <code>ID | *</code> = mọi camp của tài khoản đó)</span>
         <textarea name="accounts" id="g-accounts" required placeholder="7542372674190934023&#10;7660741366342991879"></textarea></label>
     </div>
     <div class="dlg-actions">
@@ -477,6 +477,10 @@ const parseYmd = s => { const [y, m, d] = s.split("-").map(Number); return new D
 const dayDiff = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
 const shortDate = s => { const [, m, d] = s.split("-"); return `${d}/${m}`; };
 const spanText = (a, b) => a === b ? shortDate(a) : `${shortDate(a)}–${shortDate(b)}`;
+// Từ khóa lọc camp: theo nhóm (trống = mọi camp), có thể đặt riêng từng tài khoản ("ID | từ khóa", "*" = mọi camp)
+const groupKw = g => (g?.keyword ?? "Ecomdy").trim();
+const accKw = (g, acc) => { const k = g?.accKw?.[acc]; return k == null ? groupKw(g) : (k.trim() === "*" ? "" : k.trim()); };
+const kwText = kw => kw ? `camp ${kw}` : "mọi camp";
 const appName = code => config.apps[code]?.name || (String(code).startsWith("acc:") ? accInfo.get(code.slice(4))?.name || "Cả tài khoản" : code);
 const kpiOf = code => { const k = config.apps[code]?.kpi; return isNum(k) && k > 0 ? k : 1; };
 const roasCls = (roas, kpi) => roas >= kpi ? "up" : "down";
@@ -689,8 +693,8 @@ async function loadAccInfo(refresh) {
 }
 
 function appCode(name, kw) {
-  const segs = name.trim().split("_").map(s => s.trim()).filter(Boolean);
-  return segs.find(s => s.toLowerCase() !== kw.toLowerCase()) || segs[0] || "?";
+  const segs = name.trim().split(/[_|]/).map(s => s.trim()).filter(Boolean);
+  return segs.find(s => !kw || s.toLowerCase() !== kw.toLowerCase()) || segs[0] || "?";
 }
 function commonPrefix(names, kw) {
   let p = null;
@@ -709,7 +713,7 @@ function commonPrefix(names, kw) {
 
 // Kéo dữ liệu thô của 1 tài khoản. Việc gom theo app làm riêng (aggregate) để đổi bộ lọc camp không phải kéo lại.
 async function fetchAccount(acc, kw, win, refresh) {
-  const filtering = [{ field_name: "campaign_name", filter_type: "MATCH", filter_value: kw }];
+  const filtering = kw ? [{ field_name: "campaign_name", filter_type: "MATCH", filter_value: kw }] : undefined;
   const base = { advertiser_id: acc, report_type: "BASIC", data_level: "AUCTION_CAMPAIGN", filtering };
   // Số chính (spend, ROAS, Δ) lấy từ report TỔNG theo camp — giống TTAM, ít dòng (thường 1 trang) nên không
   // sót dòng khi số đang chạy. Report theo ngày (nhiều trang) chỉ dùng cho biểu đồ / bảng theo ngày / max budget.
@@ -717,7 +721,7 @@ async function fetchAccount(acc, kw, win, refresh) {
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end, order_field: "spend" }, refresh),
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end, order_field: "spend" }, refresh),
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end, order_field: "spend" }, refresh),
-    allPages("campaign_get", { advertiser_id: acc, filtering: { campaign_name: kw }, fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status", "roas_bid", "create_time"] }, refresh)
+    allPages("campaign_get", { advertiser_id: acc, ...(kw ? { filtering: { campaign_name: kw } } : {}), fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status", "roas_bid", "create_time"] }, refresh)
       .catch(() => ({ rows: [] })), // ngân sách là phụ: lỗi thì hiện spend TB/ngày
   ]);
   return {
@@ -837,8 +841,7 @@ const accRaw = new Map();   // `${acc}|${kw}` → dữ liệu thô của lần k
 function rebuild(gi) {
   const g = config.groups[gi], r = results[gi];
   if (!g || !r || r.status !== "ok") return;
-  const kw = (g.keyword || "Ecomdy").trim();
-  r.apps = r.accs.flatMap(acc => { const raw = accRaw.get(`${acc}|${kw}`); return raw ? aggregate(acc, raw, kw, g.groupBy) : []; });
+  r.apps = r.accs.flatMap(acc => { const kw = accKw(g, acc), raw = accRaw.get(`${acc}|${kw}`); return raw ? aggregate(acc, raw, kw, g.groupBy) : []; });
   r.apps.sort((a, b) => b.spend - a.spend);
 }
 
@@ -866,7 +869,6 @@ async function loadAll(refresh = false, silent = false) {
     ensureDefaultRange(); renderRangeUi();
     if (refresh) geoCache.clear();
     const win = rangeWindows();   // khoảng ngày chung (khóa cache); mỗi tài khoản dùng rangeWindows(acc)
-    const kw = (g.keyword || "Ecomdy").trim();
     const accounts = g.accounts || [];
     // Kéo lần lượt từng tài khoản trong nhóm; xong tài khoản nào hiện tài khoản đó
     const res = { status: "ok", apps: [], errors: [], accs: [], storedAt: null, rangeKey: `${win.cur.start}|${win.cur.end}`, progress: `0/${accounts.length}` };
@@ -874,6 +876,7 @@ async function loadAll(refresh = false, silent = false) {
     for (let i = 0; i < accounts.length; i++) {
       res.progress = `${i + 1}/${accounts.length}`;
       if (i) { rebuild(gi); render(); }   // khi chạy ngầm: thẻ của tài khoản vừa kéo xong đổi số ngay
+      const kw = accKw(g, accounts[i]);
       try {
         const raw = await fetchAccount(accounts[i], kw, rangeWindows(accounts[i]), refresh);
         if (gen !== loadGen) return;
@@ -1036,7 +1039,7 @@ function card(a) {
   const id = `${a.acc}-${a.code}`;
   const panel = openPanels.get(id);
   const accName = accInfo.get(a.acc)?.name;
-  const kwG = (config.groups[activeTab]?.keyword || "Ecomdy").trim();
+  const kwG = accKw(config.groups[activeTab], a.acc);
   const customF = !!ruleTerms(a.code, kwG);
   const byAcc = a.code.startsWith("acc:");
   const shownName = ov.name || (byAcc ? accName : "");
@@ -1056,7 +1059,7 @@ function card(a) {
       <input class="chip camp f-code${ov.appCode?.trim() ? " custom" : ""}" data-code="${esc(a.code)}" value="${esc(ov.appCode || "")}" placeholder="${esc(byAcc ? "Lọc theo mã app (không bắt buộc)" : a.code)}" spellcheck="false" aria-label="Mã app" ${readOnly ? "readonly" : ""}>
       <span class="share">${a.names.size} camp${customF ? "" : byAcc ? " · cả tài khoản" : " · tự gom"}</span>
     </div>`}
-    ${a.noMatch ? `<div class="match-err" role="alert">Không có camp ${esc(kwG)} nào chứa "${esc(ov.appCode)}" trong tài khoản này. Kiểm tra lại mã app.</div>` : ""}
+    ${a.noMatch ? `<div class="match-err" role="alert">Không có ${esc(kwText(kwG))} nào chứa "${esc(ov.appCode)}" trong tài khoản này. Kiểm tra lại mã app.</div>` : ""}
 
     ${trendCharts(a, days, kpi)}
 
@@ -1081,7 +1084,7 @@ function card(a) {
       </span>
       </div>
       <button class="new-badge${a.newCamps ? "" : " zero"}" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" data-new="1"
-      title="Camp ${esc(config.groups[activeTab]?.keyword || "Ecomdy")} được tạo trong khoảng ngày đang xem (theo giờ tài khoản). Bấm để xem.">
+      title="${esc(kwText(kwG))} được tạo trong khoảng ngày đang xem (theo giờ tài khoản). Bấm để xem.">
       <b>${a.newCamps}</b><span>New camp</span></button>
     </div>
     ${panel === "daily" ? `<div class="panel">${dailyPanel(a, kpi, days)}</div>` : ""}
@@ -1105,10 +1108,11 @@ function render() {
   const hiddenN = r0.apps.filter(a => isHidden(gi, a)).length;
   const r = { ...r0, apps: r0.apps.filter(a => !isHidden(gi, a)) };
   const total = r.apps.reduce((s, a) => s + a.spend, 0);
-  const kw = esc(g.keyword || "Ecomdy");
+  const ownN = (g.accounts || []).filter(a => accKw(g, a) !== groupKw(g)).length;
+  const kw = esc(groupKw(g) + (ownN ? ` · ${ownN} tài khoản lọc riêng` : ""));
   const sub = r.status === "ok"
-    ? `${r.apps.length} app · ${fmtUsd(Math.round(total))} · chỉ camp ${kw}${hiddenN ? ` · <button class="icon unhide edit-only" data-act="unhide" data-g="${esc(g.name)}">Hiện lại ${hiddenN} app đã xóa</button>` : ""}`
-    : `${(g.accounts || []).length} tài khoản · chỉ camp ${kw}`;
+    ? `${r.apps.length} app · ${fmtUsd(Math.round(total))} · ${kw ? `chỉ camp ${kw}` : "mọi camp"}${hiddenN ? ` · <button class="icon unhide edit-only" data-act="unhide" data-g="${esc(g.name)}">Hiện lại ${hiddenN} app đã xóa</button>` : ""}`
+    : `${(g.accounts || []).length} tài khoản · ${kw ? `chỉ camp ${kw}` : "mọi camp"}`;
   const status = r.status === "loading" ? "Đang kéo số…"
     : r.progress ? `Đang kéo tài khoản ${r.progress}…`
     : r.updating ? "Đang cập nhật…"
@@ -1117,7 +1121,7 @@ function render() {
   let body;
   if (r.status === "loading" || (r.progress && !r.apps.length)) body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
   else if (r.pageError || r.status !== "ok") body = `<div class="empty">Chưa có số liệu.</div>`;
-  else if (!r.apps.length && !r.errors.length) body = `<div class="empty">${hiddenN ? "Đã xóa hết app khỏi dashboard. Bấm \"Hiện lại\" ở trên để lấy lại." : `Không có camp ${kw} nào có spend trong khoảng ngày này.`}</div>`;
+  else if (!r.apps.length && !r.errors.length) body = `<div class="empty">${hiddenN ? "Đã xóa hết app khỏi dashboard. Bấm \"Hiện lại\" ở trên để lấy lại." : `Không có ${kw ? `camp ${kw}` : "camp"} nào có spend trong khoảng ngày này.`}</div>`;
   else body = [...r.apps].sort(bySort(appSort)).map(a => card(a)).join("") + (r.progress ? `<div class="card loading">Đang kéo tài khoản ${r.progress}…</div>` : "");
   const errs = r.errors.length ? `<div class="acc-errors">${r.errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
   const tabs = `<nav class="tabs" role="tablist" aria-label="Nhóm tài khoản">${config.groups.map((x, i) =>
@@ -1224,7 +1228,8 @@ function openGroup(gi) {
   editing = { gi };
   const f = groupDlg.querySelector("form");
   const g = gi != null ? config.groups[gi] : { name: "", keyword: "Ecomdy", accounts: [] };
-  f.name.value = g.name; f.keyword.value = g.keyword || "Ecomdy"; f.accounts.value = (g.accounts || []).join("\n");
+  f.name.value = g.name; f.keyword.value = g.keyword ?? "Ecomdy";
+  f.accounts.value = (g.accounts || []).map(a => g.accKw?.[a] != null ? `${a} | ${g.accKw[a]}` : a).join("\n");
   f.groupBy.value = g.groupBy === "account" ? "account" : "app";
   f.querySelector('[value="delete"]').hidden = gi == null;
   groupDlg.showModal();
@@ -1232,8 +1237,14 @@ function openGroup(gi) {
 groupDlg.addEventListener("close", () => {
   const f = groupDlg.querySelector("form"), { gi } = editing;
   if (groupDlg.returnValue === "save") {
-    const accounts = [...new Set(f.accounts.value.split(/[\s,;]+/).map(s => s.replace(/\D/g, "")).filter(Boolean))];
-    const g = { name: f.name.value.trim(), keyword: f.keyword.value.trim() || "Ecomdy", accounts, groupBy: f.groupBy.value === "account" ? "account" : "app" };
+    // Mỗi dòng: "ID" hoặc "ID | từ khóa" (từ khóa "*" = mọi camp). Dòng có nhiều ID cách nhau bằng dấu phẩy/khoảng trắng vẫn được.
+    const accounts = [], accKwMap = {};
+    for (const line of f.accounts.value.split(/\n/)) {
+      const [ids, kwPart] = line.split("|");
+      const list = (ids || "").split(/[\s,;]+/).map(x => x.replace(/\D/g, "")).filter(Boolean);
+      for (const id of list) { if (!accounts.includes(id)) accounts.push(id); if (kwPart != null && kwPart.trim()) accKwMap[id] = kwPart.trim(); }
+    }
+    const g = { name: f.name.value.trim(), keyword: f.keyword.value.trim(), accounts, accKw: accKwMap, groupBy: f.groupBy.value === "account" ? "account" : "app" };
     if (gi == null) { config.groups.push(g); setTab(config.groups.length - 1); } else config.groups[gi] = g;
     results = []; saveConfig(); loadAll();
   } else if (groupDlg.returnValue === "delete") {
