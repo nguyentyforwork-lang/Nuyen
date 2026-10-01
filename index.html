@@ -294,6 +294,9 @@
   .new-badge b { font-size: 32px; font-weight: 700; }
   .new-badge span { font-size: 13px; font-weight: 500; margin-top: 4px; white-space: nowrap; }
   .new-badge.zero { background: transparent; border-color: var(--border); color: var(--muted); }
+  .groupby { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; display: grid; gap: 6px; }
+  .groupby legend { font-size: 13px; color: var(--muted); font-weight: 500; padding: 0 4px; }
+  .groupby label { flex-direction: row !important; align-items: center; gap: 8px !important; color: var(--text) !important; font-size: 14px !important; }
   .match-err { margin-top: 8px; font-size: 13px; color: var(--down); background: color-mix(in srgb, var(--down) 8%, transparent); border-radius: 8px; padding: 6px 10px; }
   .f-code, .f-kw { font: inherit; font-size: 15px; font-weight: 500; min-width: 0; border: 1px dashed transparent; outline: none; }
   .f-code { flex: 1 1 120px; } .f-kw { flex: 1 1 100px; }
@@ -341,6 +344,10 @@
     <div class="fields">
       <label class="full">Tên nhóm<input name="name" id="g-name" required placeholder="Apero"></label>
       <label class="full">Lọc camp có chữ<input name="keyword" id="g-keyword" required value="Ecomdy"></label>
+      <fieldset class="full groupby"><legend>Gom thẻ theo</legend>
+        <label><input type="radio" name="groupBy" value="app" checked> Mã app <span class="hint">— 1 tài khoản chạy nhiều app, mỗi mã app 1 thẻ</span></label>
+        <label><input type="radio" name="groupBy" value="account"> Tài khoản <span class="hint">— 1 tài khoản 1 app, mỗi tài khoản 1 thẻ</span></label>
+      </fieldset>
       <label class="full">ID tài khoản quảng cáo <span class="hint">(mỗi dòng 1 ID)</span>
         <textarea name="accounts" id="g-accounts" required placeholder="7542372674190934023&#10;7660741366342991879"></textarea></label>
     </div>
@@ -453,6 +460,7 @@ const parseYmd = s => { const [y, m, d] = s.split("-").map(Number); return new D
 const dayDiff = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
 const shortDate = s => { const [, m, d] = s.split("-"); return `${d}/${m}`; };
 const spanText = (a, b) => a === b ? shortDate(a) : `${shortDate(a)}–${shortDate(b)}`;
+const appName = code => config.apps[code]?.name || (String(code).startsWith("acc:") ? accInfo.get(code.slice(4))?.name || "Cả tài khoản" : code);
 const kpiOf = code => { const k = config.apps[code]?.kpi; return isNum(k) && k > 0 ? k : 1; };
 const roasCls = (roas, kpi) => roas >= kpi ? "up" : "down";
 let regionNames = null;
@@ -726,9 +734,14 @@ function assigner(kw) {
   };
 }
 
-function aggregate(acc, raw, kw) {
+// mode "account": cả tài khoản là 1 app (khóa "acc:<id>"); mã app nhập vào (nếu có) chỉ để lọc thêm.
+function aggregate(acc, raw, kw, mode = "app") {
   const kwl = kw.toLowerCase();
-  const assign = assigner(kw);
+  const accKey = `acc:${acc}`;
+  const accTerms = mode === "account" ? ruleTerms(accKey, kw) : null;
+  const assign = mode === "account"
+    ? (name => !accTerms || accTerms.every(t => name.toLowerCase().includes(t)) ? accKey : null)
+    : assigner(kw);
   const apps = new Map();
   const campaigns = new Map();  // id → { id, name, code, spend, rev, status, budget, budgetMode }
   const get = code => {
@@ -792,8 +805,9 @@ function aggregate(acc, raw, kw) {
   const allNames = [...new Set([...raw.cur, ...raw.trend].map(r => r.metrics?.campaign_name)
     .concat(raw.camps.map(c => c.campaign_name)).filter(ok))].map(n => n.toLowerCase());
   const autoHere = new Set(allNames.map(n => appCode(n, kw).toLowerCase()));
-  for (const code of Object.keys(config.apps)) {
+  for (const code of (mode === "account" ? [accKey] : Object.keys(config.apps))) {
     const t = ruleTerms(code, kw); if (!t) continue;
+    if (mode === "account") { if (!allNames.some(n => t.every(x => n.includes(x)))) get(code).noMatch = t.join(" + "); continue; }
     if (!apps.has(code) && !autoHere.has(code.toLowerCase())) continue;   // app không thuộc tài khoản này
     if (!allNames.some(n => t.every(x => n.includes(x)))) get(code).noMatch = t.join(" + ");
   }
@@ -807,7 +821,7 @@ function rebuild(gi) {
   const g = config.groups[gi], r = results[gi];
   if (!g || !r || r.status !== "ok") return;
   const kw = (g.keyword || "Ecomdy").trim();
-  r.apps = r.accs.flatMap(acc => { const raw = accRaw.get(`${acc}|${kw}`); return raw ? aggregate(acc, raw, kw) : []; });
+  r.apps = r.accs.flatMap(acc => { const raw = accRaw.get(`${acc}|${kw}`); return raw ? aggregate(acc, raw, kw, g.groupBy) : []; });
   r.apps.sort((a, b) => b.spend - a.spend);
 }
 
@@ -1007,11 +1021,13 @@ function card(a) {
   const accName = accInfo.get(a.acc)?.name;
   const kwG = (config.groups[activeTab]?.keyword || "Ecomdy").trim();
   const customF = !!ruleTerms(a.code, kwG);
+  const byAcc = a.code.startsWith("acc:");
+  const shownName = ov.name || (byAcc ? accName : "");
 
   return `<article class="card">
     <div class="top">
       <div>
-        <div class="name-row">${ov.name ? `<div class="name">${esc(ov.name)}</div>` : `<button class="name name-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">Đặt tên app</button><div class="name readonly-only">${esc(ov.appCode || a.code)}</div>`}<button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">Sửa</button></div>
+        <div class="name-row">${shownName ? `<div class="name">${esc(shownName)}</div>` : `<button class="name name-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">Đặt tên app</button><div class="name readonly-only">${esc(ov.appCode || a.code)}</div>`}<button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">Sửa</button></div>
         <div class="pic">UA PIC: ${ov.pic ? `<b>${esc(ov.pic)}</b>` : `<button class="pic-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">điền tên</button><span class="readonly-only">—</span>`}</div>
       </div>
       <div class="score">
@@ -1020,8 +1036,8 @@ function card(a) {
       </div>
     </div>
     <div class="filter-row" title="Chỉ tính camp có tên chứa mã app (không phân biệt hoa thường). Để trống = tự gom theo mã tách từ tên camp.">
-      <input class="chip camp f-code${ov.appCode?.trim() ? " custom" : ""}" data-code="${esc(a.code)}" value="${esc(ov.appCode || "")}" placeholder="${esc(a.code)}" spellcheck="false" aria-label="Mã app" ${readOnly ? "readonly" : ""}>
-      <span class="share">${a.names.size} camp${customF ? "" : " · tự gom"}</span>
+      <input class="chip camp f-code${ov.appCode?.trim() ? " custom" : ""}" data-code="${esc(a.code)}" value="${esc(ov.appCode || "")}" placeholder="${esc(byAcc ? "Lọc theo mã app (không bắt buộc)" : a.code)}" spellcheck="false" aria-label="Mã app" ${readOnly ? "readonly" : ""}>
+      <span class="share">${a.names.size} camp${customF ? "" : byAcc ? " · cả tài khoản" : " · tự gom"}</span>
     </div>
     ${a.noMatch ? `<div class="match-err" role="alert">Không có camp ${esc(kwG)} nào chứa "${esc(ov.appCode)}" trong tài khoản này. Kiểm tra lại mã app.</div>` : ""}
 
@@ -1130,7 +1146,7 @@ function renderCamps() {
   const maxed = rows.filter(c => c.maxDays > 0).length;
   box.innerHTML = `<table><thead><tr><th>Camp</th><th>App</th><th>Trạng thái</th><th>Budget/ngày</th><th>Max budget</th><th><button class="th-sort" data-act="camp-sort" data-key="spend" aria-pressed="${campSort === "spend"}">Spend${campSort === "spend" ? " ↓" : ""}</button></th><th><button class="th-sort" data-act="camp-sort" data-key="roas" aria-pressed="${campSort === "roas"}">ROAS IAA D0${campSort === "roas" ? " ↓" : ""}</button></th><th>Target ROAS</th></tr></thead><tbody>${
     rows.map(c => { const r = c.spend > 0 ? c.rev / c.spend : null, t = c.roasBid || kpiOf(c.code);
-      return `<tr><td>${esc(c.name)}${c.isNew ? ' <span class="pill new">Mới</span>' : ""}<div class="share">${esc(c.id)}${c.createdDay ? ` · tạo ${shortDate(c.createdDay)}` : ""}</div></td><td>${c.code ? esc(config.apps[c.code]?.name || c.code) : '<span class="share">ngoài bộ lọc</span>'}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${maxCell(c)}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, t)}">${r == null ? "—" : r.toFixed(3)}</td><td>${c.roasBid ? c.roasBid.toFixed(2) : '<span class="share">—</span>'}</td></tr>`; }).join("")
+      return `<tr><td>${esc(c.name)}${c.isNew ? ' <span class="pill new">Mới</span>' : ""}<div class="share">${esc(c.id)}${c.createdDay ? ` · tạo ${shortDate(c.createdDay)}` : ""}</div></td><td>${c.code ? esc(appName(c.code)) : '<span class="share">ngoài bộ lọc</span>'}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${maxCell(c)}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, t)}">${r == null ? "—" : r.toFixed(3)}</td><td>${c.roasBid ? c.roasBid.toFixed(2) : '<span class="share">—</span>'}</td></tr>`; }).join("")
   }</tbody><tfoot><tr><td>${rows.length} camp</td><td></td><td></td><td></td><td>${maxed} max</td><td>${fmtUsd(sp)}</td><td>${sp > 0 ? (rv / sp).toFixed(3) : "—"}</td><td></td></tr></tfoot></table>`;
 }
 function openCamps(acc, code, onlyMaxed = false, onlyNew = false) {
@@ -1142,7 +1158,7 @@ function openCamps(acc, code, onlyMaxed = false, onlyNew = false) {
   const info = accInfo.get(acc); const { cur } = rangeWindows(acc);
   document.getElementById("campTitle").textContent = info?.name || `Tài khoản ${acc}`;
   document.getElementById("campMeta").textContent = `${acc} · ${spanText(cur.start, cur.end)}${info?.tz ? " · " + tzOffset(info.tz) : ""}`;
-  document.getElementById("campOnlyAppLabel").textContent = `Chỉ app ${config.apps[code]?.name || code}`;
+  document.getElementById("campOnlyAppLabel").textContent = `Chỉ app ${appName(code)}`;
   document.getElementById("campSearch").value = "";
   renderCamps();
   campDlg.showModal();
@@ -1168,7 +1184,7 @@ function exportGeo(acc, code) {
   const { cur } = rangeWindows(acc);
   const g = geoCache.get(`${acc}|${code}|${cur.start}|${cur.end}`);
   if (g?.status !== "ok") return;
-  const name = config.apps[code]?.name || code;
+  const name = appName(code);
   saveFile(`top-geo_${name}_${acc}_${cur.start}_${cur.end}.csv`.replace(/[^\w.\-]+/g, "_"),
     csv([["country_code", "country", "spend", "roas_iaa_d0"], ...g.rows.map(r => [r.cc, countryName(r.cc), r.spend.toFixed(2), (r.rev / r.spend).toFixed(3)])]));
 }
@@ -1190,6 +1206,7 @@ function openGroup(gi) {
   const f = groupDlg.querySelector("form");
   const g = gi != null ? config.groups[gi] : { name: "", keyword: "Ecomdy", accounts: [] };
   f.name.value = g.name; f.keyword.value = g.keyword || "Ecomdy"; f.accounts.value = (g.accounts || []).join("\n");
+  f.groupBy.value = g.groupBy === "account" ? "account" : "app";
   f.querySelector('[value="delete"]').hidden = gi == null;
   groupDlg.showModal();
 }
@@ -1197,7 +1214,7 @@ groupDlg.addEventListener("close", () => {
   const f = groupDlg.querySelector("form"), { gi } = editing;
   if (groupDlg.returnValue === "save") {
     const accounts = [...new Set(f.accounts.value.split(/[\s,;]+/).map(s => s.replace(/\D/g, "")).filter(Boolean))];
-    const g = { name: f.name.value.trim(), keyword: f.keyword.value.trim() || "Ecomdy", accounts };
+    const g = { name: f.name.value.trim(), keyword: f.keyword.value.trim() || "Ecomdy", accounts, groupBy: f.groupBy.value === "account" ? "account" : "app" };
     if (gi == null) { config.groups.push(g); setTab(config.groups.length - 1); } else config.groups[gi] = g;
     results = []; saveConfig(); loadAll();
   } else if (groupDlg.returnValue === "delete") {
@@ -1216,7 +1233,7 @@ function openApp(code, acc) {
 }
 appDlg.addEventListener("close", () => {
   if (appDlg.returnValue === "delete") {
-    const { code, acc } = editing, name = config.apps[code]?.name || code;
+    const { code, acc } = editing, name = appName(code);
     ask(`Xóa "${name}" (tài khoản ${acc}) khỏi dashboard? Camp trên TikTok không bị ảnh hưởng; bấm "Hiện lại" ở đầu nhóm để lấy lại.`, "Xóa").then(ok => {
       if (!ok) return;
       config.hidden = [...new Set([...(config.hidden || []), hideKey(activeTab, acc, code)])];
