@@ -209,22 +209,60 @@
     .fields { grid-template-columns: 1fr; }
     .group-head .actions { margin-left: 0; }
   }
+
+  /* ---------- v3: date range, KPI inline, campaign panel, top geo ---------- */
+  .daterange { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 11px; padding: 5px 10px; }
+  .daterange label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+  .daterange input { font: inherit; font-size: 14px; color: var(--text); background: transparent; border: 0; padding: 2px 0; }
+  .chip.kpi { display: inline-flex; align-items: center; gap: 6px; }
+  .chip.kpi input {
+    font: inherit; font-size: 17px; font-weight: 600; color: var(--text); width: 4.2em;
+    background: var(--card); border: 1px solid var(--chip-border); border-radius: 5px; padding: 0 4px;
+  }
+  body.readonly .chip.kpi input { border-color: transparent; background: transparent; pointer-events: none; }
+  .vs { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .acc-link {
+    font: inherit; color: var(--muted); font-size: 18px; letter-spacing: .03em; background: none; border: 0; padding: 0;
+    cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 4px;
+    overflow-wrap: anywhere; min-width: 0; text-align: left;
+  }
+  .acc-link:hover { color: var(--text); text-decoration-color: currentColor; }
+  .foot-btns { display: flex; gap: 8px; flex-shrink: 0; }
+  .panel { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; overflow-x: auto; }
+  .panel table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .panel th { text-align: right; color: var(--muted); font-weight: 500; padding: 4px 6px; white-space: nowrap; }
+  .panel td { text-align: right; padding: 4px 6px; border-top: 1px solid var(--border); }
+  .panel th:first-child, .panel td:first-child { text-align: left; }
+  .panel .note { color: var(--muted); font-size: 14px; padding: 6px 0; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 14px; color: var(--muted); }
+  .share { color: var(--muted); font-size: 13px; }
+
+  dialog.wide { width: min(1080px, calc(100vw - 32px)); }
+  .camp-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; margin-bottom: 12px; }
+  .camp-head h2 { margin: 0; }
+  .camp-head .meta { color: var(--muted); font-size: 14px; }
+  .camp-tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: 14px; color: var(--muted); }
+  .camp-tools input[type="search"] { font: inherit; font-size: 14px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; min-width: 0; flex: 1 1 200px; }
+  .camp-table { max-height: 62vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+  .camp-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .camp-table th { position: sticky; top: 0; background: var(--card); text-align: right; color: var(--muted); font-weight: 500; padding: 8px 10px; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  .camp-table td { text-align: right; padding: 7px 10px; border-top: 1px solid var(--border); white-space: nowrap; }
+  .camp-table th:first-child, .camp-table td:first-child { text-align: left; white-space: normal; overflow-wrap: anywhere; min-width: 260px; }
+  .camp-table tfoot td { font-weight: 600; border-top: 2px solid var(--border); }
+  .pill { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--chip-bg); color: var(--chip-text); }
+  .pill.on { background: color-mix(in srgb, var(--up) 15%, transparent); color: var(--up); }
+  .foot { flex-wrap: wrap; }
+  .chip.camp { font-size: 15px; }
+  @media (max-width: 520px) { .acc-link { font-size: 14px; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="toolbar">
-    <div class="seg" id="rangeSeg" role="group" aria-label="Khoảng ngày">
-      <button data-range="today">Hôm nay</button>
-      <button data-range="yesterday">Hôm qua</button>
-      <button data-range="7d">7 ngày qua</button>
-      <button data-range="14d">14 ngày qua</button>
-      <button data-range="30d">30 ngày qua</button>
-      <button data-range="custom">Tùy chọn</button>
+    <div class="daterange">
+      <label>Từ <input type="date" id="dStart"></label>
+      <label>Đến <input type="date" id="dEnd"></label>
     </div>
-    <span class="custom" id="customRange" hidden>
-      <input type="date" id="customStart" aria-label="Từ ngày"> – <input type="date" id="customEnd" aria-label="Đến ngày">
-    </span>
     <span class="range-label" id="rangeLabel"></span>
     <span class="spacer"></span>
     <button class="tb" data-act="refresh" id="refreshBtn">Làm mới</button>
@@ -257,12 +295,29 @@
     <h2 id="appDlgTitle">App</h2>
     <div class="fields">
       <label class="full">Tên hiển thị<input name="name" id="a-name" placeholder="AI Chat"></label>
-      <label>KPI ROAS IAA D0<input name="kpi" id="a-kpi" type="number" step="any" min="0" placeholder="1.00"></label>
+      <label>KPI ROAS IAA D0<input name="kpi" id="a-kpi" type="number" step="0.01" min="0" placeholder="1.00"></label>
       <label>OS<input name="os" id="a-os" placeholder="iOS / Android"></label>
     </div>
     <div class="dlg-actions">
       <button class="tb" value="cancel" formnovalidate>Hủy</button>
       <button class="tb primary" value="save">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="campDlg" class="wide">
+  <form method="dialog">
+    <div class="camp-head"><h2 id="campTitle"></h2><span class="meta" id="campMeta"></span></div>
+    <div class="camp-tools">
+      <label><input type="checkbox" id="campOnlyApp" checked> <span id="campOnlyAppLabel">Chỉ app này</span></label>
+      <label><input type="checkbox" id="campHideZero" checked> Ẩn camp không có spend</label>
+      <input type="search" id="campSearch" placeholder="Tìm tên camp…" aria-label="Tìm tên camp">
+    </div>
+    <div class="camp-table" id="campTable"></div>
+    <div class="dlg-actions">
+      <button class="tb" data-act="camp-csv" type="button">Xuất CSV</button>
+      <span class="spacer"></span>
+      <button class="tb primary" value="close">Đóng</button>
     </div>
   </form>
 </dialog>
@@ -282,28 +337,30 @@
 /* ============================================================
    Cấu hình (người dùng nhập):
      groups: [{ name, keyword, accounts: ["7542..."] }]
-     apps:   { "<MÃ APP>": { name, kpi, os } }    // ghi đè hiển thị theo mã app
-   Số liệu kéo từ TikTok qua connector "TikTok MCP":
-     report_integrated_get  → spend, ad_impression_ad_revenue_roas_day0 (IAA D0), total_purchase_roas_day0 (IAP D0)
-     campaign_get           → ngân sách/ngày của camp đang bật
+     apps:   { "<MÃ APP>": { name, kpi, os } }     // KPI riêng từng app
+   Số liệu kéo từ TikTok qua connector "TikTok MCP" (ngày theo múi giờ của tài khoản):
+     advertiser_info_get    → tên + múi giờ tài khoản
+     report_integrated_get  → spend, ad_impression_ad_revenue_roas_day0 (ROAS IAA D0); theo quốc gia cho Top geo
+     campaign_get           → trạng thái + ngân sách/ngày của camp
    Camp được gom theo mã app = đoạn đầu tiên của tên camp khác từ khóa lọc
    (APB508_Global_ROAS_Ecomdy_... → APB508, Ecomdy_Elyra_... → Elyra).
    ============================================================ */
 const SERVER = "TikTok MCP";
 const CONFIG_DOC = "dashboard/config";
 const LOCAL_KEY = "ecomdy-kpi-config-v2";
-const RANGE_KEY = "ecomdy-kpi-range";
-const GOOD_RATIO = 0.9;
 const M_IAA = "ad_impression_ad_revenue_roas_day0";
-const M_IAP = "total_purchase_roas_day0";
 
 let config = { groups: [], apps: {} };
-let results = [];            // theo chỉ số nhóm: { status, apps, errors }
+let results = [];                 // theo chỉ số nhóm: { status, apps, errors }
+const accInfo = new Map();        // acc → { name, tz }
+const accData = new Map();        // acc → { campaigns: [...] }  (của lần tải gần nhất)
+const geoCache = new Map();       // `${acc}|${code}|${start}|${end}` → { status, rows, error }
+const openPanels = new Map();     // cardId → "daily" | "geo"
 let dbRef = null, mcp = null, mcpReady = false, readOnly = false;
 let writing = Promise.resolve();
 let loadGen = 0;
-let range = loadRange();
-const openDaily = new Set();
+let range = null;                 // { start, end } — mặc định hôm nay theo giờ tài khoản
+let rangeTouched = false;
 
 /* ---------- Helpers ---------- */
 const isNum = v => typeof v === "number" && isFinite(v);
@@ -318,46 +375,55 @@ const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); r
 const parseYmd = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
 const dayDiff = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
 const shortDate = s => { const [, m, d] = s.split("-"); return `${d}/${m}`; };
+const spanText = (a, b) => a === b ? shortDate(a) : `${shortDate(a)}–${shortDate(b)}`;
+const kpiOf = code => { const k = config.apps[code]?.kpi; return isNum(k) && k > 0 ? k : 1; };
+const roasCls = (roas, kpi) => roas >= kpi ? "up" : "down";
+let regionNames = null;
+try { regionNames = new Intl.DisplayNames(["vi"], { type: "region" }); } catch (e) {}
+const countryName = cc => { try { return regionNames?.of(cc) || cc; } catch (e) { return cc; } };
+
+function todayIn(tz) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+    const g = t => parts.find(p => p.type === t).value;
+    return `${g("year")}-${g("month")}-${g("day")}`;
+  } catch (e) { return ymd(new Date()); }
+}
+function tzOffset(tz) {
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" }).formatToParts(new Date())
+      .find(p => p.type === "timeZoneName").value.replace("GMT", "UTC");
+  } catch (e) { return tz; }
+}
+function firstTz() {
+  for (const g of config.groups) for (const a of g.accounts || []) { const tz = accInfo.get(a)?.tz; if (tz) return tz; }
+  return null;
+}
 
 /* ---------- Khoảng ngày ---------- */
-function loadRange() {
-  try { const r = JSON.parse(localStorage.getItem(RANGE_KEY)); if (r && r.key) return r; } catch (e) {}
-  return { key: "7d" };
-}
-function resolveRange(r) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const last = n => ({ start: ymd(addDays(today, -n)), end: ymd(addDays(today, -1)) });
-  switch (r.key) {
-    case "today": return { start: ymd(today), end: ymd(today) };
-    case "yesterday": return { start: ymd(addDays(today, -1)), end: ymd(addDays(today, -1)) };
-    case "14d": return last(14);
-    case "30d": return last(30);
-    case "custom":
-      if (r.start && r.end && r.start <= r.end) return { start: r.start, end: r.end };
-      return last(7);
-    default: return last(7);
-  }
-}
 function rangeWindows() {
-  const cur = resolveRange(range);
+  const cur = range || { start: ymd(new Date()), end: ymd(new Date()) };
   const len = dayDiff(cur.start, cur.end) + 1;
+  // Kỳ trước: cùng số ngày, ngay trước kỳ đang xem (hôm nay → hôm qua)
   const prev = { start: ymd(addDays(parseYmd(cur.start), -len)), end: ymd(addDays(parseYmd(cur.start), -1)) };
-  // Biểu đồ: ít nhất 14 ngày, tối đa 30 ngày (giới hạn của report theo ngày)
+  // Biểu đồ: ít nhất 14 ngày, tối đa 30 ngày (giới hạn report theo ngày)
   const trendLen = Math.min(30, Math.max(14, len));
   const trend = { start: ymd(addDays(parseYmd(cur.end), -(trendLen - 1))), end: cur.end };
   return { cur, prev, trend, len };
 }
+function ensureDefaultRange() {
+  if (rangeTouched && range) return;
+  const tz = firstTz();
+  const t = tz ? todayIn(tz) : ymd(new Date());
+  range = { start: t, end: t };
+}
 function renderRangeUi() {
-  document.querySelectorAll("#rangeSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.range === range.key));
-  const custom = document.getElementById("customRange");
-  custom.hidden = range.key !== "custom";
-  const { cur, len } = rangeWindows();
-  if (range.key === "custom") {
-    document.getElementById("customStart").value = cur.start;
-    document.getElementById("customEnd").value = cur.end;
-  }
+  const { cur, prev, len } = rangeWindows();
+  document.getElementById("dStart").value = cur.start;
+  document.getElementById("dEnd").value = cur.end;
+  const tzs = [...new Set(config.groups.flatMap(g => (g.accounts || []).map(a => accInfo.get(a)?.tz).filter(Boolean)).map(tzOffset))];
   document.getElementById("rangeLabel").textContent =
-    cur.start === cur.end ? shortDate(cur.start) : `${shortDate(cur.start)} – ${shortDate(cur.end)} · ${len} ngày`;
+    `${len} ngày · Δ so với ${spanText(prev.start, prev.end)}` + (tzs.length ? ` · giờ tài khoản ${tzs.join(", ")}` : "");
 }
 
 /* ---------- Lưu cấu hình ---------- */
@@ -422,6 +488,16 @@ async function allPages(tool, input, refresh) {
   return { rows, storedAt };
 }
 
+async function loadAccInfo(refresh) {
+  const ids = [...new Set(config.groups.flatMap(g => g.accounts || []))].filter(id => refresh || !accInfo.has(id));
+  for (let i = 0; i < ids.length; i += 50) {
+    try {
+      const { data } = await tt("advertiser_info_get", { advertiser_ids: ids.slice(i, i + 50), fields: ["advertiser_id", "name", "timezone", "display_timezone"] }, refresh);
+      for (const a of data.list || []) accInfo.set(String(a.advertiser_id), { name: a.name, tz: a.timezone || a.display_timezone });
+    } catch (e) { /* tên + múi giờ là phụ; lỗi quyền sẽ hiện ở bước kéo report */ }
+  }
+}
+
 function appCode(name, kw) {
   const segs = name.trim().split("_").map(s => s.trim()).filter(Boolean);
   return segs.find(s => s.toLowerCase() !== kw.toLowerCase()) || segs[0] || "?";
@@ -446,24 +522,32 @@ async function fetchAccount(acc, kw, win, refresh) {
   const filtering = [{ field_name: "campaign_name", filter_type: "MATCH", filter_value: kw }];
   const base = { advertiser_id: acc, report_type: "BASIC", data_level: "AUCTION_CAMPAIGN", filtering };
   const [cur, prev, trend, camps] = await Promise.all([
-    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA, M_IAP], start_date: win.cur.start, end_date: win.cur.end }, refresh),
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end }, refresh),
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end }, refresh),
-    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA, M_IAP], start_date: win.trend.start, end_date: win.trend.end }, refresh),
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end }, refresh),
     allPages("campaign_get", { advertiser_id: acc, filtering: { campaign_name: kw }, fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status"] }, refresh)
       .catch(() => ({ rows: [] })), // ngân sách là phụ: lỗi thì hiện SPEND/NGÀY
   ]);
 
   const apps = new Map();
+  const campaigns = new Map();  // id → { id, name, code, spend, rev, status, budget, budgetMode }
   const get = code => {
-    if (!apps.has(code)) apps.set(code, { acc, code, names: new Set(), spend: 0, revIaa: 0, revIap: 0, prevSpend: 0, budget: 0, days: new Map() });
+    if (!apps.has(code)) apps.set(code, { acc, code, names: new Set(), ids: new Set(), spend: 0, rev: 0, prevSpend: 0, budget: 0, days: new Map() });
     return apps.get(code);
   };
   const ok = name => typeof name === "string" && name.toLowerCase().includes(kwl);
+  const camp = (id, name) => {
+    if (!campaigns.has(id)) campaigns.set(id, { id, name, code: appCode(name, kw), spend: 0, rev: 0, status: null, budget: null, budgetMode: null });
+    return campaigns.get(id);
+  };
 
   for (const r of cur.rows) {
     const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
-    const a = get(appCode(m.campaign_name, kw)); const sp = num(m.spend);
-    a.names.add(m.campaign_name); a.spend += sp; a.revIaa += sp * num(m[M_IAA]); a.revIap += sp * num(m[M_IAP]);
+    const id = String(r.dimensions?.campaign_id || ""); const sp = num(m.spend); const rev = sp * num(m[M_IAA]);
+    const a = get(appCode(m.campaign_name, kw));
+    a.names.add(m.campaign_name); a.spend += sp; a.rev += rev;
+    if (sp > 0 && id) a.ids.add(id);
+    if (id) { const c = camp(id, m.campaign_name); c.spend += sp; c.rev += rev; }
   }
   for (const r of prev.rows) {
     const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
@@ -473,15 +557,18 @@ async function fetchAccount(acc, kw, win, refresh) {
     const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
     const day = String(r.dimensions?.stat_time_day || "").slice(0, 10); if (!day) continue;
     const a = get(appCode(m.campaign_name, kw)); const sp = num(m.spend);
-    const d = a.days.get(day) || { spend: 0, revIaa: 0, revIap: 0 };
-    d.spend += sp; d.revIaa += sp * num(m[M_IAA]); d.revIap += sp * num(m[M_IAP]);
+    const d = a.days.get(day) || { spend: 0, rev: 0 };
+    d.spend += sp; d.rev += sp * num(m[M_IAA]);
     a.days.set(day, d);
   }
   for (const c of camps.rows) {
-    if (!ok(c.campaign_name) || c.operation_status !== "ENABLE") continue;
-    if (!/DAY|DAILY/.test(c.budget_mode || "")) continue;
-    const a = apps.get(appCode(c.campaign_name, kw)); if (a) a.budget += num(c.budget);
+    if (!ok(c.campaign_name)) continue;
+    const row = camp(String(c.campaign_id), c.campaign_name);
+    row.status = c.operation_status; row.budget = num(c.budget); row.budgetMode = c.budget_mode;
+    if (c.operation_status !== "ENABLE" || !/DAY|DAILY/.test(c.budget_mode || "")) continue;
+    const a = apps.get(row.code); if (a) a.budget += num(c.budget);
   }
+  accData.set(acc, { campaigns: [...campaigns.values()], kw });
   const list = [...apps.values()].filter(a => a.spend > 0 || a.budget > 0);
   for (const a of list) a.prefix = commonPrefix([...a.names], kw) || a.code;
   return { apps: list, storedAt: cur.storedAt };
@@ -489,18 +576,22 @@ async function fetchAccount(acc, kw, win, refresh) {
 
 async function loadAll(refresh = false) {
   const gen = ++loadGen;
-  renderRangeUi();
-  if (!mcpReady) { render(); return; }
+  if (!mcpReady) { ensureDefaultRange(); renderRangeUi(); render(); return; }
   if (!mcp) {
+    ensureDefaultRange(); renderRangeUi();
     showBanner(`Kéo số tự động chỉ chạy khi mở trang này trên Claude, với connector ${SERVER} đã kết nối.`);
     results = config.groups.map(() => ({ status: "error", apps: [], errors: [] }));
     render(); return;
   }
   hideBanner();
-  const win = rangeWindows();
   results = config.groups.map(() => ({ status: "loading", apps: [], errors: [] }));
   render();
   document.getElementById("refreshBtn").disabled = true;
+  await loadAccInfo(refresh);
+  if (gen !== loadGen) return;
+  ensureDefaultRange(); renderRangeUi();
+  if (refresh) geoCache.clear();
+  const win = rangeWindows();
 
   await Promise.all(config.groups.map(async (g, gi) => {
     const kw = (g.keyword || "Ecomdy").trim();
@@ -530,6 +621,49 @@ async function loadAll(refresh = false) {
   }
 }
 
+/* ---------- Top geo ---------- */
+async function loadGeo(a) {
+  const { cur } = rangeWindows();
+  const key = `${a.acc}|${a.code}|${cur.start}|${cur.end}`;
+  if (geoCache.get(key)?.status === "ok" || geoCache.get(key)?.status === "loading") return;
+  geoCache.set(key, { status: "loading" }); render();
+  try {
+    const ids = [...a.ids]; const byCc = new Map();
+    for (let i = 0; i < ids.length; i += 100) {
+      const { rows } = await allPages("report_integrated_get", {
+        advertiser_id: a.acc, report_type: "AUDIENCE", data_level: "AUCTION_CAMPAIGN",
+        dimensions: ["country_code"], metrics: ["spend", M_IAA],
+        start_date: cur.start, end_date: cur.end, order_field: "spend",
+        filtering: [{ field_name: "campaign_ids", filter_type: "IN", filter_value: JSON.stringify(ids.slice(i, i + 100)) }],
+      });
+      for (const r of rows) {
+        const cc = r.dimensions?.country_code || "?"; const sp = num(r.metrics?.spend);
+        if (!sp) continue;
+        const g = byCc.get(cc) || { cc, spend: 0, rev: 0 };
+        g.spend += sp; g.rev += sp * num(r.metrics?.[M_IAA]); byCc.set(cc, g);
+      }
+    }
+    geoCache.set(key, { status: "ok", rows: [...byCc.values()].sort((x, y) => y.spend - x.spend) });
+  } catch (e) { geoCache.set(key, { status: "error", error: e }); }
+  render();
+}
+
+function geoPanel(a, kpi) {
+  const { cur } = rangeWindows();
+  const g = geoCache.get(`${a.acc}|${a.code}|${cur.start}|${cur.end}`);
+  if (!g || g.status === "loading") return `<div class="note">Đang kéo top geo…</div>`;
+  if (g.status === "error") return `<div class="note">${esc(errText(g.error))}</div>`;
+  if (!g.rows.length) return `<div class="note">Không có spend theo quốc gia trong khoảng ngày này.</div>`;
+  const total = g.rows.reduce((s, r) => s + r.spend, 0);
+  const top = g.rows.slice(0, 10);
+  const rest = g.rows.slice(10);
+  const line = r => `<tr><td>${esc(countryName(r.cc))} <span class="share">${esc(r.cc)}</span></td><td>${fmtUsd(r.spend)}</td><td class="share">${Math.round(r.spend / total * 100)}%</td><td class="num ${roasCls(r.rev / r.spend, kpi)}">${(r.rev / r.spend).toFixed(3)}</td></tr>`;
+  const restRow = rest.length ? (() => { const s = rest.reduce((x, r) => x + r.spend, 0), v = rest.reduce((x, r) => x + r.rev, 0);
+    return `<tr><td>${rest.length} nước khác</td><td>${fmtUsd(s)}</td><td class="share">${Math.round(s / total * 100)}%</td><td class="num ${roasCls(v / s, kpi)}">${(v / s).toFixed(3)}</td></tr>`; })() : "";
+  return `<div class="panel-head"><span>Top geo · ${spanText(cur.start, cur.end)}</span><button class="icon" data-act="geo-csv" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}">Xuất CSV</button></div>
+    <table><thead><tr><th>Quốc gia</th><th>Spend</th><th>%</th><th>ROAS IAA D0</th></tr></thead><tbody>${top.map(line).join("")}${restRow}</tbody></table>`;
+}
+
 /* ---------- Render ---------- */
 function sparkline(series, kpi) {
   const pts0 = series.filter(isNum);
@@ -557,28 +691,29 @@ function trendDays() {
   return out;
 }
 
-function dailyTable(a, kpi, days) {
+function dailyPanel(a, kpi, days) {
   const rows = days.slice().reverse().map(day => {
     const d = a.days.get(day);
-    if (!d || !d.spend) return `<tr><td>${shortDate(day)}</td><td>—</td><td class="num na">—</td><td class="num na">—</td></tr>`;
-    const iaa = d.revIaa / d.spend, iap = d.revIap / d.spend;
-    return `<tr><td>${shortDate(day)}</td><td>${fmtUsd(d.spend)}</td><td class="num ${iaa >= kpi ? "up" : "down"}">${iaa.toFixed(3)}</td><td>${iap.toFixed(3)}</td></tr>`;
+    if (!d || !d.spend) return `<tr><td>${shortDate(day)}</td><td>—</td><td class="num na">—</td></tr>`;
+    const r = d.rev / d.spend;
+    return `<tr><td>${shortDate(day)}</td><td>${fmtUsd(d.spend)}</td><td class="num ${roasCls(r, kpi)}">${r.toFixed(3)}</td></tr>`;
   }).join("");
-  return `<table><thead><tr><th>Ngày</th><th>Spend</th><th>ROAS IAA D0</th><th>ROAS IAP D0</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<table><thead><tr><th>Ngày</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function card(a, days, len) {
+function card(a, days, win) {
   const ov = config.apps[a.code] || {};
-  const kpi = isNum(ov.kpi) && ov.kpi > 0 ? ov.kpi : 1;
-  const score = a.spend > 0 ? a.revIaa / a.spend : null;
+  const kpi = kpiOf(a.code);
+  const score = a.spend > 0 ? a.rev / a.spend : null;
   const ratio = isNum(score) ? score / kpi : 0;
-  const color = ratio >= GOOD_RATIO ? "var(--good)" : "var(--bad)";
+  const color = isNum(score) && score >= kpi ? "var(--up)" : "var(--down)";
   const hasDelta = a.prevSpend > 0;
   const delta = hasDelta ? (a.spend - a.prevSpend) / a.prevSpend : 0;
-  const third = a.budget > 0 ? { lbl: "NS/ngày", val: fmtUsd(a.budget) } : { lbl: "Spend/ngày", val: fmtUsd(a.spend / len) };
-  const series = days.map(day => { const d = a.days.get(day); return d && d.spend > 0 ? d.revIaa / d.spend : null; });
-  const id = `d-${a.acc}-${a.code}`;
-  const open = openDaily.has(id);
+  const third = a.budget > 0 ? { lbl: "NS/ngày", val: fmtUsd(a.budget) } : { lbl: "Spend/ngày", val: fmtUsd(a.spend / win.len) };
+  const series = days.map(day => { const d = a.days.get(day); return d && d.spend > 0 ? d.rev / d.spend : null; });
+  const id = `${a.acc}-${a.code}`;
+  const panel = openPanels.get(id);
+  const accName = accInfo.get(a.acc)?.name;
 
   return `<article class="card">
     <div class="top">
@@ -586,7 +721,7 @@ function card(a, days, len) {
         <div class="name-row"><div class="name">${esc(ov.name || a.code)}</div><button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}">Sửa</button></div>
         <div class="chips">
           <span class="chip">${ov.os ? esc(ov.os) : "OS?"}</span>
-          <span class="chip">KPI ${kpi.toFixed(2)}</span>
+          <label class="chip kpi">KPI <input type="number" step="0.01" min="0" class="kpi-input" data-code="${esc(a.code)}" value="${kpi.toFixed(2)}" aria-label="KPI ROAS IAA D0 của ${esc(ov.name || a.code)}" ${readOnly ? "readonly" : ""}></label>
           <span class="chip camp" title="${a.names.size} camp">${esc(a.prefix)}</span>
         </div>
       </div>
@@ -603,15 +738,19 @@ function card(a, days, len) {
       <div class="stat"><div class="lbl">Spend</div><div class="num">${fmtUsd(a.spend)}</div></div>
       <div class="stat"><div class="lbl">Δ Spend</div>${hasDelta
         ? `<div class="num ${delta >= 0 ? "up" : "down"}">${(delta >= 0 ? "+" : "-") + Math.abs(Math.round(delta * 100))}%</div>`
-        : `<div class="num na">—</div>`}</div>
+        : `<div class="num na">—</div>`}<div class="vs">so với ${spanText(win.prev.start, win.prev.end)} (${fmtUsd(a.prevSpend)})</div></div>
       <div class="stat"><div class="lbl">${third.lbl}</div><div class="num">${third.val}</div></div>
     </div>
 
     <div class="foot">
-      <span class="acc">${esc(a.acc)}</span>
-      <button class="btn" data-act="toggle" data-id="${esc(id)}" aria-expanded="${open}">Theo ngày</button>
+      <button class="acc-link" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" title="${esc(accName || "Xem camp")}">${esc(a.acc)}</button>
+      <span class="foot-btns">
+        <button class="btn" data-act="panel" data-kind="geo" data-id="${esc(id)}" aria-expanded="${panel === "geo"}">Top geo</button>
+        <button class="btn" data-act="panel" data-kind="daily" data-id="${esc(id)}" aria-expanded="${panel === "daily"}">Theo ngày</button>
+      </span>
     </div>
-    <div class="daily" ${open ? "" : "hidden"}>${dailyTable(a, kpi, days)}</div>
+    ${panel === "daily" ? `<div class="panel">${dailyPanel(a, kpi, days)}</div>` : ""}
+    ${panel === "geo" ? `<div class="panel">${geoPanel(a, kpi)}</div>` : ""}
   </article>`;
 }
 
@@ -624,7 +763,7 @@ function render() {
       : `<button class="empty" data-act="add-group">Bấm để thêm nhóm đầu tiên: đặt tên (vd. Apero) và dán ID tài khoản quảng cáo. Trang sẽ tự kéo các camp Ecomdy về.</button>`;
     return;
   }
-  const { len } = rangeWindows();
+  const win = rangeWindows();
   const days = trendDays();
   el.innerHTML = config.groups.map((g, gi) => {
     const r = results[gi] || { status: "idle", apps: [], errors: [] };
@@ -640,7 +779,7 @@ function render() {
     if (r.status === "loading") body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
     else if (r.pageError || r.status !== "ok") body = `<div class="empty">Chưa có số liệu.</div>`;
     else if (!r.apps.length && !r.errors.length) body = `<div class="empty">Không có camp ${kw} nào có spend trong khoảng ngày này.</div>`;
-    else body = r.apps.map(a => card(a, days, len)).join("");
+    else body = r.apps.map(a => card(a, days, win)).join("");
     const errs = r.errors.length ? `<div class="acc-errors">${r.errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
     return `<section>
       <div class="group-head">
@@ -653,6 +792,73 @@ function render() {
       <div class="grid">${body}</div>
     </section>`;
   }).join("");
+}
+
+/* ---------- Bảng camp của tài khoản ---------- */
+const campDlg = document.getElementById("campDlg");
+let campView = null; // { acc, code }
+
+function campRows() {
+  const d = accData.get(campView.acc); if (!d) return [];
+  const q = document.getElementById("campSearch").value.trim().toLowerCase();
+  const onlyApp = document.getElementById("campOnlyApp").checked;
+  const hideZero = document.getElementById("campHideZero").checked;
+  return d.campaigns
+    .filter(c => (!onlyApp || c.code === campView.code) && (!hideZero || c.spend > 0) && (!q || c.name.toLowerCase().includes(q)))
+    .sort((x, y) => y.spend - x.spend || x.name.localeCompare(y.name));
+}
+function renderCamps() {
+  const rows = campRows();
+  const box = document.getElementById("campTable");
+  if (!rows.length) { box.innerHTML = `<div class="panel"><div class="note" style="padding:12px">Không có camp nào khớp bộ lọc.</div></div>`; return; }
+  const sp = rows.reduce((s, c) => s + c.spend, 0), rv = rows.reduce((s, c) => s + c.rev, 0);
+  const status = s => s === "ENABLE" ? `<span class="pill on">Đang chạy</span>` : s ? `<span class="pill">Tắt</span>` : `<span class="pill">—</span>`;
+  box.innerHTML = `<table><thead><tr><th>Camp</th><th>App</th><th>Trạng thái</th><th>NS/ngày</th><th>Spend</th><th>ROAS IAA D0</th><th>KPI</th></tr></thead><tbody>${
+    rows.map(c => { const k = kpiOf(c.code), r = c.spend > 0 ? c.rev / c.spend : null;
+      return `<tr><td>${esc(c.name)}<div class="share">${esc(c.id)}</div></td><td>${esc(config.apps[c.code]?.name || c.code)}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, k)}">${r == null ? "—" : r.toFixed(3)}</td><td>${k.toFixed(2)}</td></tr>`; }).join("")
+  }</tbody><tfoot><tr><td>${rows.length} camp</td><td></td><td></td><td></td><td>${fmtUsd(sp)}</td><td>${sp > 0 ? (rv / sp).toFixed(3) : "—"}</td><td></td></tr></tfoot></table>`;
+}
+function openCamps(acc, code) {
+  campView = { acc, code };
+  const info = accInfo.get(acc); const { cur } = rangeWindows();
+  document.getElementById("campTitle").textContent = info?.name || `Tài khoản ${acc}`;
+  document.getElementById("campMeta").textContent = `${acc} · ${spanText(cur.start, cur.end)}${info?.tz ? " · " + tzOffset(info.tz) : ""}`;
+  document.getElementById("campOnlyAppLabel").textContent = `Chỉ app ${config.apps[code]?.name || code}`;
+  document.getElementById("campSearch").value = "";
+  renderCamps();
+  campDlg.showModal();
+}
+["campOnlyApp", "campHideZero"].forEach(id => document.getElementById(id).addEventListener("change", renderCamps));
+document.getElementById("campSearch").addEventListener("input", renderCamps);
+
+/* ---------- Xuất CSV ---------- */
+function csv(rows) { return rows.map(r => r.map(v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\n"); }
+async function saveFile(filename, text) {
+  const downloads = await (window.claude?.use ? window.claude.use("downloads") : null);
+  if (downloads) {
+    try { await downloads.save({ filename, data: "﻿" + text }); }
+    catch (e) { if (e?.code !== "declined") toast("Không xuất được file lúc này."); }
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + text], { type: "text/csv" }));
+  a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function exportGeo(acc, code) {
+  const { cur } = rangeWindows();
+  const g = geoCache.get(`${acc}|${code}|${cur.start}|${cur.end}`);
+  if (g?.status !== "ok") return;
+  const name = config.apps[code]?.name || code;
+  saveFile(`top-geo_${name}_${acc}_${cur.start}_${cur.end}.csv`.replace(/[^\w.\-]+/g, "_"),
+    csv([["country_code", "country", "spend", "roas_iaa_d0"], ...g.rows.map(r => [r.cc, countryName(r.cc), r.spend.toFixed(2), (r.rev / r.spend).toFixed(3)])]));
+}
+function exportCamps() {
+  if (!campView) return;
+  const { cur } = rangeWindows();
+  saveFile(`campaigns_${campView.acc}_${cur.start}_${cur.end}.csv`,
+    csv([["campaign_id", "campaign_name", "app", "status", "daily_budget", "spend", "roas_iaa_d0", "kpi"],
+      ...campRows().map(c => [c.id, c.name, c.code, c.status || "", c.budget || "", c.spend.toFixed(2), c.spend > 0 ? (c.rev / c.spend).toFixed(3) : "", kpiOf(c.code)])]));
 }
 
 /* ---------- Dialogs ---------- */
@@ -686,14 +892,14 @@ function openApp(code) {
   editing = { code };
   const f = appDlg.querySelector("form"), ov = config.apps[code] || {};
   document.getElementById("appDlgTitle").textContent = `App ${code}`;
-  f.name.value = ov.name || ""; f.kpi.value = isNum(ov.kpi) ? ov.kpi : ""; f.os.value = ov.os || "";
+  f.name.value = ov.name || ""; f.kpi.value = kpiOf(code).toFixed(2); f.os.value = ov.os || "";
   appDlg.showModal();
 }
 appDlg.addEventListener("close", () => {
   if (appDlg.returnValue !== "save") return;
   const f = appDlg.querySelector("form");
   const kpi = parseFloat(f.kpi.value);
-  config.apps[editing.code] = { name: f.name.value.trim(), kpi: isFinite(kpi) && kpi > 0 ? kpi : null, os: f.os.value.trim() };
+  config.apps[editing.code] = { ...config.apps[editing.code], name: f.name.value.trim(), kpi: isFinite(kpi) && kpi > 0 ? kpi : 1, os: f.os.value.trim() };
   saveConfig(); render();
 });
 
@@ -714,31 +920,42 @@ function showBanner(msg) { const b = document.getElementById("banner"); b.textCo
 function hideBanner() { document.getElementById("banner").hidden = true; }
 
 /* ---------- Events ---------- */
-document.getElementById("rangeSeg").addEventListener("click", e => {
-  const b = e.target.closest("button[data-range]"); if (!b) return;
-  range = b.dataset.range === "custom" ? { key: "custom", ...resolveRange(range) } : { key: b.dataset.range };
-  try { localStorage.setItem(RANGE_KEY, JSON.stringify(range)); } catch (err) {}
-  loadAll();
-});
-["customStart", "customEnd"].forEach(id => document.getElementById(id).addEventListener("change", () => {
-  const s = document.getElementById("customStart").value, en = document.getElementById("customEnd").value;
-  if (!s || !en) return;
-  if (s > en) { toast("Ngày bắt đầu phải trước ngày kết thúc."); return; }
-  range = { key: "custom", start: s, end: en };
-  try { localStorage.setItem(RANGE_KEY, JSON.stringify(range)); } catch (err) {}
+["dStart", "dEnd"].forEach(id => document.getElementById(id).addEventListener("change", () => {
+  let s = document.getElementById("dStart").value, e = document.getElementById("dEnd").value;
+  if (!s || !e) return;
+  if (s > e) { if (id === "dStart") e = s; else s = e; }
+  if (dayDiff(s, e) > 364) { toast("Chọn tối đa 365 ngày."); renderRangeUi(); return; }
+  range = { start: s, end: e }; rangeTouched = true;
+  openPanels.clear();
   loadAll();
 }));
+
+document.addEventListener("change", e => {
+  const inp = e.target.closest(".kpi-input"); if (!inp || readOnly) return;
+  const v = parseFloat(inp.value);
+  if (!isFinite(v) || v <= 0) { toast("KPI phải là số lớn hơn 0."); render(); return; }
+  const code = inp.dataset.code;
+  config.apps[code] = { ...config.apps[code], kpi: Math.round(v * 1000) / 1000 };
+  saveConfig(); render();
+});
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.closest(".kpi-input")) e.target.blur(); });
 
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if (!el) return;
   switch (el.dataset.act) {
-    case "toggle": {
-      const id = el.dataset.id, open = !openDaily.has(id);
-      open ? openDaily.add(id) : openDaily.delete(id);
-      el.setAttribute("aria-expanded", open);
-      el.closest(".card").querySelector(".daily").hidden = !open;
+    case "panel": {
+      const id = el.dataset.id, kind = el.dataset.kind;
+      if (openPanels.get(id) === kind) openPanels.delete(id); else openPanels.set(id, kind);
+      render();
+      if (openPanels.get(id) === "geo") {
+        const a = results.flatMap(r => r.apps).find(x => `${x.acc}-${x.code}` === id);
+        if (a) loadGeo(a);
+      }
       break;
     }
+    case "camps": openCamps(el.dataset.acc, el.dataset.code); break;
+    case "geo-csv": exportGeo(el.dataset.acc, el.dataset.code); break;
+    case "camp-csv": exportCamps(); break;
     case "add-group": openGroup(null); break;
     case "edit-group": openGroup(+el.dataset.g); break;
     case "edit-app": openApp(el.dataset.code); break;
@@ -749,7 +966,7 @@ document.addEventListener("click", e => {
 /* ---------- Khởi động ---------- */
 async function boot() {
   config = loadLocal();
-  renderRangeUi(); render();
+  ensureDefaultRange(); renderRangeUi(); render();
   const use = n => (window.claude?.use ? window.claude.use(n) : Promise.resolve(null));
   const [db, m] = await Promise.all([use("db"), use("mcp")]);
   mcp = m; mcpReady = true;
