@@ -118,6 +118,13 @@
   .top { display: flex; justify-content: space-between; gap: 12px; }
   .top > div:first-child { min-width: 0; }
   .name-row { display: flex; align-items: baseline; gap: 6px; }
+  .card .name { margin: 4px 0 2px; }
+  .app-code { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: .04em; }
+  .pic { font-size: 14px; color: var(--muted); margin-top: 6px; }
+  .pic b { color: var(--text); font-weight: 600; }
+  .pic-empty { font: inherit; color: var(--camp-text); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .readonly-only { display: none; }
+  body.readonly .readonly-only { display: inline; }
   .name { font-size: 24px; font-weight: 600; margin: 4px 0 12px; }
   .score { text-align: right; flex-shrink: 0; }
   .score .val { font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
@@ -316,7 +323,8 @@
   <form method="dialog">
     <h2 id="appDlgTitle">App</h2>
     <div class="fields">
-      <label class="full">Tên hiển thị<input name="name" id="a-name" placeholder="AI Chat"></label>
+      <label class="full">Tên app<input name="name" id="a-name" placeholder="AI Chat"></label>
+      <label class="full">UA PIC<input name="pic" id="a-pic" placeholder="Tên người phụ trách"></label>
       <label class="full">KPI ROAS IAA D0<input name="kpi" id="a-kpi" type="number" step="0.01" min="0" placeholder="1.00"></label>
       <label class="full">Lọc camp có chứa <span class="hint">(trống = tự gom theo mã app)</span><input name="filter" id="a-filter" placeholder="AIP805_Global_ROAS"></label>
     </div>
@@ -875,7 +883,8 @@ function card(a, days, win) {
     <div class="top">
       <div>
         <div class="name-row"><div class="name">${esc(ov.name || a.code)}</div><button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}">Sửa</button></div>
-
+        <div class="app-code">${esc(a.code)}</div>
+        <div class="pic">UA PIC: ${ov.pic ? `<b>${esc(ov.pic)}</b>` : `<button class="pic-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}">điền tên</button><span class="readonly-only">—</span>`}</div>
       </div>
       <div class="score">
         <div class="val" style="color:${isNum(score) ? color : "var(--muted)"}">${isNum(score) ? score.toFixed(3) : "—"}</div>
@@ -1061,14 +1070,14 @@ function openApp(code) {
   editing = { code };
   const f = appDlg.querySelector("form"), ov = config.apps[code] || {};
   document.getElementById("appDlgTitle").textContent = `App ${code}`;
-  f.name.value = ov.name || ""; f.kpi.value = kpiOf(code).toFixed(2); f.filter.value = ov.filter || "";
+  f.name.value = ov.name || ""; f.kpi.value = kpiOf(code).toFixed(2); f.filter.value = ov.filter || ""; f.pic.value = ov.pic || "";
   appDlg.showModal();
 }
 appDlg.addEventListener("close", () => {
   if (appDlg.returnValue !== "save") return;
   const f = appDlg.querySelector("form");
   const kpi = parseFloat(f.kpi.value);
-  config.apps[editing.code] = { ...config.apps[editing.code], name: f.name.value.trim(), kpi: isFinite(kpi) && kpi > 0 ? kpi : 1, filter: f.filter.value.trim() };
+  config.apps[editing.code] = { ...config.apps[editing.code], name: f.name.value.trim(), kpi: isFinite(kpi) && kpi > 0 ? kpi : 1, filter: f.filter.value.trim(), pic: f.pic.value.trim() };
   saveConfig(); rebuild(activeTab); render();
 });
 
