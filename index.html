@@ -875,14 +875,11 @@ function card(a, days, win) {
     <div class="top">
       <div>
         <div class="name-row"><div class="name">${esc(ov.name || a.code)}</div><button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}">Sửa</button></div>
-        <div class="chips">
-          <span class="chip">KPI ${kpi.toFixed(2)}</span>
-        </div>
 
       </div>
       <div class="score">
         <div class="val" style="color:${isNum(score) ? color : "var(--muted)"}">${isNum(score) ? score.toFixed(3) : "—"}</div>
-        <div class="pct">${isNum(score) ? Math.round(ratio * 100) + "% KPI" : "chưa có spend"}</div>
+        <div class="pct">KPI ${kpi.toFixed(2)}</div>
       </div>
     </div>
     <label class="filter-row" title="Chỉ tính camp có tên chứa đoạn này. Xóa trống để tự gom theo mã app.">
