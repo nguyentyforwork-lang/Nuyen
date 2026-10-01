@@ -1079,7 +1079,7 @@ function card(a) {
     </div>
     <div class="new-row"><button class="new-badge${a.newCamps ? "" : " zero"}" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" data-new="1"
       title="Camp ${esc(config.groups[activeTab]?.keyword || "Ecomdy")} được tạo trong khoảng ngày đang xem (theo giờ tài khoản). Bấm để xem.">
-      <b>${a.newCamps}</b><span>camp mới ${win.cur.start === win.cur.end ? (win.cur.end === todayIn(accInfo.get(a.acc)?.tz) ? "hôm nay" : shortDate(win.cur.end)) : spanText(win.cur.start, win.cur.end)}</span></button></div>
+      <b>${a.newCamps}</b><span>New camp</span></button></div>
     ${panel === "daily" ? `<div class="panel">${dailyPanel(a, kpi, days)}</div>` : ""}
     ${panel === "geo" ? `<div class="panel">${geoPanel(a, kpi)}</div>` : ""}
   </article>`;
