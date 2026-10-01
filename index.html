@@ -304,6 +304,12 @@
 <body>
 <div class="wrap">
   <div class="toolbar">
+    <div class="seg" id="presetSeg" role="group" aria-label="Chọn nhanh khoảng ngày">
+      <button data-preset="today">Hôm nay</button>
+      <button data-preset="yesterday">Hôm qua</button>
+      <button data-preset="3d">3 ngày qua</button>
+      <button data-preset="7d">7 ngày qua</button>
+    </div>
     <div class="daterange">
       <label>Từ <input type="date" id="dStart"></label>
       <label>Đến <input type="date" id="dEnd"></label>
@@ -463,10 +469,16 @@ function firstTz() {
 // Ngày theo múi giờ từng tài khoản: khoảng ngày có chứa "hôm nay" (giờ máy bạn) thì mỗi tài khoản
 // dùng "hôm nay" của chính nó (vd. 6h sáng VN, tài khoản UTC+0 vẫn đang ở ngày hôm qua).
 // Khoảng ngày trong quá khứ thì giữ nguyên ngày; TikTok tự tính theo múi giờ tài khoản.
+// Chọn nhanh: tính theo "hôm nay" của từng tài khoản. "3/7 ngày qua" không gồm hôm nay (giống TikTok Ads Manager).
+const PRESETS = { today: [0, 0], yesterday: [1, 1], "3d": [3, 1], "7d": [7, 1] };
+function presetRange(key) {
+  const t = new Date(), [a, b] = PRESETS[key];
+  return { start: ymd(addDays(t, -a)), end: ymd(addDays(t, -b)), preset: key };
+}
 function accShift(acc) {
   const base = range || { start: ymd(new Date()), end: ymd(new Date()) };
   const tz = acc && accInfo.get(acc)?.tz;
-  if (!tz || base.end < ymd(new Date())) return 0;
+  if (!tz || (!base.preset && base.end < ymd(new Date()))) return 0;
   return dayDiff(ymd(new Date()), todayIn(tz));
 }
 function rangeWindows(acc) {
@@ -483,12 +495,13 @@ function rangeWindows(acc) {
   return { cur, prev, trend, len };
 }
 function ensureDefaultRange() {
+  if (range?.preset) { range = presetRange(range.preset); return; }   // làm mới mốc khi qua ngày
   if (rangeTouched && range) return;
-  const t = ymd(new Date());
-  range = { start: t, end: t };
+  range = presetRange("today");
 }
 function renderRangeUi() {
   const { cur, prev, len } = rangeWindows();
+  document.querySelectorAll("#presetSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.preset === range?.preset));
   document.getElementById("dStart").value = cur.start;
   document.getElementById("dEnd").value = cur.end;
   const accs = config.groups[activeTab]?.accounts || [];
@@ -1191,12 +1204,18 @@ function showBanner(msg) { const b = document.getElementById("banner"); b.textCo
 function hideBanner() { document.getElementById("banner").hidden = true; }
 
 /* ---------- Events ---------- */
+document.getElementById("presetSeg").addEventListener("click", e => {
+  const b = e.target.closest("button[data-preset]"); if (!b) return;
+  range = presetRange(b.dataset.preset); rangeTouched = true;
+  openPanels.clear(); results = [];
+  loadAll();
+});
 ["dStart", "dEnd"].forEach(id => document.getElementById(id).addEventListener("change", () => {
   let s = document.getElementById("dStart").value, e = document.getElementById("dEnd").value;
   if (!s || !e) return;
   if (s > e) { if (id === "dStart") e = s; else s = e; }
   if (dayDiff(s, e) > 364) { toast("Chọn tối đa 365 ngày."); renderRangeUi(); return; }
-  range = { start: s, end: e }; rangeTouched = true;
+  range = { start: s, end: e }; rangeTouched = true;   // chọn tay → bỏ chọn nhanh
   openPanels.clear(); results = [];
   loadAll();
 }));
