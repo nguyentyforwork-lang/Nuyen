@@ -317,8 +317,7 @@
     <h2 id="appDlgTitle">App</h2>
     <div class="fields">
       <label class="full">Tên hiển thị<input name="name" id="a-name" placeholder="AI Chat"></label>
-      <label>KPI ROAS IAA D0<input name="kpi" id="a-kpi" type="number" step="0.01" min="0" placeholder="1.00"></label>
-      <label>OS<input name="os" id="a-os" placeholder="iOS / Android"></label>
+      <label class="full">KPI ROAS IAA D0<input name="kpi" id="a-kpi" type="number" step="0.01" min="0" placeholder="1.00"></label>
       <label class="full">Lọc camp có chứa <span class="hint">(trống = tự gom theo mã app)</span><input name="filter" id="a-filter" placeholder="AIP805_Global_ROAS"></label>
     </div>
     <div class="dlg-actions">
@@ -877,8 +876,7 @@ function card(a, days, win) {
       <div>
         <div class="name-row"><div class="name">${esc(ov.name || a.code)}</div><button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}">Sửa</button></div>
         <div class="chips">
-          <span class="chip">${ov.os ? esc(ov.os) : "OS?"}</span>
-          <label class="chip kpi">KPI <input type="number" step="0.01" min="0" class="kpi-input" data-code="${esc(a.code)}" value="${kpi.toFixed(2)}" aria-label="KPI ROAS IAA D0 của ${esc(ov.name || a.code)}" ${readOnly ? "readonly" : ""}></label>
+          <span class="chip">KPI ${kpi.toFixed(2)}</span>
         </div>
 
       </div>
@@ -1066,14 +1064,14 @@ function openApp(code) {
   editing = { code };
   const f = appDlg.querySelector("form"), ov = config.apps[code] || {};
   document.getElementById("appDlgTitle").textContent = `App ${code}`;
-  f.name.value = ov.name || ""; f.kpi.value = kpiOf(code).toFixed(2); f.os.value = ov.os || ""; f.filter.value = ov.filter || "";
+  f.name.value = ov.name || ""; f.kpi.value = kpiOf(code).toFixed(2); f.filter.value = ov.filter || "";
   appDlg.showModal();
 }
 appDlg.addEventListener("close", () => {
   if (appDlg.returnValue !== "save") return;
   const f = appDlg.querySelector("form");
   const kpi = parseFloat(f.kpi.value);
-  config.apps[editing.code] = { ...config.apps[editing.code], name: f.name.value.trim(), kpi: isFinite(kpi) && kpi > 0 ? kpi : 1, os: f.os.value.trim(), filter: f.filter.value.trim() };
+  config.apps[editing.code] = { ...config.apps[editing.code], name: f.name.value.trim(), kpi: isFinite(kpi) && kpi > 0 ? kpi : 1, filter: f.filter.value.trim() };
   saveConfig(); rebuild(activeTab); render();
 });
 
