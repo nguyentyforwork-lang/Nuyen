@@ -294,9 +294,20 @@
   .new-badge b { font-size: 32px; font-weight: 700; }
   .new-badge span { font-size: 13px; font-weight: 500; margin-top: 4px; white-space: nowrap; }
   .new-badge.zero { background: transparent; border-color: var(--border); color: var(--muted); }
-  .groupby { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; display: grid; gap: 6px; }
-  .groupby legend { font-size: 13px; color: var(--muted); font-weight: 500; padding: 0 4px; }
-  .groupby label { flex-direction: row !important; align-items: center; gap: 8px !important; color: var(--text) !important; font-size: 14px !important; }
+  .groupby { border: 0; padding: 0; margin: 0; min-width: 0; }
+  .groupby legend { font-size: 13px; color: var(--muted); font-weight: 500; padding: 0; margin-bottom: 5px; }
+  .groupby .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .fields .groupby .opt {
+    position: relative; display: flex; flex-direction: column; gap: 3px; cursor: pointer;
+    border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg);
+  }
+  .fields .groupby .opt input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+  .groupby .opt-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .groupby .opt-desc { font-size: 12px; color: var(--muted); font-weight: 400; line-height: 1.35; }
+  .fields .groupby .opt:has(input:checked) { border-color: var(--line); background: color-mix(in srgb, var(--line) 8%, var(--card)); }
+  .fields .groupby .opt:has(input:checked) .opt-title { color: var(--line); }
+  .fields .groupby .opt:has(input:focus-visible) { outline: 2px solid var(--line); outline-offset: 2px; }
+  @media (max-width: 520px) { .groupby .opts { grid-template-columns: 1fr; } }
   .match-err { margin-top: 8px; font-size: 13px; color: var(--down); background: color-mix(in srgb, var(--down) 8%, transparent); border-radius: 8px; padding: 6px 10px; }
   .f-code, .f-kw { font: inherit; font-size: 15px; font-weight: 500; min-width: 0; border: 1px dashed transparent; outline: none; }
   .f-code { flex: 1 1 120px; } .f-kw { flex: 1 1 100px; }
@@ -345,8 +356,12 @@
       <label class="full">Tên nhóm<input name="name" id="g-name" required placeholder="Apero"></label>
       <label class="full">Lọc camp có chữ<input name="keyword" id="g-keyword" required value="Ecomdy"></label>
       <fieldset class="full groupby"><legend>Gom thẻ theo</legend>
-        <label><input type="radio" name="groupBy" value="app" checked> Mã app <span class="hint">— 1 tài khoản chạy nhiều app, mỗi mã app 1 thẻ</span></label>
-        <label><input type="radio" name="groupBy" value="account"> Tài khoản <span class="hint">— 1 tài khoản 1 app, mỗi tài khoản 1 thẻ</span></label>
+        <div class="opts">
+          <label class="opt"><input type="radio" name="groupBy" value="app" checked>
+            <span class="opt-title">Mã app</span><span class="opt-desc">1 tài khoản chạy nhiều app · mỗi mã app 1 thẻ</span></label>
+          <label class="opt"><input type="radio" name="groupBy" value="account">
+            <span class="opt-title">Tài khoản</span><span class="opt-desc">1 tài khoản 1 app · mỗi tài khoản 1 thẻ</span></label>
+        </div>
       </fieldset>
       <label class="full">ID tài khoản quảng cáo <span class="hint">(mỗi dòng 1 ID)</span>
         <textarea name="accounts" id="g-accounts" required placeholder="7542372674190934023&#10;7660741366342991879"></textarea></label>
