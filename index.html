@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* Layout: thanh chọn ngày ở trên, mỗi nhóm khách hàng là một lưới thẻ app (giống TTAM report theo app) */
   :root {
     --bg: #f4f5f8;
     --card: #ffffff;
@@ -23,7 +24,10 @@
     --up: #2e7d32;
     --down: #b3261e;
     --line: #4f46e5;
+    --on-line: #ffffff;
     --track: #eef0f3;
+    --warn-bg: #fff6e5;
+    --warn-text: #7a4b00;
     --shadow: 0 1px 2px rgba(16, 24, 40, .04);
   }
   @media (prefers-color-scheme: dark) {
@@ -32,7 +36,9 @@
       --chip-bg: #22262e; --chip-border: #2e333d; --chip-text: #c3c8d1;
       --camp-bg: #23233d; --camp-text: #a5a3ff;
       --good: #d4914a; --bad: #e0675f; --up: #5fbf68; --down: #ef6b62;
-      --line: #8b85ff; --track: #262a33;
+      --line: #8b85ff; --on-line: #0f1115; --track: #262a33;
+      --warn-bg: #2e2412; --warn-text: #f3c77a;
+      color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
@@ -40,10 +46,13 @@
     --chip-bg: #22262e; --chip-border: #2e333d; --chip-text: #c3c8d1;
     --camp-bg: #23233d; --camp-text: #a5a3ff;
     --good: #d4914a; --bad: #e0675f; --up: #5fbf68; --down: #ef6b62;
-    --line: #8b85ff; --track: #262a33;
+    --line: #8b85ff; --on-line: #0f1115; --track: #262a33;
+    --warn-bg: #2e2412; --warn-text: #f3c77a;
+    color-scheme: dark;
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--bg);
@@ -54,15 +63,45 @@
   }
   .wrap { max-width: 1680px; margin: 0 auto; padding: 16px; }
 
+  /* ---------- Toolbar ---------- */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
+  .seg { display: inline-flex; flex-wrap: wrap; background: var(--card); border: 1px solid var(--border); border-radius: 11px; padding: 3px; gap: 2px; }
+  .seg button {
+    font: inherit; font-size: 14px; font-weight: 500; color: var(--chip-text);
+    background: transparent; border: 0; border-radius: 8px; padding: 6px 11px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--line); color: var(--on-line); }
+  .custom { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+  .custom input { font: inherit; font-size: 14px; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; }
+  .range-label { font-size: 14px; color: var(--muted); }
+  .spacer { flex: 1; }
+  .tb {
+    font: inherit; font-size: 14px; font-weight: 500; color: var(--text);
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 7px 12px; cursor: pointer;
+  }
+  .tb:hover { background: var(--chip-bg); }
+  .tb.primary { background: var(--line); border-color: var(--line); color: var(--on-line); }
+  .tb.danger { color: var(--down); }
+  .tb:disabled { opacity: .5; cursor: default; }
+
+  .banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.5; margin-bottom: 18px; }
+
+  /* ---------- Groups ---------- */
+  section + section { margin-top: 40px; }
   .group-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 4px 0 20px; }
   .group-head h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
   .group-head .sub { color: var(--muted); font-size: 20px; }
+  .group-head .actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .status { font-size: 13px; color: var(--muted); }
+  .acc-errors { display: grid; gap: 6px; margin: -8px 0 16px; }
+  .acc-errors div { font-size: 13px; color: var(--down); }
 
   .grid {
-    align-items: start;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
     gap: 24px;
+    align-items: start;
   }
 
   .card {
@@ -72,8 +111,12 @@
     padding: 24px 24px 20px;
     box-shadow: var(--shadow);
     display: flex; flex-direction: column;
+    min-width: 0;
   }
+  .card.loading { min-height: 300px; justify-content: center; align-items: center; color: var(--muted); }
   .top { display: flex; justify-content: space-between; gap: 12px; }
+  .top > div:first-child { min-width: 0; }
+  .name-row { display: flex; align-items: baseline; gap: 6px; }
   .name { font-size: 24px; font-weight: 600; margin: 4px 0 12px; }
   .score { text-align: right; flex-shrink: 0; }
   .score .val { font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
@@ -84,6 +127,7 @@
     font-size: 17px; font-weight: 500;
     padding: 5px 11px; border-radius: 7px;
     background: var(--chip-bg); border: 1px solid var(--chip-border); color: var(--chip-text);
+    max-width: 100%; overflow-wrap: anywhere;
   }
   .chip.camp { background: var(--camp-bg); color: var(--camp-text); border-color: transparent; }
 
@@ -95,7 +139,7 @@
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 24px; }
   .stat .lbl { font-size: 16px; font-weight: 500; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
   .stat .num { font-size: 23px; font-weight: 600; margin-top: 8px; letter-spacing: .01em; }
-  .num.up { color: var(--up); } .num.down { color: var(--down); }
+  .num.up { color: var(--up); } .num.down { color: var(--down); } .num.na { color: var(--muted); }
 
   .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; }
   .acc { color: var(--muted); font-size: 18px; letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; }
@@ -104,53 +148,28 @@
     background: var(--card); border: 1px solid var(--border); border-radius: 12px;
     padding: 8px 15px; cursor: pointer; flex-shrink: 0;
   }
-  .btn:hover { background: var(--chip-bg); }
-  .btn[aria-expanded="true"] { background: var(--chip-bg); }
-
-  .daily { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; display: none; }
-  .daily.open { display: block; }
-  .daily table { width: 100%; border-collapse: collapse; font-size: 15px; }
-  .daily th { text-align: right; color: var(--muted); font-weight: 500; padding: 4px 6px; }
-  .daily td { text-align: right; padding: 4px 6px; border-top: 1px solid var(--border); }
-  .daily th:first-child, .daily td:first-child { text-align: left; }
-
-  @media (max-width: 520px) {
-    .card { padding: 18px 16px 16px; }
-    .name { font-size: 20px; }
-    .score .val { font-size: 36px; }
-    .stat .lbl { font-size: 13px; }
-    .stat .num { font-size: 19px; }
-    .acc { font-size: 14px; }
-    .btn { font-size: 16px; }
-  }
-
-  /* ---------- Toolbar & editor ---------- */
-  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-bottom: 16px; }
-  .tb {
-    font: inherit; font-size: 14px; font-weight: 500; color: var(--text);
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    padding: 7px 12px; cursor: pointer;
-  }
-  .tb:hover { background: var(--chip-bg); }
-  .tb.primary { background: var(--line); border-color: var(--line); color: #fff; }
-  .tb.danger { color: var(--down); }
-  section + section { margin-top: 36px; }
-  .group-head .actions { margin-left: auto; display: flex; gap: 6px; }
+  .btn:hover, .btn[aria-expanded="true"] { background: var(--chip-bg); }
   .icon {
     font: inherit; font-size: 13px; color: var(--muted); background: transparent;
     border: 1px solid transparent; border-radius: 8px; padding: 4px 8px; cursor: pointer;
   }
   .icon:hover { color: var(--text); border-color: var(--border); background: var(--card); }
-  .name-row { display: flex; align-items: center; gap: 6px; }
-  .name-row .icon { margin-top: -8px; }
+
+  .daily { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; overflow-x: auto; }
+  .daily table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .daily th { text-align: right; color: var(--muted); font-weight: 500; padding: 4px 6px; white-space: nowrap; }
+  .daily td { text-align: right; padding: 4px 6px; border-top: 1px solid var(--border); }
+  .daily th:first-child, .daily td:first-child { text-align: left; }
+
   .empty {
-    border: 1.5px dashed var(--border); border-radius: 18px; min-height: 160px;
-    display: flex; align-items: center; justify-content: center;
+    border: 1.5px dashed var(--border); border-radius: 18px; min-height: 160px; width: 100%;
+    display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px;
     color: var(--muted); font-size: 16px; cursor: pointer; background: transparent; font-family: inherit;
   }
   .empty:hover { color: var(--text); border-color: var(--muted); }
-  .num.na { color: var(--muted); }
+  div.empty { cursor: default; }
 
+  /* ---------- Dialogs ---------- */
   dialog {
     border: 1px solid var(--border); border-radius: 16px; padding: 0;
     background: var(--card); color: var(--text); width: min(560px, calc(100vw - 32px));
@@ -165,44 +184,64 @@
     font: inherit; font-size: 15px; color: var(--text); background: var(--bg);
     border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%;
   }
-  .fields textarea { min-height: 84px; resize: vertical; font-variant-numeric: tabular-nums; }
+  .fields textarea { min-height: 96px; resize: vertical; font-variant-numeric: tabular-nums; }
   .fields .hint { font-weight: 400; font-size: 12px; }
   .dlg-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
   .dlg-actions .spacer { flex: 1; }
+
   .toast {
     position: fixed; left: 50%; transform: translateX(-50%);
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     background: var(--text); color: var(--card); padding: 10px 16px; border-radius: 10px;
     font-size: 14px; max-width: calc(100vw - 32px); box-shadow: 0 6px 20px rgba(0,0,0,.18);
   }
-  .sync { font-size: 13px; color: var(--muted); align-self: center; margin-right: auto; }
-  body:not(.synced) .sync.db, body.synced .sync.local { display: none; }
-  body.readonly [data-act="add-group"], body.readonly [data-act="add-app"], body.readonly [data-act="edit-group"],
-  body.readonly [data-act="edit-app"], body.readonly [data-act="import"], body.readonly [data-act="clear"] { display: none; }
-  .tb:focus-visible, .btn:focus-visible, .icon:focus-visible, .empty:focus-visible { outline: 2px solid var(--line); outline-offset: 2px; }
-  @media (max-width: 520px) { .fields { grid-template-columns: 1fr; } }
+  body.readonly .edit-only { display: none !important; }
+  .tb:focus-visible, .btn:focus-visible, .icon:focus-visible, .empty:focus-visible, .seg button:focus-visible { outline: 2px solid var(--line); outline-offset: 2px; }
+
+  @media (max-width: 520px) {
+    .card { padding: 18px 16px 16px; }
+    .name { font-size: 20px; }
+    .score .val { font-size: 36px; }
+    .stat .lbl { font-size: 13px; }
+    .stat .num { font-size: 19px; }
+    .acc { font-size: 14px; }
+    .btn { font-size: 16px; }
+    .fields { grid-template-columns: 1fr; }
+    .group-head .actions { margin-left: 0; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="toolbar">
-    <span class="sync db">Đã đồng bộ: lưu trên server, mở máy nào cũng thấy</span>
-    <span class="sync local">Lưu trong trình duyệt này. Dùng Xuất JSON để sao lưu</span>
-    <button class="tb primary" data-act="add-group">+ Thêm nhóm</button>
-    <button class="tb" data-act="export">Xuất JSON</button>
-    <button class="tb" data-act="import">Nhập JSON</button>
-    <button class="tb danger" data-act="clear">Xóa hết</button>
-    <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <div class="seg" id="rangeSeg" role="group" aria-label="Khoảng ngày">
+      <button data-range="today">Hôm nay</button>
+      <button data-range="yesterday">Hôm qua</button>
+      <button data-range="7d">7 ngày qua</button>
+      <button data-range="14d">14 ngày qua</button>
+      <button data-range="30d">30 ngày qua</button>
+      <button data-range="custom">Tùy chọn</button>
+    </div>
+    <span class="custom" id="customRange" hidden>
+      <input type="date" id="customStart" aria-label="Từ ngày"> – <input type="date" id="customEnd" aria-label="Đến ngày">
+    </span>
+    <span class="range-label" id="rangeLabel"></span>
+    <span class="spacer"></span>
+    <button class="tb" data-act="refresh" id="refreshBtn">Làm mới</button>
+    <button class="tb primary edit-only" data-act="add-group">+ Thêm nhóm</button>
   </div>
+  <div id="banner" class="banner" hidden></div>
   <div id="app"></div>
 </div>
 
 <dialog id="groupDlg">
   <form method="dialog">
-    <h2>Nhóm</h2>
+    <h2>Nhóm tài khoản</h2>
     <div class="fields">
-      <label class="full">Tên nhóm<input name="name" required placeholder="Apero"></label>
-      <label class="full">Ghi chú<input name="note" placeholder="chỉ camp Ecomdy"></label>
+      <label class="full">Tên nhóm<input name="name" id="g-name" required placeholder="Apero"></label>
+      <label class="full">Lọc camp có chữ<input name="keyword" id="g-keyword" required value="Ecomdy"></label>
+      <label class="full">ID tài khoản quảng cáo <span class="hint">(mỗi dòng 1 ID)</span>
+        <textarea name="accounts" id="g-accounts" required placeholder="7542372674190934023&#10;7660741366342991879"></textarea></label>
     </div>
     <div class="dlg-actions">
       <button class="tb danger" value="delete" formnovalidate>Xóa nhóm</button>
@@ -215,22 +254,13 @@
 
 <dialog id="appDlg">
   <form method="dialog">
-    <h2>App</h2>
+    <h2 id="appDlgTitle">App</h2>
     <div class="fields">
-      <label class="full">Tên app<input name="name" required placeholder="AI Chat"></label>
-      <label>OS<input name="os" placeholder="iOS / Android (trống = OS?)"></label>
-      <label>KPI ROAS<input name="kpi" type="number" step="any" min="0" value="1"></label>
-      <label class="full">Campaign<input name="campaign" placeholder="APB508_Global_ROAS_Ecomdy"></label>
-      <label class="full">ID tài khoản<input name="account" placeholder="7542372674190934023"></label>
-      <label>Spend<input name="spend" type="number" step="any" min="0" placeholder="728"></label>
-      <label>Spend kỳ trước <span class="hint">(để tính Δ)</span><input name="prevSpend" type="number" step="any" min="0"></label>
-      <label class="full">NS/ngày <span class="hint">(trống = hiện SPEND/NGÀY)</span><input name="budget" type="number" step="any" min="0"></label>
-      <label class="full">Số liệu theo ngày <span class="hint">— mỗi dòng 1 ngày, cũ → mới: <code>ROAS</code> hoặc <code>ROAS, spend</code> hoặc <code>ngày, ROAS, spend</code>. Dòng cuối = ROAS hiện tại.</span>
-        <textarea name="daily" placeholder="1.02, 110&#10;0.98, 95&#10;0.906, 102"></textarea></label>
+      <label class="full">Tên hiển thị<input name="name" id="a-name" placeholder="AI Chat"></label>
+      <label>KPI ROAS IAA D0<input name="kpi" id="a-kpi" type="number" step="any" min="0" placeholder="1.00"></label>
+      <label>OS<input name="os" id="a-os" placeholder="iOS / Android"></label>
     </div>
     <div class="dlg-actions">
-      <button class="tb danger" value="delete" formnovalidate>Xóa app</button>
-      <span class="spacer"></span>
       <button class="tb" value="cancel" formnovalidate>Hủy</button>
       <button class="tb primary" value="save">Lưu</button>
     </div>
@@ -249,76 +279,424 @@
 <div id="toast" class="toast" role="status" hidden></div>
 
 <script>
-/* ---------- Mô hình dữ liệu ----------
-   group: { name, note, apps: [app] }
-   app:   { name, os, kpi, campaign, account, spend, prevSpend, budget,
-            daily: [{ date?, roas, spend? }] }   // cũ -> mới, phần tử cuối = hiện tại
+/* ============================================================
+   Cấu hình (người dùng nhập):
+     groups: [{ name, keyword, accounts: ["7542..."] }]
+     apps:   { "<MÃ APP>": { name, kpi, os } }    // ghi đè hiển thị theo mã app
+   Số liệu kéo từ TikTok qua connector "TikTok MCP":
+     report_integrated_get  → spend, ad_impression_ad_revenue_roas_day0 (IAA D0), total_purchase_roas_day0 (IAP D0)
+     campaign_get           → ngân sách/ngày của camp đang bật
+   Camp được gom theo mã app = đoạn đầu tiên của tên camp khác từ khóa lọc
+   (APB508_Global_ROAS_Ecomdy_... → APB508, Ecomdy_Elyra_... → Elyra).
+   ============================================================ */
+const SERVER = "TikTok MCP";
+const CONFIG_DOC = "dashboard/config";
+const LOCAL_KEY = "ecomdy-kpi-config-v2";
+const RANGE_KEY = "ecomdy-kpi-range";
+const GOOD_RATIO = 0.9;
+const M_IAA = "ad_impression_ad_revenue_roas_day0";
+const M_IAP = "total_purchase_roas_day0";
 
-   Lưu trữ:
-   - Mở trên Claude: database của trang (lưu trên server, máy nào cũng thấy).
-   - Mở ở nơi khác (GitHub Pages, file trên máy): localStorage của trình duyệt.
-   Dùng Xuất/Nhập JSON để sao lưu hoặc chuyển dữ liệu.
-*/
-const STORE_KEY = "apero-dashboard-v1";
-const DB_DOC = "dashboard/main";
-const GOOD_RATIO = 0.9; // >= 90% KPI -> màu nâu, dưới -> đỏ
-
-let groups = loadLocal();
-let dbRef = null;        // khi có database
-let readOnly = false;
+let config = { groups: [], apps: {} };
+let results = [];            // theo chỉ số nhóm: { status, apps, errors }
+let dbRef = null, mcp = null, mcpReady = false, readOnly = false;
 let writing = Promise.resolve();
+let loadGen = 0;
+let range = loadRange();
+const openDaily = new Set();
 
-function loadLocal() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return [];
+/* ---------- Helpers ---------- */
+const isNum = v => typeof v === "number" && isFinite(v);
+const num = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+const fmtUsd = v => !isNum(v) ? "—" : "$" + (v >= 1000 || Number.isInteger(v)
+  ? Math.round(v).toLocaleString("en-US")
+  : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pad2 = n => String(n).padStart(2, "0");
+const ymd = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const parseYmd = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const dayDiff = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
+const shortDate = s => { const [, m, d] = s.split("-"); return `${d}/${m}`; };
+
+/* ---------- Khoảng ngày ---------- */
+function loadRange() {
+  try { const r = JSON.parse(localStorage.getItem(RANGE_KEY)); if (r && r.key) return r; } catch (e) {}
+  return { key: "7d" };
+}
+function resolveRange(r) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const last = n => ({ start: ymd(addDays(today, -n)), end: ymd(addDays(today, -1)) });
+  switch (r.key) {
+    case "today": return { start: ymd(today), end: ymd(today) };
+    case "yesterday": return { start: ymd(addDays(today, -1)), end: ymd(addDays(today, -1)) };
+    case "14d": return last(14);
+    case "30d": return last(30);
+    case "custom":
+      if (r.start && r.end && r.start <= r.end) return { start: r.start, end: r.end };
+      return last(7);
+    default: return last(7);
+  }
+}
+function rangeWindows() {
+  const cur = resolveRange(range);
+  const len = dayDiff(cur.start, cur.end) + 1;
+  const prev = { start: ymd(addDays(parseYmd(cur.start), -len)), end: ymd(addDays(parseYmd(cur.start), -1)) };
+  // Biểu đồ: ít nhất 14 ngày, tối đa 30 ngày (giới hạn của report theo ngày)
+  const trendLen = Math.min(30, Math.max(14, len));
+  const trend = { start: ymd(addDays(parseYmd(cur.end), -(trendLen - 1))), end: cur.end };
+  return { cur, prev, trend, len };
+}
+function renderRangeUi() {
+  document.querySelectorAll("#rangeSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.range === range.key));
+  const custom = document.getElementById("customRange");
+  custom.hidden = range.key !== "custom";
+  const { cur, len } = rangeWindows();
+  if (range.key === "custom") {
+    document.getElementById("customStart").value = cur.start;
+    document.getElementById("customEnd").value = cur.end;
+  }
+  document.getElementById("rangeLabel").textContent =
+    cur.start === cur.end ? shortDate(cur.start) : `${shortDate(cur.start)} – ${shortDate(cur.end)} · ${len} ngày`;
 }
 
-function save() {
-  render();
-  const snapshot = structuredClone(groups);
+/* ---------- Lưu cấu hình ---------- */
+function loadLocal() {
+  try { const raw = localStorage.getItem(LOCAL_KEY); if (raw) return normalize(JSON.parse(raw)); } catch (e) {}
+  return { groups: [], apps: {} };
+}
+function normalize(c) {
+  return { groups: Array.isArray(c?.groups) ? c.groups : [], apps: c?.apps && typeof c.apps === "object" ? c.apps : {} };
+}
+function saveConfig() {
+  const snap = structuredClone(config);
   if (!dbRef) {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(snapshot)); }
-    catch (e) { toast("Trình duyệt không cho lưu dữ liệu. Hãy Xuất JSON để giữ lại."); }
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(snap)); }
+    catch (e) { toast("Trình duyệt không cho lưu cấu hình."); }
     return;
   }
-  // Mỗi lần chỉ một lệnh ghi vào tài liệu.
-  writing = writing.then(() => dbRef.set({ groups: snapshot, updatedAt: new Date().toISOString() }))
+  writing = writing.then(() => dbRef.set({ ...snap, updatedAt: new Date().toISOString() }))
     .catch(err => {
       if (err?.code === "invalid_argument") { readOnly = true; render(); toast("Bạn chỉ có quyền xem, thay đổi không được lưu."); }
-      else if (err?.code === "quota_exceeded") toast("Dữ liệu quá lớn để lưu. Hãy bớt số ngày hoặc xóa app cũ.");
       else toast("Chưa lưu được thay đổi. Kiểm tra kết nối rồi thử lại.");
     });
 }
 
-async function connectDb() {
-  const db = await window.claude?.use?.("db");
-  if (!db) return; // không có database: dùng localStorage
-  dbRef = db.doc(DB_DOC);
-  groups = [];
-  document.body.classList.add("synced");
+/* ---------- Gọi TikTok qua connector ---------- */
+const ERR_TEXT = {
+  server_not_connected: `Chưa kết nối connector ${SERVER}. Thêm trong claude.ai → Settings → Connectors rồi bấm Làm mới.`,
+  needs_reauth: `Kết nối ${SERVER} đã hết hạn. Kết nối lại trong claude.ai → Settings → Connectors.`,
+  selection_required: `Bạn có nhiều connector ${SERVER}. Chọn một connector khi được hỏi rồi bấm Làm mới.`,
+  not_in_manifest: `Trang chưa được phép dùng ${SERVER}. Bấm Làm mới và chọn Cho phép.`,
+  consent_required: `Trang chưa được phép dùng ${SERVER}. Bấm Làm mới và chọn Cho phép.`,
+  blocked_by_policy: `Tổ chức của bạn đang chặn ${SERVER} cho trang này.`,
+  approval_required: `Tổ chức yêu cầu duyệt từng lần gọi ${SERVER}, trang này chưa hỗ trợ.`,
+  server_unavailable: "TikTok không phản hồi. Đợi một lát rồi bấm Làm mới.",
+};
+const PAGE_LEVEL = new Set(["server_not_connected", "needs_reauth", "selection_required", "not_in_manifest", "consent_required", "blocked_by_policy", "approval_required"]);
+const errText = e => ERR_TEXT[e?.code] || e?.message || "Không kéo được số liệu.";
+
+async function tt(tool, input, refresh) {
+  const opts = { cache: { staleTime: 120000, gcTime: 1800000, refresh: !!refresh } };
+  let res;
+  try { res = await mcp.callTool(SERVER, tool, input, opts); }
+  catch (e) {
+    if (!e?.retryable) throw e;
+    await new Promise(r => setTimeout(r, Math.min(e.retryAfterMs || 0, 10000) + 800 + Math.random() * 1200));
+    res = await mcp.callTool(SERVER, tool, input, opts);
+  }
+  let p = res?.payload;
+  if (typeof p === "string") { try { p = JSON.parse(p); } catch (e) {} }
+  if (!p || typeof p !== "object") throw { code: "bad_payload", message: "TikTok trả về dữ liệu không đọc được." };
+  if (p.code !== undefined && Number(p.code) !== 0) throw { code: "api_error", message: `TikTok: ${p.message || "lỗi " + p.code}` };
+  return { data: p.data || {}, storedAt: res.cache?.storedAt };
+}
+async function allPages(tool, input, refresh) {
+  const rows = []; let storedAt;
+  for (let page = 1; page <= 20; page++) {
+    const { data, storedAt: s } = await tt(tool, { ...input, page, page_size: 1000 }, refresh);
+    if (s && (!storedAt || s < storedAt)) storedAt = s;
+    rows.push(...(data.list || []));
+    if (page >= (data.page_info?.total_page || 1)) break;
+  }
+  return { rows, storedAt };
+}
+
+function appCode(name, kw) {
+  const segs = name.trim().split("_").map(s => s.trim()).filter(Boolean);
+  return segs.find(s => s.toLowerCase() !== kw.toLowerCase()) || segs[0] || "?";
+}
+function commonPrefix(names, kw) {
+  let p = null;
+  for (const n of names) {
+    const segs = n.trim().split("_");
+    if (!p) { p = segs; continue; }
+    let i = 0; while (i < p.length && i < segs.length && p[i] === segs[i]) i++;
+    p = p.slice(0, i);
+  }
+  p = p || [];
+  // Cắt sau đoạn chứa từ khóa: APB508_Global_ROAS_Ecomdy_0110_... → APB508_Global_ROAS_Ecomdy
+  const k = p.findIndex(s => s.toLowerCase() === kw.toLowerCase());
+  if (k >= 0 && k < p.length - 1) p = p.slice(0, Math.max(k + 1, 2));
+  return p.join("_");
+}
+
+async function fetchAccount(acc, kw, win, refresh) {
+  const kwl = kw.toLowerCase();
+  const filtering = [{ field_name: "campaign_name", filter_type: "MATCH", filter_value: kw }];
+  const base = { advertiser_id: acc, report_type: "BASIC", data_level: "AUCTION_CAMPAIGN", filtering };
+  const [cur, prev, trend, camps] = await Promise.all([
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA, M_IAP], start_date: win.cur.start, end_date: win.cur.end }, refresh),
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end }, refresh),
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA, M_IAP], start_date: win.trend.start, end_date: win.trend.end }, refresh),
+    allPages("campaign_get", { advertiser_id: acc, filtering: { campaign_name: kw }, fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status"] }, refresh)
+      .catch(() => ({ rows: [] })), // ngân sách là phụ: lỗi thì hiện SPEND/NGÀY
+  ]);
+
+  const apps = new Map();
+  const get = code => {
+    if (!apps.has(code)) apps.set(code, { acc, code, names: new Set(), spend: 0, revIaa: 0, revIap: 0, prevSpend: 0, budget: 0, days: new Map() });
+    return apps.get(code);
+  };
+  const ok = name => typeof name === "string" && name.toLowerCase().includes(kwl);
+
+  for (const r of cur.rows) {
+    const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
+    const a = get(appCode(m.campaign_name, kw)); const sp = num(m.spend);
+    a.names.add(m.campaign_name); a.spend += sp; a.revIaa += sp * num(m[M_IAA]); a.revIap += sp * num(m[M_IAP]);
+  }
+  for (const r of prev.rows) {
+    const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
+    get(appCode(m.campaign_name, kw)).prevSpend += num(m.spend);
+  }
+  for (const r of trend.rows) {
+    const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
+    const day = String(r.dimensions?.stat_time_day || "").slice(0, 10); if (!day) continue;
+    const a = get(appCode(m.campaign_name, kw)); const sp = num(m.spend);
+    const d = a.days.get(day) || { spend: 0, revIaa: 0, revIap: 0 };
+    d.spend += sp; d.revIaa += sp * num(m[M_IAA]); d.revIap += sp * num(m[M_IAP]);
+    a.days.set(day, d);
+  }
+  for (const c of camps.rows) {
+    if (!ok(c.campaign_name) || c.operation_status !== "ENABLE") continue;
+    if (!/DAY|DAILY/.test(c.budget_mode || "")) continue;
+    const a = apps.get(appCode(c.campaign_name, kw)); if (a) a.budget += num(c.budget);
+  }
+  const list = [...apps.values()].filter(a => a.spend > 0 || a.budget > 0);
+  for (const a of list) a.prefix = commonPrefix([...a.names], kw) || a.code;
+  return { apps: list, storedAt: cur.storedAt };
+}
+
+async function loadAll(refresh = false) {
+  const gen = ++loadGen;
+  renderRangeUi();
+  if (!mcpReady) { render(); return; }
+  if (!mcp) {
+    showBanner(`Kéo số tự động chỉ chạy khi mở trang này trên Claude, với connector ${SERVER} đã kết nối.`);
+    results = config.groups.map(() => ({ status: "error", apps: [], errors: [] }));
+    render(); return;
+  }
+  hideBanner();
+  const win = rangeWindows();
+  results = config.groups.map(() => ({ status: "loading", apps: [], errors: [] }));
   render();
-  dbRef.onSnapshot(snap => {
-    if (snap.metadata.hasPendingWrites) return;
-    groups = snap.exists ? structuredClone(snap.data().groups || []) : [];
+  document.getElementById("refreshBtn").disabled = true;
+
+  await Promise.all(config.groups.map(async (g, gi) => {
+    const kw = (g.keyword || "Ecomdy").trim();
+    const settled = await Promise.allSettled((g.accounts || []).map(acc => fetchAccount(acc, kw, win, refresh)));
+    if (gen !== loadGen) return;
+    const res = { status: "ok", apps: [], errors: [], storedAt: null };
+    settled.forEach((s, i) => {
+      if (s.status === "fulfilled") {
+        res.apps.push(...s.value.apps);
+        if (s.value.storedAt && (!res.storedAt || s.value.storedAt < res.storedAt)) res.storedAt = s.value.storedAt;
+      } else res.errors.push({ acc: g.accounts[i], err: s.reason });
+    });
+    res.apps.sort((a, b) => b.spend - a.spend);
+    results[gi] = res;
     render();
-  }, () => { toast("Mất kết nối dữ liệu. Tải lại trang để tiếp tục."); });
-  try {
-    const user = await window.claude.use("user");
-    const can = await user?.can?.("data.write");
-    if (can === false) { readOnly = true; render(); }
-  } catch (e) {}
+  }));
+  if (gen !== loadGen) return;
+  document.getElementById("refreshBtn").disabled = false;
+
+  // Lỗi cùng loại ở mọi tài khoản (vd. chưa kết nối connector) → báo một lần ở đầu trang
+  const errs = results.flatMap(r => r.errors.map(e => e.err));
+  const anyOk = results.some((r, gi) => r.errors.length < (config.groups[gi]?.accounts?.length || 0));
+  if (errs.length && !anyOk && errs.every(e => e?.code === errs[0]?.code) && PAGE_LEVEL.has(errs[0]?.code)) {
+    showBanner(errText(errs[0]));
+    results.forEach(r => { r.errors = []; r.pageError = true; });
+    render();
+  }
 }
 
-function toast(msg) {
-  const el = document.getElementById("toast");
-  el.textContent = msg; el.hidden = false;
-  clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 4000);
+/* ---------- Render ---------- */
+function sparkline(series, kpi) {
+  const pts0 = series.filter(isNum);
+  if (pts0.length < 2) return `<svg class="spark" viewBox="0 0 480 64" aria-hidden="true"></svg>`;
+  const W = 480, H = 64, pad = 6;
+  const lo = Math.min(...pts0, kpi), hi = Math.max(...pts0, kpi);
+  const span = hi - lo || 1;
+  const x = i => (i / (series.length - 1)) * W;
+  const y = v => pad + (1 - (v - lo) / span) * (H - pad * 2);
+  const idx = series.map((v, i) => isNum(v) ? i : -1).filter(i => i >= 0);
+  const pts = idx.map(i => `${x(i).toFixed(1)},${y(series[i]).toFixed(1)}`).join(" ");
+  const ky = y(kpi).toFixed(1);
+  const dots = idx.slice(-2).map(i =>
+    `<circle cx="${x(i)}" cy="${y(series[i])}" r="5" fill="${series[i] >= kpi ? "var(--up)" : "var(--down)"}"/>`).join("");
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="0" x2="${W}" y1="${ky}" y2="${ky}" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="8 6" vector-effect="non-scaling-stroke" opacity=".7"/>
+    <polyline points="${pts}" fill="none" stroke="var(--line)" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    ${dots}
+  </svg>`;
 }
 
-/* Hộp xác nhận trong trang (confirm() bị chặn trong trang Claude) */
+function trendDays() {
+  const { trend } = rangeWindows(); const out = [];
+  for (let d = parseYmd(trend.start); ymd(d) <= trend.end; d = addDays(d, 1)) out.push(ymd(d));
+  return out;
+}
+
+function dailyTable(a, kpi, days) {
+  const rows = days.slice().reverse().map(day => {
+    const d = a.days.get(day);
+    if (!d || !d.spend) return `<tr><td>${shortDate(day)}</td><td>—</td><td class="num na">—</td><td class="num na">—</td></tr>`;
+    const iaa = d.revIaa / d.spend, iap = d.revIap / d.spend;
+    return `<tr><td>${shortDate(day)}</td><td>${fmtUsd(d.spend)}</td><td class="num ${iaa >= kpi ? "up" : "down"}">${iaa.toFixed(3)}</td><td>${iap.toFixed(3)}</td></tr>`;
+  }).join("");
+  return `<table><thead><tr><th>Ngày</th><th>Spend</th><th>ROAS IAA D0</th><th>ROAS IAP D0</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function card(a, days, len) {
+  const ov = config.apps[a.code] || {};
+  const kpi = isNum(ov.kpi) && ov.kpi > 0 ? ov.kpi : 1;
+  const score = a.spend > 0 ? a.revIaa / a.spend : null;
+  const ratio = isNum(score) ? score / kpi : 0;
+  const color = ratio >= GOOD_RATIO ? "var(--good)" : "var(--bad)";
+  const hasDelta = a.prevSpend > 0;
+  const delta = hasDelta ? (a.spend - a.prevSpend) / a.prevSpend : 0;
+  const third = a.budget > 0 ? { lbl: "NS/ngày", val: fmtUsd(a.budget) } : { lbl: "Spend/ngày", val: fmtUsd(a.spend / len) };
+  const series = days.map(day => { const d = a.days.get(day); return d && d.spend > 0 ? d.revIaa / d.spend : null; });
+  const id = `d-${a.acc}-${a.code}`;
+  const open = openDaily.has(id);
+
+  return `<article class="card">
+    <div class="top">
+      <div>
+        <div class="name-row"><div class="name">${esc(ov.name || a.code)}</div><button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}">Sửa</button></div>
+        <div class="chips">
+          <span class="chip">${ov.os ? esc(ov.os) : "OS?"}</span>
+          <span class="chip">KPI ${kpi.toFixed(2)}</span>
+          <span class="chip camp" title="${a.names.size} camp">${esc(a.prefix)}</span>
+        </div>
+      </div>
+      <div class="score">
+        <div class="val" style="color:${isNum(score) ? color : "var(--muted)"}">${isNum(score) ? score.toFixed(3) : "—"}</div>
+        <div class="pct">${isNum(score) ? Math.round(ratio * 100) + "% KPI" : "chưa có spend"}</div>
+      </div>
+    </div>
+
+    <div class="bar"><span style="width:${Math.min(ratio, 1) * 100}%;background:${color}"></span></div>
+    ${sparkline(series, kpi)}
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">Spend</div><div class="num">${fmtUsd(a.spend)}</div></div>
+      <div class="stat"><div class="lbl">Δ Spend</div>${hasDelta
+        ? `<div class="num ${delta >= 0 ? "up" : "down"}">${(delta >= 0 ? "+" : "-") + Math.abs(Math.round(delta * 100))}%</div>`
+        : `<div class="num na">—</div>`}</div>
+      <div class="stat"><div class="lbl">${third.lbl}</div><div class="num">${third.val}</div></div>
+    </div>
+
+    <div class="foot">
+      <span class="acc">${esc(a.acc)}</span>
+      <button class="btn" data-act="toggle" data-id="${esc(id)}" aria-expanded="${open}">Theo ngày</button>
+    </div>
+    <div class="daily" ${open ? "" : "hidden"}>${dailyTable(a, kpi, days)}</div>
+  </article>`;
+}
+
+function render() {
+  document.body.classList.toggle("readonly", readOnly);
+  const el = document.getElementById("app");
+  if (!config.groups.length) {
+    el.innerHTML = readOnly
+      ? `<div class="empty">Chưa có nhóm tài khoản nào.</div>`
+      : `<button class="empty" data-act="add-group">Bấm để thêm nhóm đầu tiên: đặt tên (vd. Apero) và dán ID tài khoản quảng cáo. Trang sẽ tự kéo các camp Ecomdy về.</button>`;
+    return;
+  }
+  const { len } = rangeWindows();
+  const days = trendDays();
+  el.innerHTML = config.groups.map((g, gi) => {
+    const r = results[gi] || { status: "idle", apps: [], errors: [] };
+    const total = r.apps.reduce((s, a) => s + a.spend, 0);
+    const kw = esc(g.keyword || "Ecomdy");
+    const sub = r.status === "ok"
+      ? `${r.apps.length} app · ${fmtUsd(Math.round(total))} · chỉ camp ${kw}`
+      : `${(g.accounts || []).length} tài khoản · chỉ camp ${kw}`;
+    const status = r.status === "loading" ? "Đang kéo số…"
+      : r.status === "ok" && r.storedAt ? `Số liệu lúc ${new Date(r.storedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`
+      : "";
+    let body;
+    if (r.status === "loading") body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
+    else if (r.pageError || r.status !== "ok") body = `<div class="empty">Chưa có số liệu.</div>`;
+    else if (!r.apps.length && !r.errors.length) body = `<div class="empty">Không có camp ${kw} nào có spend trong khoảng ngày này.</div>`;
+    else body = r.apps.map(a => card(a, days, len)).join("");
+    const errs = r.errors.length ? `<div class="acc-errors">${r.errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
+    return `<section>
+      <div class="group-head">
+        <h1>${esc(g.name)}</h1>
+        <span class="sub">${sub}</span>
+        <span class="actions"><span class="status">${status}</span>
+          <button class="icon edit-only" data-act="edit-group" data-g="${gi}">Sửa nhóm</button></span>
+      </div>
+      ${errs}
+      <div class="grid">${body}</div>
+    </section>`;
+  }).join("");
+}
+
+/* ---------- Dialogs ---------- */
+const groupDlg = document.getElementById("groupDlg");
+const appDlg = document.getElementById("appDlg");
+let editing = null;
+
+function openGroup(gi) {
+  editing = { gi };
+  const f = groupDlg.querySelector("form");
+  const g = gi != null ? config.groups[gi] : { name: "", keyword: "Ecomdy", accounts: [] };
+  f.name.value = g.name; f.keyword.value = g.keyword || "Ecomdy"; f.accounts.value = (g.accounts || []).join("\n");
+  f.querySelector('[value="delete"]').hidden = gi == null;
+  groupDlg.showModal();
+}
+groupDlg.addEventListener("close", () => {
+  const f = groupDlg.querySelector("form"), { gi } = editing;
+  if (groupDlg.returnValue === "save") {
+    const accounts = [...new Set(f.accounts.value.split(/[\s,;]+/).map(s => s.replace(/\D/g, "")).filter(Boolean))];
+    const g = { name: f.name.value.trim(), keyword: f.keyword.value.trim() || "Ecomdy", accounts };
+    if (gi == null) config.groups.push(g); else config.groups[gi] = g;
+    saveConfig(); loadAll();
+  } else if (groupDlg.returnValue === "delete") {
+    ask(`Xóa nhóm "${config.groups[gi].name}"? Số liệu trên TikTok không bị ảnh hưởng.`).then(ok => {
+      if (ok) { config.groups.splice(gi, 1); results.splice(gi, 1); saveConfig(); render(); }
+    });
+  }
+});
+
+function openApp(code) {
+  editing = { code };
+  const f = appDlg.querySelector("form"), ov = config.apps[code] || {};
+  document.getElementById("appDlgTitle").textContent = `App ${code}`;
+  f.name.value = ov.name || ""; f.kpi.value = isNum(ov.kpi) ? ov.kpi : ""; f.os.value = ov.os || "";
+  appDlg.showModal();
+}
+appDlg.addEventListener("close", () => {
+  if (appDlg.returnValue !== "save") return;
+  const f = appDlg.querySelector("form");
+  const kpi = parseFloat(f.kpi.value);
+  config.apps[editing.code] = { name: f.name.value.trim(), kpi: isFinite(kpi) && kpi > 0 ? kpi : null, os: f.os.value.trim() };
+  saveConfig(); render();
+});
+
 function ask(message, okLabel = "Xóa") {
   const dlg = document.getElementById("confirmDlg");
   dlg.querySelector("p").textContent = message;
@@ -327,254 +705,70 @@ function ask(message, okLabel = "Xóa") {
   dlg.showModal();
   return new Promise(res => dlg.addEventListener("close", () => res(dlg.returnValue === "ok"), { once: true }));
 }
-
-/* ---------- Helpers ---------- */
-const isNum = v => typeof v === "number" && isFinite(v);
-const fmtUsd = v => !isNum(v) ? "—" : "$" + (v >= 1000 || Number.isInteger(v)
-  ? Math.round(v).toLocaleString("en-US")
-  : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const toNum = s => { const v = parseFloat(String(s).replace(/[$,\s]/g, "")); return isFinite(v) ? v : null; };
-
-function sparkline(series, kpi) {
-  if (series.length < 2) return `<svg class="spark" viewBox="0 0 480 64" aria-hidden="true"></svg>`;
-  const W = 480, H = 64, pad = 6;
-  const lo = Math.min(...series, kpi), hi = Math.max(...series, kpi);
-  const span = hi - lo || 1;
-  const x = i => (i / (series.length - 1)) * W;
-  const y = v => pad + (1 - (v - lo) / span) * (H - pad * 2);
-  const pts = series.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const ky = y(kpi).toFixed(1);
-  const dots = series.slice(-2).map((v, j) => {
-    const i = series.length - 2 + j;
-    return `<circle cx="${x(i)}" cy="${y(v)}" r="5" fill="${v >= kpi ? "var(--up)" : "var(--down)"}"/>`;
-  }).join("");
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-    <line x1="0" x2="${W}" y1="${ky}" y2="${ky}" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="8 6" vector-effect="non-scaling-stroke" opacity=".7"/>
-    <polyline points="${pts}" fill="none" stroke="var(--line)" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-    ${dots}
-  </svg>`;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 4000);
 }
-
-function dailyTable(app) {
-  const d = app.daily || [];
-  if (!d.length) return `<div class="acc">Chưa có số liệu theo ngày.</div>`;
-  const hasSpend = d.some(r => isNum(r.spend));
-  const rows = d.map((r, i) => {
-    const label = r.date || `Ngày ${i + 1}`;
-    return `<tr><td>${esc(label)}</td>${hasSpend ? `<td>${fmtUsd(r.spend)}</td>` : ""}<td class="num ${r.roas >= app.kpi ? "up" : "down"}">${r.roas.toFixed(3)}</td></tr>`;
-  }).reverse().join("");
-  return `<table><thead><tr><th>Ngày</th>${hasSpend ? "<th>Spend</th>" : ""}<th>ROAS</th></tr></thead><tbody>${rows}</tbody></table>`;
-}
-
-function card(app, gi, ai) {
-  const kpi = isNum(app.kpi) && app.kpi > 0 ? app.kpi : 1;
-  const series = (app.daily || []).map(r => r.roas);
-  const score = series.length ? series[series.length - 1] : null;
-  const ratio = isNum(score) ? score / kpi : 0;
-  const color = ratio >= GOOD_RATIO ? "var(--good)" : "var(--bad)";
-  const hasDelta = isNum(app.spend) && isNum(app.prevSpend) && app.prevSpend > 0;
-  const delta = hasDelta ? (app.spend - app.prevSpend) / app.prevSpend : 0;
-  const deltaHtml = hasDelta
-    ? `<div class="num ${delta >= 0 ? "up" : "down"}">${(delta >= 0 ? "+" : "-") + Math.abs(Math.round(delta * 100))}%</div>`
-    : `<div class="num na">—</div>`;
-  const third = isNum(app.budget)
-    ? { lbl: "NS/ngày", val: fmtUsd(app.budget) }
-    : { lbl: "Spend/ngày", val: fmtUsd(app.spend) };
-  const id = `d${gi}-${ai}`;
-
-  return `<article class="card">
-    <div class="top">
-      <div>
-        <div class="name-row"><div class="name">${esc(app.name)}</div><button class="icon" data-act="edit-app" data-g="${gi}" data-a="${ai}">Sửa</button></div>
-        <div class="chips">
-          <span class="chip">${app.os ? esc(app.os) : "OS?"}</span>
-          <span class="chip">KPI ${kpi.toFixed(2)}</span>
-          ${app.campaign ? `<span class="chip camp">${esc(app.campaign)}</span>` : ""}
-        </div>
-      </div>
-      <div class="score">
-        <div class="val" style="color:${isNum(score) ? color : "var(--muted)"}">${isNum(score) ? score.toFixed(3) : "—"}</div>
-        <div class="pct">${isNum(score) ? Math.round(ratio * 100) + "% KPI" : "chưa có ROAS"}</div>
-      </div>
-    </div>
-
-    <div class="bar"><span style="width:${Math.min(ratio, 1) * 100}%;background:${color}"></span></div>
-    ${sparkline(series, kpi)}
-
-    <div class="stats">
-      <div class="stat"><div class="lbl">Spend</div><div class="num">${fmtUsd(app.spend)}</div></div>
-      <div class="stat"><div class="lbl">Δ Spend</div>${deltaHtml}</div>
-      <div class="stat"><div class="lbl">${third.lbl}</div><div class="num">${third.val}</div></div>
-    </div>
-
-    <div class="foot">
-      <span class="acc">${esc(app.account)}</span>
-      <button class="btn" data-act="toggle" aria-expanded="false" aria-controls="${id}">Theo ngày</button>
-    </div>
-    <div class="daily" id="${id}">${dailyTable(app)}</div>
-  </article>`;
-}
-
-function render() {
-  const el = document.getElementById("app");
-  document.body.classList.toggle("readonly", readOnly);
-  if (!groups.length) {
-    el.innerHTML = readOnly
-      ? `<div class="empty" style="width:100%">Chưa có dữ liệu.</div>`
-      : `<button class="empty" style="width:100%" data-act="add-group">Chưa có dữ liệu. Bấm để thêm nhóm đầu tiên (vd. Apero), rồi thêm app vào nhóm.</button>`;
-    return;
-  }
-  el.innerHTML = groups.map((g, gi) => {
-    const total = g.apps.reduce((s, a) => s + (isNum(a.spend) ? a.spend : 0), 0);
-    return `<section>
-      <div class="group-head">
-        <h1>${esc(g.name)}</h1>
-        <span class="sub">${g.apps.length} app · ${fmtUsd(Math.round(total))}${g.note ? " · " + esc(g.note) : ""}</span>
-        <span class="actions">
-          <button class="icon" data-act="edit-group" data-g="${gi}">Sửa nhóm</button>
-          <button class="icon" data-act="add-app" data-g="${gi}">+ App</button>
-        </span>
-      </div>
-      <div class="grid">
-        ${g.apps.map((a, ai) => card(a, gi, ai)).join("")}
-        <button class="empty" data-act="add-app" data-g="${gi}">+ Thêm app</button>
-      </div>
-    </section>`;
-  }).join("");
-}
-
-/* ---------- Editor ---------- */
-const groupDlg = document.getElementById("groupDlg");
-const appDlg = document.getElementById("appDlg");
-let editing = null; // { gi, ai }
-
-function openGroup(gi) {
-  editing = { gi };
-  const f = groupDlg.querySelector("form");
-  const g = gi != null ? groups[gi] : { name: "", note: "" };
-  f.name.value = g.name; f.note.value = g.note || "";
-  f.querySelector('[value="delete"]').hidden = gi == null;
-  groupDlg.showModal();
-}
-
-function dailyToText(daily) {
-  return (daily || []).map(r => [r.date, r.roas, r.spend].filter(v => v != null && v !== "").join(", ")).join("\n");
-}
-function parseDaily(text) {
-  return text.split(/\n/).map(l => l.trim()).filter(Boolean).map(line => {
-    const parts = line.split(/[,;\t]+/).map(s => s.trim()).filter(Boolean);
-    let date = null;
-    if (parts.length >= 3 || (parts.length === 2 && toNum(parts[0]) === null)) date = parts.shift();
-    const roas = toNum(parts[0]);
-    const spend = parts.length > 1 ? toNum(parts[1]) : null;
-    if (roas === null) return null;
-    const r = { roas };
-    if (date) r.date = date;
-    if (spend !== null) r.spend = spend;
-    return r;
-  }).filter(Boolean);
-}
-
-function openApp(gi, ai) {
-  editing = { gi, ai };
-  const f = appDlg.querySelector("form");
-  const a = ai != null ? groups[gi].apps[ai] : { kpi: 1 };
-  for (const k of ["name", "os", "campaign", "account"]) f[k].value = a[k] ?? "";
-  for (const k of ["kpi", "spend", "prevSpend", "budget"]) f[k].value = isNum(a[k]) ? a[k] : "";
-  f.daily.value = dailyToText(a.daily);
-  f.querySelector('[value="delete"]').hidden = ai == null;
-  appDlg.showModal();
-}
-
-groupDlg.addEventListener("close", () => {
-  const f = groupDlg.querySelector("form"), { gi } = editing;
-  if (groupDlg.returnValue === "save") {
-    const data = { name: f.name.value.trim(), note: f.note.value.trim() };
-    if (gi == null) groups.push({ ...data, apps: [] });
-    else Object.assign(groups[gi], data);
-    save();
-  } else if (groupDlg.returnValue === "delete") {
-    ask(`Xóa nhóm "${groups[gi].name}" và toàn bộ app trong đó?`).then(ok => { if (ok) { groups.splice(gi, 1); save(); } });
-  }
-});
-
-appDlg.addEventListener("close", () => {
-  const f = appDlg.querySelector("form"), { gi, ai } = editing;
-  if (appDlg.returnValue === "save") {
-    const app = {
-      name: f.name.value.trim(),
-      os: f.os.value.trim() || null,
-      kpi: toNum(f.kpi.value) ?? 1,
-      campaign: f.campaign.value.trim(),
-      account: f.account.value.trim(),
-      spend: toNum(f.spend.value),
-      prevSpend: toNum(f.prevSpend.value),
-      budget: toNum(f.budget.value),
-      daily: parseDaily(f.daily.value),
-    };
-    if (ai == null) groups[gi].apps.push(app); else groups[gi].apps[ai] = app;
-    save();
-  } else if (appDlg.returnValue === "delete") {
-    ask(`Xóa app "${groups[gi].apps[ai].name}"?`).then(ok => { if (ok) { groups[gi].apps.splice(ai, 1); save(); } });
-  }
-});
-
-/* ---------- Import / export ---------- */
-async function exportJson() {
-  const filename = `dashboard-${new Date().toISOString().slice(0, 10)}.json`;
-  const json = JSON.stringify(groups, null, 2);
-  const downloads = await window.claude?.use?.("downloads");
-  if (downloads) {
-    try { await downloads.save({ filename, data: json }); }
-    catch (err) { if (err?.code !== "declined") toast("Không xuất được file lúc này."); }
-    return;
-  }
-  const blob = new Blob([json], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
-document.getElementById("importFile").addEventListener("change", async e => {
-  const file = e.target.files[0]; e.target.value = "";
-  if (!file) return;
-  try {
-    const data = JSON.parse(await file.text());
-    if (!Array.isArray(data)) throw new Error("File phải là mảng các nhóm");
-    if (groups.length && !(await ask("Nhập file sẽ thay toàn bộ dữ liệu hiện tại. Tiếp tục?", "Nhập"))) return;
-    groups = data; save(); toast("Đã nhập dữ liệu.");
-  } catch (err) { toast("Không đọc được file: " + err.message); }
-});
+function showBanner(msg) { const b = document.getElementById("banner"); b.textContent = msg; b.hidden = false; }
+function hideBanner() { document.getElementById("banner").hidden = true; }
 
 /* ---------- Events ---------- */
+document.getElementById("rangeSeg").addEventListener("click", e => {
+  const b = e.target.closest("button[data-range]"); if (!b) return;
+  range = b.dataset.range === "custom" ? { key: "custom", ...resolveRange(range) } : { key: b.dataset.range };
+  try { localStorage.setItem(RANGE_KEY, JSON.stringify(range)); } catch (err) {}
+  loadAll();
+});
+["customStart", "customEnd"].forEach(id => document.getElementById(id).addEventListener("change", () => {
+  const s = document.getElementById("customStart").value, en = document.getElementById("customEnd").value;
+  if (!s || !en) return;
+  if (s > en) { toast("Ngày bắt đầu phải trước ngày kết thúc."); return; }
+  range = { key: "custom", start: s, end: en };
+  try { localStorage.setItem(RANGE_KEY, JSON.stringify(range)); } catch (err) {}
+  loadAll();
+}));
+
 document.addEventListener("click", e => {
-  const el = e.target.closest("[data-act]");
-  if (!el) return;
-  const gi = el.dataset.g != null ? +el.dataset.g : null;
-  const ai = el.dataset.a != null ? +el.dataset.a : null;
+  const el = e.target.closest("[data-act]"); if (!el) return;
   switch (el.dataset.act) {
     case "toggle": {
-      const open = el.getAttribute("aria-expanded") !== "true";
+      const id = el.dataset.id, open = !openDaily.has(id);
+      open ? openDaily.add(id) : openDaily.delete(id);
       el.setAttribute("aria-expanded", open);
-      document.getElementById(el.getAttribute("aria-controls")).classList.toggle("open", open);
+      el.closest(".card").querySelector(".daily").hidden = !open;
       break;
     }
     case "add-group": openGroup(null); break;
-    case "edit-group": openGroup(gi); break;
-    case "add-app": openApp(gi, null); break;
-    case "edit-app": openApp(gi, ai); break;
-    case "export": exportJson(); break;
-    case "import": document.getElementById("importFile").click(); break;
-    case "clear":
-      ask("Xóa toàn bộ dữ liệu? Nên Xuất JSON trước để sao lưu.", "Xóa hết").then(ok => { if (ok) { groups = []; save(); } });
-      break;
+    case "edit-group": openGroup(+el.dataset.g); break;
+    case "edit-app": openApp(el.dataset.code); break;
+    case "refresh": loadAll(true); break;
   }
 });
 
-render();
-connectDb();
+/* ---------- Khởi động ---------- */
+async function boot() {
+  config = loadLocal();
+  renderRangeUi(); render();
+  const use = n => (window.claude?.use ? window.claude.use(n) : Promise.resolve(null));
+  const [db, m] = await Promise.all([use("db"), use("mcp")]);
+  mcp = m; mcpReady = true;
+  if (db) {
+    dbRef = db.doc(CONFIG_DOC);
+    let first = true;
+    dbRef.onSnapshot(snap => {
+      if (snap.metadata.hasPendingWrites) return;
+      const next = normalize(snap.exists ? structuredClone(snap.data()) : {});
+      const accountsChanged = JSON.stringify(next.groups) !== JSON.stringify(config.groups);
+      config = next;
+      if (first || accountsChanged) { first = false; loadAll(); } else render();
+    }, () => toast("Mất kết nối dữ liệu. Tải lại trang để tiếp tục."));
+    use("user").then(u => u?.can?.("data.write")).then(can => { if (can === false) { readOnly = true; render(); } }).catch(() => {});
+  } else {
+    loadAll();
+  }
+}
+boot();
 </script>
 </body>
 </html>
