@@ -120,7 +120,9 @@
   .card.loading { min-height: 300px; justify-content: center; align-items: center; color: var(--muted); }
   .top { display: flex; justify-content: space-between; gap: 12px; }
   .top > div:first-child { min-width: 0; }
-  .name-row { display: flex; align-items: baseline; gap: 6px; }
+  .name-row { display: flex; align-items: center; gap: 6px; }
+  .name-row .icon { color: var(--down); padding: 4px; line-height: 0; margin-top: -6px; }
+  .name-row .icon:hover { color: var(--down); background: color-mix(in srgb, var(--down) 10%, transparent); border-color: transparent; }
   .card .name { margin: 4px 0 2px; }
   .name-empty { font: inherit; font-size: 24px; font-weight: 600; color: var(--muted); background: none; border: 0; padding: 0; cursor: pointer; border-bottom: 2px dashed var(--border); }
   .name-empty:hover { color: var(--camp-text); border-color: var(--camp-text); }
@@ -133,8 +135,8 @@
   body.readonly .readonly-only { display: inline; }
   .name { font-size: 24px; font-weight: 600; margin: 4px 0 12px; }
   .score { text-align: right; flex-shrink: 0; }
-  .score .val { font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
-  .score .pct { color: var(--muted); font-size: 18px; margin-top: 8px; }
+  .score .val { font-size: 54px; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
+  .score .pct { color: var(--muted); font-size: 22px; font-weight: 500; margin-top: 8px; }
 
   .chips { display: flex; flex-wrap: wrap; gap: 10px; }
   .chip {
@@ -215,7 +217,7 @@
   @media (max-width: 520px) {
     .card { padding: 18px 16px 16px; }
     .name { font-size: 20px; }
-    .score .val { font-size: 36px; }
+    .score .val { font-size: 42px; }
     .stat .lbl { font-size: 13px; }
     .stat .num { font-size: 19px; }
     .acc { font-size: 14px; }
@@ -292,10 +294,11 @@
   /* Chân thẻ: trái = ID tài khoản + nút; phải = ô New camp cao bằng cả cụm */
   .foot2 { display: flex; gap: 14px; align-items: stretch; margin-top: 18px; }
   .foot-left { display: flex; flex-direction: column; gap: 12px; min-width: 0; flex: 1; justify-content: space-between; }
-  .new-badge { font: inherit; cursor: pointer; border: 1px solid var(--new-bd); background: var(--new-bg); color: var(--new-fg); border-radius: 14px; padding: 8px 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 120px; line-height: 1; flex-shrink: 0; }
-  .new-badge b { font-size: 46px; font-weight: 700; letter-spacing: -.02em; }
-  .new-badge span { font-size: 14px; font-weight: 600; margin-top: 6px; white-space: nowrap; }
-  .new-badge.zero { background: transparent; border-color: var(--border); color: var(--muted); }
+  .new-badge { font: inherit; cursor: pointer; border: 0; background: transparent; color: var(--muted); padding: 0 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 110px; line-height: 1; flex-shrink: 0; }
+  .new-badge b { font-size: 44px; font-weight: 700; letter-spacing: -.02em; color: var(--new-fg); background: var(--new-bg); border-radius: 12px; padding: 6px 16px; min-width: 64px; text-align: center; }
+  .new-badge span { font-size: 14px; font-weight: 600; margin-top: 8px; white-space: nowrap; }
+  .new-badge.zero b { background: transparent; color: var(--muted); }
+  .new-badge:hover b { outline: 2px solid var(--new-bd); }
   .groupby { border: 0; padding: 0; margin: 0; min-width: 0; }
   .groupby legend { font-size: 13px; color: var(--muted); font-weight: 500; padding: 0; margin-bottom: 5px; }
   .groupby .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -1009,15 +1012,14 @@ function trendCharts(a, days, kpi) {
     const ky = ry(kpi).toFixed(1);
     const dots = idx.slice(-2).map(i => `<circle cx="${x(i)}" cy="${ry(roas[i])}" r="4" fill="${roas[i] >= kpi ? "var(--up)" : "var(--down)"}"/>`).join("");
     roasSvg = `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-      <line x1="0" x2="${W}" y1="${ky}" y2="${ky}" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="6 5" vector-effect="non-scaling-stroke" opacity=".7"/>
       <polyline points="${idx.map(i => `${x(i).toFixed(1)},${ry(roas[i]).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--line)" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
       ${dots}${tips}</svg>`;
   }
   const lastR = [...roas].reverse().find(isNum);
   return `<div class="trend">
-    <div class="trend-lbl"><span><i class="key" style="background:var(--spend)"></i>Spend theo ngày</span><span>cao nhất ${fmtUsd(Math.max(...spend, 0))}</span></div>
+    <div class="trend-lbl"><span><i class="key" style="background:var(--spend)"></i>Spend</span></div>
     ${spendSvg}
-    <div class="trend-lbl"><span><i class="key" style="background:var(--line)"></i>ROAS IAA D0</span><span>KPI ${kpi.toFixed(2)} (nét đứt)${isNum(lastR) ? ` · gần nhất <b class="num ${roasCls(lastR, kpi)}">${lastR.toFixed(3)}</b>` : ""}</span></div>
+    <div class="trend-lbl"><span><i class="key" style="background:var(--line)"></i>ROAS</span></div>
     ${roasSvg}
     <div class="trend-axis"><span>${shortDate(days[0])}</span><span>${shortDate(days[days.length - 1])}</span></div>
   </div>`;
@@ -1053,7 +1055,7 @@ function card(a) {
   return `<article class="card">
     <div class="top">
       <div>
-        <div class="name-row">${shownName ? `<div class="name">${esc(shownName)}</div>` : `<button class="name name-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">Đặt tên app</button><div class="name readonly-only">${esc(ov.appCode || a.code)}</div>`}<button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">Sửa</button></div>
+        <div class="name-row">${shownName ? `<div class="name">${esc(shownName)}</div>` : `<button class="name name-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">Đặt tên app</button><div class="name readonly-only">${esc(ov.appCode || a.code)}</div>`}<button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}" title="Sửa app" aria-label="Sửa app"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></div>
         <div class="pic">UA PIC: ${ov.pic ? `<b>${esc(ov.pic)}</b>` : `<button class="pic-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">điền tên</button><span class="readonly-only">—</span>`}</div>
       </div>
       <div class="score">
@@ -1073,17 +1075,15 @@ function card(a) {
       <div class="stat"><div class="lbl">Spend</div><div class="num">${fmtUsd(a.spend)}</div></div>
       <div class="stat"><div class="lbl">Δ Spend</div>${hasDelta
         ? `<div class="num ${delta >= 0 ? "up" : "down"}">${(delta >= 0 ? "+" : "-") + Math.abs(Math.round(delta * 100))}%</div>`
-        : `<div class="num na">—</div>`}<div class="vs">so với ${spanText(win.prev.start, win.prev.end)} (${fmtUsd(a.prevSpend)})</div></div>
+        : `<div class="num na">—</div>`}</div>
       <div class="stat" title="Số camp có ít nhất 1 ngày spend ≥ 98% budget ngày (budget đang đặt) trong khoảng đang xem. Bấm để xem danh sách.">
         <div class="lbl">Max budget</div>
-        <button class="num stat-link${a.maxed ? "" : " na"}" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" data-maxed="1">${a.maxed} camp</button>
-        <div class="vs">/ ${a.ids.size} camp có spend</div></div>
+        <button class="num stat-link${a.maxed ? "" : " na"}" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" data-maxed="1">${a.maxed} camp</button></div>
     </div>
 
     <div class="foot2">
       <div class="foot-left">
-      <span class="acc-wrap"><button class="acc-link" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" title="${esc(accName || "Xem camp")}">${esc(a.acc)}</button>
-        <span class="acc-date">${spanText(win.cur.start, win.cur.end)}${accInfo.get(a.acc)?.tz ? " · " + tzOffset(accInfo.get(a.acc).tz) : ""}</span></span>
+      <span class="acc-wrap"><button class="acc-link" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" title="${esc(accName || "Xem camp")}">${esc(a.acc)}</button></span>
       <span class="foot-btns">
         <button class="btn" data-act="panel" data-kind="geo" data-id="${esc(id)}" aria-expanded="${panel === "geo"}">Top geo</button>
         <button class="btn" data-act="panel" data-kind="daily" data-id="${esc(id)}" aria-expanded="${panel === "daily"}">Theo ngày</button>
