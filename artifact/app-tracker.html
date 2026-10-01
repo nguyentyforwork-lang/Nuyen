@@ -176,7 +176,6 @@ a.applink:hover .nm { text-decoration: underline; }
     <span id="customRange" hidden>
       <input type="date" id="startDate" aria-label="Từ ngày"> → <input type="date" id="endDate" aria-label="Đến ngày">
     </span>
-    <label class="chk"><input type="checkbox" id="includeToday"> gồm hôm nay</label>
     <button id="refreshBtn" class="btn" type="button">↻ Refresh</button>
   </header>
 
@@ -205,7 +204,7 @@ const LS = {
 };
 const state = {
   bcs: [], selected: LS.get('bcat.selected', []),
-  preset: 'today', includeToday: LS.get('bcat.inc', false), start: '', end: '',
+  preset: 'today', start: '', end: '',
   lvl2: LS.get('bcat.lvl2', 'account'),
   sort: LS.get('bcat.sort', { key: 'spend', dir: 'desc' }),
   panel: null,
@@ -242,7 +241,8 @@ function rangeFor(tz) {
   if (state.preset === 'today') return { start: t, end: t };
   if (state.preset === 'yesterday') { const y = addDays(t, -1); return { start: y, end: y }; }
   const m = /^last(\d+)$/.exec(state.preset);
-  if (m) { const end = state.includeToday ? t : addDays(t, -1); return { start: addDays(end, -(Number(m[1]) - 1)), end }; }
+  if (m) { const end = addDays(t, -1); // Last N days = N full days before today, like Ads Manager
+    return { start: addDays(end, -(Number(m[1]) - 1)), end }; }
   let { start, end } = state;
   if (!start || !end) return { start: t, end: t };
   if (start > end) [start, end] = [end, start];
@@ -783,7 +783,6 @@ function initBcPicker() {
 
 // ---------- controls ----------
 function initControls() {
-  $('#includeToday').checked = state.includeToday;
   $$('#presetSeg button').forEach((b) => b.addEventListener('click', () => {
     $$('#presetSeg button').forEach((x) => x.classList.toggle('on', x === b));
     state.preset = b.dataset.preset;
@@ -797,7 +796,6 @@ function initControls() {
     load();
   }));
   ['#startDate', '#endDate'].forEach((s) => $(s).addEventListener('change', () => { state.start = $('#startDate').value; state.end = $('#endDate').value; load(); }));
-  $('#includeToday').addEventListener('change', (e) => { state.includeToday = e.target.checked; LS.set('bcat.inc', state.includeToday); if (/^last/.test(state.preset)) load(); });
   $('#summary').addEventListener('click', (e) => {
     const c = e.target.closest('[data-panel]');
     if (!c) return;
