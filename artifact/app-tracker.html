@@ -168,7 +168,7 @@ a.applink:hover .nm { text-decoration: underline; }
   <div id="panel"></div>
 
   <div class="tablebox"><table id="tbl"></table></div>
-  <p class="foot">Level: BC → Account (hoặc App, bấm nút ⇄ trên tiêu đề bảng để đổi) → Campaign → Creative. Bấm dòng để xổ ra. BC xếp A–Z; bấm tiêu đề Spend hoặc ROAS IAA D0 để sort các level bên dưới. Chỉ hiện dòng có spend &gt; 0. Dữ liệu tải lần lượt từng account, spend cao trước; bấm account đang chờ để tải nó trước. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
+  <p class="foot">Level: BC → Account → App → Campaign → Creative, hoặc BC → App → Account → Campaign → Creative (bấm nút ⇄ trên tiêu đề bảng để đổi). Bấm dòng để xổ ra. BC xếp A–Z; bấm tiêu đề Spend hoặc ROAS IAA D0 để sort các level bên dưới. Chỉ hiện dòng có spend &gt; 0. Dữ liệu tải lần lượt từng account, spend cao trước; bấm account đang chờ để tải nó trước. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
 </div>
 
 <script>
@@ -471,9 +471,9 @@ function geoOf(model, rows) {
 
 // BC > lvl2 > campaign > geo > creative
 function buildTree(model) {
-  const dims = ['bc', state.lvl2];
+  const dims = ['bc', state.lvl2, state.lvl2 === 'account' ? 'app' : 'account'];
   const make = (rows, depth, prefix) => {
-    if (depth < 2) {
+    if (depth < 3) {
       const dim = dims[depth];
       const groups = new Map();
       for (const f of rows) { const id = f[dim]; if (!groups.has(id)) groups.set(id, []); groups.get(id).push(f); }
@@ -481,7 +481,9 @@ function buildTree(model) {
         const path = `${prefix}/${dim}:${id}`;
         const spend = sum(rs, (r) => r.spend), rev = sum(rs, (r) => r.rev);
         const real = rs.filter((r) => !r.placeholder);
-        return { path, dim, id, depth, rows: rs, spend, rev, roas: roas(rev, spend), geo: geoOf(model, real), hits: real.filter((r) => r.hitDays.size).length, kids: depth === 1 && !real.length ? null : () => make(depth === 0 ? rs : real, depth + 1, path) };
+        // An account still loading has no app/campaign breakdown yet: nothing to expand.
+        const noKids = !real.length && (dim === 'account' || depth === 2);
+        return { path, dim, id, depth, rows: rs, spend, rev, roas: roas(rev, spend), geo: geoOf(model, real), kids: noKids ? null : () => make(depth < 2 ? rs : real, depth + 1, path) };
       });
     }
     return rows.filter((f) => !f.placeholder).map((f) => {
@@ -490,6 +492,22 @@ function buildTree(model) {
     });
   };
   return make(model.facts.filter((f) => f.spend > 0), 0, '');
+}
+// account -> apps it runs, app -> accounts running it (campaigns with spend)
+function links(model) {
+  if (model.links) return model.links;
+  const accApps = new Map(), appAccs = new Map();
+  for (const f of model.facts) {
+    if (f.placeholder || !(f.spend > 0) || f.app === NONE_APP) continue;
+    if (!accApps.has(f.account)) accApps.set(f.account, new Set());
+    accApps.get(f.account).add(f.app);
+    if (!appAccs.has(f.app)) appAccs.set(f.app, new Set());
+    appAccs.get(f.app).add(f.account);
+  }
+  return (model.links = { accApps, appAccs });
+}
+function pills(list, max = 3) {
+  return list.slice(0, max).join('') + (list.length > max ? `<span class="pill">+${list.length - max}</span>` : '');
 }
 function creativeNodes(model, f, prefix, depth) {
   const groups = new Map();
@@ -535,19 +553,20 @@ function label(n) {
   if (n.dim === 'bc') return `<span class="nm">${esc(bcName(n.id))}</span><span class="meta">${esc(n.id)}</span>`;
   if (n.dim === 'account') {
     const a = model.accounts.get(n.id) || {};
-    const appIds = [...new Set(n.rows.map((r) => r.app))].filter((x) => x !== NONE_APP && x !== PENDING_APP);
+    const appIds = [...(links(model).accApps.get(n.id) || [])];
     const st = a.status === 'loading' ? '<span class="meta loading">đang tải…</span>' : a.status === 'pending' ? '<span class="meta">chờ tải · bấm để tải trước</span>' : a.status === 'error' ? `<span class="meta r-bad" title="${esc(a.error || '')}">lỗi tải</span>` : '';
-    return `<span class="nm">${esc(a.name || n.id)}</span>${st}<span class="meta">${esc(n.id)}${a.cur && a.cur !== 'USD' ? ' · ' + esc(a.cur) : ''}</span>${appIds.slice(0, 3).map(appPill).join('')}${appIds.length > 3 ? `<span class="pill">+${appIds.length - 3}</span>` : ''}`;
+    return `<span class="nm">${esc(a.name || n.id)}</span>${st}<span class="meta">${esc(n.id)}${a.cur && a.cur !== 'USD' ? ' · ' + esc(a.cur) : ''}</span>${pills(appIds.map(appPill))}`;
   }
   if (n.dim === 'app' && n.id === PENDING_APP) return `<span class="nm meta loading">Đang tải chi tiết…</span><span class="meta">${new Set(n.rows.map((r) => r.account)).size} account</span>`;
   if (n.dim === 'app') {
     const a = model.apps.get(n.id) || {};
-    return `${appLink(n.id, true)}<span class="meta">${esc(a.platform || '')}${n.id !== NONE_APP ? ' · ' + esc(n.id) : ''}</span>`;
+    const accs = [...(links(model).appAccs.get(n.id) || [])].map((x) => model.accounts.get(x)?.name || x);
+    const accPills = accs.map((nm) => `<span class="pill" title="Account đang chạy app này">${esc(nm)}</span>`);
+    return `${appLink(n.id, true)}<span class="meta">${esc(a.platform || '')}${n.id !== NONE_APP ? ' · ' + esc(n.id) : ''}</span>${pills(accPills)}`;
   }
   if (n.dim === 'campaign') {
     const f = n.fact;
-    const other = state.lvl2 === 'account' ? appPill(f.app) : `<span class="pill">${esc(model.accounts.get(f.account)?.name || f.account)}</span>`;
-    return `<span class="nm" title="${esc(f.name)} (${esc(f.cid)})">${esc(f.name)}</span>${other}`;
+    return `<span class="nm" title="${esc(f.name)} (${esc(f.cid)})">${esc(f.name)}</span>`;
   }
   if (n.dim === 'geo') return `<b>${esc(n.id)}</b><span class="meta">${esc(country(n.id))} · ${pct(n.share, 0)}</span>`;
   if (n.rest) return '<span class="nm meta">(ad đã xoá / không có dữ liệu ad)</span>';
@@ -649,7 +668,7 @@ function render() {
   };
   walk(tree, spend);
   const emptyMsg = state.phase ? 'Đang tải dữ liệu từ TikTok…' : state.selected.length ? 'Không có spend trong khoảng ngày này.' : 'Chọn BC để bắt đầu.';
-  $('#tbl').innerHTML = `<thead><tr><th class="l">BC → <button type="button" class="lvswap" id="lvswap" title="Đổi level 2 giữa Account và App">${state.lvl2 === 'account' ? 'Account' : 'App'} ⇄ ${state.lvl2 === 'account' ? 'App' : 'Account'}</button> → Campaign → Creative</th>${sortTh('spend', 'Spend')}${sortTh('roas', 'ROAS IAA D0')}<th class="l">Top geo (spend · ROAS IAA D0)</th></tr></thead>
+  $('#tbl').innerHTML = `<thead><tr><th class="l">BC → <button type="button" class="lvswap" id="lvswap" title="Đổi thứ tự Account / App">${state.lvl2 === 'account' ? 'Account → App' : 'App → Account'} ⇄</button> → Campaign → Creative</th>${sortTh('spend', 'Spend')}${sortTh('roas', 'ROAS IAA D0')}<th class="l">Top geo (spend · ROAS IAA D0)</th></tr></thead>
     <tbody>${rows.join('') || `<tr><td colspan="4" class="empty">${emptyMsg}</td></tr>`}</tbody>`;
 }
 
