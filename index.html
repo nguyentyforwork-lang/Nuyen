@@ -28,6 +28,7 @@
     --track: #eef0f3;
     --warn-bg: #fff6e5;
     --warn-text: #7a4b00;
+    --spend: #0e7490;
     --shadow: 0 1px 2px rgba(16, 24, 40, .04);
   }
   @media (prefers-color-scheme: dark) {
@@ -37,7 +38,7 @@
       --camp-bg: #23233d; --camp-text: #a5a3ff;
       --good: #d4914a; --bad: #e0675f; --up: #5fbf68; --down: #ef6b62;
       --line: #8b85ff; --on-line: #0f1115; --track: #262a33;
-      --warn-bg: #2e2412; --warn-text: #f3c77a;
+      --warn-bg: #2e2412; --warn-text: #f3c77a; --spend: #4fb8cf;
       color-scheme: dark;
     }
   }
@@ -47,7 +48,7 @@
     --camp-bg: #23233d; --camp-text: #a5a3ff;
     --good: #d4914a; --bad: #e0675f; --up: #5fbf68; --down: #ef6b62;
     --line: #8b85ff; --on-line: #0f1115; --track: #262a33;
-    --warn-bg: #2e2412; --warn-text: #f3c77a;
+    --warn-bg: #2e2412; --warn-text: #f3c77a; --spend: #4fb8cf;
     color-scheme: dark;
   }
 
@@ -252,6 +253,25 @@
   .pill { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--chip-bg); color: var(--chip-text); }
   .pill.on { background: color-mix(in srgb, var(--up) 15%, transparent); color: var(--up); }
   .foot { flex-wrap: wrap; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tabs button {
+    font: inherit; font-size: 16px; font-weight: 600; color: var(--muted); background: none; border: 0;
+    border-bottom: 2px solid transparent; padding: 10px 14px; margin-bottom: -1px; cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--line); }
+  .tabs button:hover { color: var(--text); }
+  .tabs .tab-add { font-weight: 500; font-size: 14px; color: var(--camp-text); }
+  .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+  .filter-input { font: inherit; font-size: 15px; font-weight: 500; flex: 1 1 220px; min-width: 0; border: 1px dashed transparent; outline: none; }
+  .filter-input:hover, .filter-input:focus { border-color: var(--camp-text); }
+  .filter-input.custom { border-style: solid; border-color: color-mix(in srgb, var(--camp-text) 40%, transparent); }
+  body.readonly .filter-input { pointer-events: none; }
+  .trend { margin-top: 20px; display: grid; gap: 4px; }
+  .trend-lbl { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .trend-lbl b { font-weight: 600; }
+  .trend .spark { height: 52px; }
+  .key { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  .trend-axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
   .chip.camp { font-size: 15px; }
   @media (max-width: 520px) { .acc-link { font-size: 14px; } }
 </style>
@@ -266,7 +286,6 @@
     <span class="range-label" id="rangeLabel"></span>
     <span class="spacer"></span>
     <button class="tb" data-act="refresh" id="refreshBtn">Làm mới</button>
-    <button class="tb primary edit-only" data-act="add-group">+ Thêm nhóm</button>
   </div>
   <div id="banner" class="banner" hidden></div>
   <div id="app"></div>
@@ -297,6 +316,7 @@
       <label class="full">Tên hiển thị<input name="name" id="a-name" placeholder="AI Chat"></label>
       <label>KPI ROAS IAA D0<input name="kpi" id="a-kpi" type="number" step="0.01" min="0" placeholder="1.00"></label>
       <label>OS<input name="os" id="a-os" placeholder="iOS / Android"></label>
+      <label class="full">Lọc camp có chứa <span class="hint">(trống = tự gom theo mã app)</span><input name="filter" id="a-filter" placeholder="AIP805_Global_ROAS"></label>
     </div>
     <div class="dlg-actions">
       <button class="tb" value="cancel" formnovalidate>Hủy</button>
@@ -361,6 +381,9 @@ let writing = Promise.resolve();
 let loadGen = 0;
 let range = null;                 // { start, end } — mặc định hôm nay theo giờ tài khoản
 let rangeTouched = false;
+const TAB_KEY = "ecomdy-kpi-tab";
+let activeTab = (() => { try { return +localStorage.getItem(TAB_KEY) || 0; } catch (e) { return 0; } })();
+function setTab(i) { activeTab = i; try { localStorage.setItem(TAB_KEY, String(i)); } catch (e) {} }
 
 /* ---------- Helpers ---------- */
 const isNum = v => typeof v === "number" && isFinite(v);
@@ -517,8 +540,8 @@ function commonPrefix(names, kw) {
   return p.join("_");
 }
 
+// Kéo dữ liệu thô của 1 tài khoản. Việc gom theo app làm riêng (aggregate) để đổi bộ lọc camp không phải kéo lại.
 async function fetchAccount(acc, kw, win, refresh) {
-  const kwl = kw.toLowerCase();
   const filtering = [{ field_name: "campaign_name", filter_type: "MATCH", filter_value: kw }];
   const base = { advertiser_id: acc, report_type: "BASIC", data_level: "AUCTION_CAMPAIGN", filtering };
   const [cur, prev, trend, camps] = await Promise.all([
@@ -526,9 +549,30 @@ async function fetchAccount(acc, kw, win, refresh) {
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end }, refresh),
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end }, refresh),
     allPages("campaign_get", { advertiser_id: acc, filtering: { campaign_name: kw }, fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status"] }, refresh)
-      .catch(() => ({ rows: [] })), // ngân sách là phụ: lỗi thì hiện SPEND/NGÀY
+      .catch(() => ({ rows: [] })), // ngân sách là phụ: lỗi thì hiện spend TB/ngày
   ]);
+  return { cur: cur.rows, prev: prev.rows, trend: trend.rows, camps: camps.rows, storedAt: cur.storedAt };
+}
 
+// Bộ lọc camp người dùng tự đặt cho từng app (config.apps[code].filter).
+// Camp chứa đoạn lọc → thuộc app đó (đoạn dài nhất thắng). App đã có bộ lọc thì camp cùng mã
+// nhưng không khớp đoạn lọc bị loại khỏi app.
+function assigner(kw) {
+  const filters = Object.entries(config.apps)
+    .filter(([, v]) => v?.filter && v.filter.trim())
+    .map(([code, v]) => ({ code, f: v.filter.trim().toLowerCase() }))
+    .sort((a, b) => b.f.length - a.f.length);
+  return name => {
+    const n = name.toLowerCase();
+    for (const x of filters) if (n.includes(x.f)) return x.code;
+    const code = appCode(name, kw);
+    return config.apps[code]?.filter?.trim() ? null : code;
+  };
+}
+
+function aggregate(acc, raw, kw) {
+  const kwl = kw.toLowerCase();
+  const assign = assigner(kw);
   const apps = new Map();
   const campaigns = new Map();  // id → { id, name, code, spend, rev, status, budget, budgetMode }
   const get = code => {
@@ -537,41 +581,52 @@ async function fetchAccount(acc, kw, win, refresh) {
   };
   const ok = name => typeof name === "string" && name.toLowerCase().includes(kwl);
   const camp = (id, name) => {
-    if (!campaigns.has(id)) campaigns.set(id, { id, name, code: appCode(name, kw), spend: 0, rev: 0, status: null, budget: null, budgetMode: null });
+    if (!campaigns.has(id)) campaigns.set(id, { id, name, code: assign(name), spend: 0, rev: 0, status: null, budget: null, budgetMode: null });
     return campaigns.get(id);
   };
 
-  for (const r of cur.rows) {
+  for (const r of raw.cur) {
     const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
     const id = String(r.dimensions?.campaign_id || ""); const sp = num(m.spend); const rev = sp * num(m[M_IAA]);
-    const a = get(appCode(m.campaign_name, kw));
+    if (id) { const c = camp(id, m.campaign_name); c.spend += sp; c.rev += rev; }
+    const code = assign(m.campaign_name); if (!code) continue;
+    const a = get(code);
     a.names.add(m.campaign_name); a.spend += sp; a.rev += rev;
     if (sp > 0 && id) a.ids.add(id);
-    if (id) { const c = camp(id, m.campaign_name); c.spend += sp; c.rev += rev; }
   }
-  for (const r of prev.rows) {
+  for (const r of raw.prev) {
     const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
-    get(appCode(m.campaign_name, kw)).prevSpend += num(m.spend);
+    const code = assign(m.campaign_name); if (code) get(code).prevSpend += num(m.spend);
   }
-  for (const r of trend.rows) {
+  for (const r of raw.trend) {
     const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
     const day = String(r.dimensions?.stat_time_day || "").slice(0, 10); if (!day) continue;
-    const a = get(appCode(m.campaign_name, kw)); const sp = num(m.spend);
+    const code = assign(m.campaign_name); if (!code) continue;
+    const a = get(code); const sp = num(m.spend);
     const d = a.days.get(day) || { spend: 0, rev: 0 };
     d.spend += sp; d.rev += sp * num(m[M_IAA]);
     a.days.set(day, d);
   }
-  for (const c of camps.rows) {
+  for (const c of raw.camps) {
     if (!ok(c.campaign_name)) continue;
     const row = camp(String(c.campaign_id), c.campaign_name);
     row.status = c.operation_status; row.budget = num(c.budget); row.budgetMode = c.budget_mode;
-    if (c.operation_status !== "ENABLE" || !/DAY|DAILY/.test(c.budget_mode || "")) continue;
+    if (!row.code || c.operation_status !== "ENABLE" || !/DAY|DAILY/.test(c.budget_mode || "")) continue;
     const a = apps.get(row.code); if (a) a.budget += num(c.budget);
   }
   accData.set(acc, { campaigns: [...campaigns.values()], kw });
   const list = [...apps.values()].filter(a => a.spend > 0 || a.budget > 0);
   for (const a of list) a.prefix = commonPrefix([...a.names], kw) || a.code;
-  return { apps: list, storedAt: cur.storedAt };
+  return list;
+}
+
+const accRaw = new Map();   // `${acc}|${kw}` → dữ liệu thô của lần kéo gần nhất
+function rebuild(gi) {
+  const g = config.groups[gi], r = results[gi];
+  if (!g || !r || r.status !== "ok") return;
+  const kw = (g.keyword || "Ecomdy").trim();
+  r.apps = r.accs.flatMap(acc => { const raw = accRaw.get(`${acc}|${kw}`); return raw ? aggregate(acc, raw, kw) : []; });
+  r.apps.sort((a, b) => b.spend - a.spend);
 }
 
 async function loadAll(refresh = false) {
@@ -580,44 +635,41 @@ async function loadAll(refresh = false) {
   if (!mcp) {
     ensureDefaultRange(); renderRangeUi();
     showBanner(`Kéo số tự động chỉ chạy khi mở trang này trên Claude, với connector ${SERVER} đã kết nối.`);
-    results = config.groups.map(() => ({ status: "error", apps: [], errors: [] }));
     render(); return;
   }
   hideBanner();
-  results = config.groups.map(() => ({ status: "loading", apps: [], errors: [] }));
+  const gi = activeTab, g = config.groups[gi];
+  if (!g) { render(); return; }
+  results[gi] = { status: "loading", apps: [], errors: [] };
   render();
   document.getElementById("refreshBtn").disabled = true;
-  await loadAccInfo(refresh);
-  if (gen !== loadGen) return;
-  ensureDefaultRange(); renderRangeUi();
-  if (refresh) geoCache.clear();
-  const win = rangeWindows();
-
-  await Promise.all(config.groups.map(async (g, gi) => {
-    const kw = (g.keyword || "Ecomdy").trim();
-    const settled = await Promise.allSettled((g.accounts || []).map(acc => fetchAccount(acc, kw, win, refresh)));
+  try {
+    await loadAccInfo(refresh);
     if (gen !== loadGen) return;
-    const res = { status: "ok", apps: [], errors: [], storedAt: null };
+    ensureDefaultRange(); renderRangeUi();
+    if (refresh) geoCache.clear();
+    const win = rangeWindows();
+    const kw = (g.keyword || "Ecomdy").trim();
+    const accounts = g.accounts || [];
+    const settled = await Promise.allSettled(accounts.map(acc => fetchAccount(acc, kw, win, refresh)));
+    if (gen !== loadGen) return;
+    const res = { status: "ok", apps: [], errors: [], accs: [], storedAt: null, rangeKey: `${win.cur.start}|${win.cur.end}` };
     settled.forEach((s, i) => {
       if (s.status === "fulfilled") {
-        res.apps.push(...s.value.apps);
+        accRaw.set(`${accounts[i]}|${kw}`, s.value); res.accs.push(accounts[i]);
         if (s.value.storedAt && (!res.storedAt || s.value.storedAt < res.storedAt)) res.storedAt = s.value.storedAt;
-      } else res.errors.push({ acc: g.accounts[i], err: s.reason });
+      } else res.errors.push({ acc: accounts[i], err: s.reason });
     });
-    res.apps.sort((a, b) => b.spend - a.spend);
+    // Mọi tài khoản cùng lỗi kết nối (vd. chưa kết nối connector) → báo một lần ở đầu trang
+    const errs = res.errors.map(e => e.err);
+    if (errs.length && errs.length === accounts.length && errs.every(e => e?.code === errs[0]?.code) && PAGE_LEVEL.has(errs[0]?.code)) {
+      showBanner(errText(errs[0])); res.errors = []; res.pageError = true;
+    }
     results[gi] = res;
+    rebuild(gi);
     render();
-  }));
-  if (gen !== loadGen) return;
-  document.getElementById("refreshBtn").disabled = false;
-
-  // Lỗi cùng loại ở mọi tài khoản (vd. chưa kết nối connector) → báo một lần ở đầu trang
-  const errs = results.flatMap(r => r.errors.map(e => e.err));
-  const anyOk = results.some((r, gi) => r.errors.length < (config.groups[gi]?.accounts?.length || 0));
-  if (errs.length && !anyOk && errs.every(e => e?.code === errs[0]?.code) && PAGE_LEVEL.has(errs[0]?.code)) {
-    showBanner(errText(errs[0]));
-    results.forEach(r => { r.errors = []; r.pageError = true; });
-    render();
+  } finally {
+    if (gen === loadGen) document.getElementById("refreshBtn").disabled = false;
   }
 }
 
@@ -665,30 +717,55 @@ function geoPanel(a, kpi) {
 }
 
 /* ---------- Render ---------- */
-function sparkline(series, kpi) {
-  const pts0 = series.filter(isNum);
-  if (pts0.length < 2) return `<svg class="spark" viewBox="0 0 480 64" aria-hidden="true"></svg>`;
-  const W = 480, H = 64, pad = 6;
-  const lo = Math.min(...pts0, kpi), hi = Math.max(...pts0, kpi);
-  const span = hi - lo || 1;
-  const x = i => (i / (series.length - 1)) * W;
-  const y = v => pad + (1 - (v - lo) / span) * (H - pad * 2);
-  const idx = series.map((v, i) => isNum(v) ? i : -1).filter(i => i >= 0);
-  const pts = idx.map(i => `${x(i).toFixed(1)},${y(series[i]).toFixed(1)}`).join(" ");
-  const ky = y(kpi).toFixed(1);
-  const dots = idx.slice(-2).map(i =>
-    `<circle cx="${x(i)}" cy="${y(series[i])}" r="5" fill="${series[i] >= kpi ? "var(--up)" : "var(--down)"}"/>`).join("");
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-    <line x1="0" x2="${W}" y1="${ky}" y2="${ky}" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="8 6" vector-effect="non-scaling-stroke" opacity=".7"/>
-    <polyline points="${pts}" fill="none" stroke="var(--line)" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-    ${dots}
-  </svg>`;
-}
-
 function trendDays() {
   const { trend } = rangeWindows(); const out = [];
   for (let d = parseYmd(trend.start); ymd(d) <= trend.end; d = addDays(d, 1)) out.push(ymd(d));
   return out;
+}
+
+// Hai đường theo ngày: Spend (trên) và ROAS IAA D0 (dưới, nét đứt = KPI)
+function trendCharts(a, days, kpi) {
+  const W = 480, H = 52, pad = 5;
+  const spend = days.map(d => a.days.get(d)?.spend || 0);
+  const roas = days.map(d => { const x = a.days.get(d); return x && x.spend > 0 ? x.rev / x.spend : null; });
+  const x = i => days.length > 1 ? (i / (days.length - 1)) * W : W / 2;
+  const tips = days.map((d, i) => {
+    const w = W / days.length;
+    return `<rect x="${(x(i) - w / 2).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${H}" fill="transparent"><title>${shortDate(d)} · Spend ${fmtUsd(spend[i])} · ROAS ${roas[i] == null ? "—" : roas[i].toFixed(3)}</title></rect>`;
+  }).join("");
+
+  // Spend: 0 → max
+  const sMax = Math.max(...spend, 0) || 1;
+  const sy = v => pad + (1 - v / sMax) * (H - pad * 2);
+  const sPts = spend.map((v, i) => `${x(i).toFixed(1)},${sy(v).toFixed(1)}`);
+  const sArea = `M${x(0).toFixed(1)},${H - pad} L${sPts.join(" L")} L${x(days.length - 1).toFixed(1)},${H - pad} Z`;
+  const spendSvg = `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <path d="${sArea}" fill="var(--spend)" opacity=".12"/>
+    <polyline points="${sPts.join(" ")}" fill="none" stroke="var(--spend)" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    ${tips}</svg>`;
+
+  // ROAS: khoảng giá trị bao cả KPI
+  const vals = roas.filter(isNum);
+  let roasSvg = `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"></svg>`;
+  if (vals.length) {
+    const lo = Math.min(...vals, kpi), hi = Math.max(...vals, kpi), span = hi - lo || 1;
+    const ry = v => pad + (1 - (v - lo) / span) * (H - pad * 2);
+    const idx = roas.map((v, i) => isNum(v) ? i : -1).filter(i => i >= 0);
+    const ky = ry(kpi).toFixed(1);
+    const dots = idx.slice(-2).map(i => `<circle cx="${x(i)}" cy="${ry(roas[i])}" r="4" fill="${roas[i] >= kpi ? "var(--up)" : "var(--down)"}"/>`).join("");
+    roasSvg = `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+      <line x1="0" x2="${W}" y1="${ky}" y2="${ky}" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="6 5" vector-effect="non-scaling-stroke" opacity=".7"/>
+      <polyline points="${idx.map(i => `${x(i).toFixed(1)},${ry(roas[i]).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--line)" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      ${dots}${tips}</svg>`;
+  }
+  const lastR = [...roas].reverse().find(isNum);
+  return `<div class="trend">
+    <div class="trend-lbl"><span><i class="key" style="background:var(--spend)"></i>Spend theo ngày</span><span>cao nhất ${fmtUsd(Math.max(...spend, 0))}</span></div>
+    ${spendSvg}
+    <div class="trend-lbl"><span><i class="key" style="background:var(--line)"></i>ROAS IAA D0</span><span>KPI ${kpi.toFixed(2)} (nét đứt)${isNum(lastR) ? ` · gần nhất <b class="num ${roasCls(lastR, kpi)}">${lastR.toFixed(3)}</b>` : ""}</span></div>
+    ${roasSvg}
+    <div class="trend-axis"><span>${shortDate(days[0])}</span><span>${shortDate(days[days.length - 1])}</span></div>
+  </div>`;
 }
 
 function dailyPanel(a, kpi, days) {
@@ -709,11 +786,13 @@ function card(a, days, win) {
   const color = isNum(score) && score >= kpi ? "var(--up)" : "var(--down)";
   const hasDelta = a.prevSpend > 0;
   const delta = hasDelta ? (a.spend - a.prevSpend) / a.prevSpend : 0;
-  const third = a.budget > 0 ? { lbl: "NS/ngày", val: fmtUsd(a.budget) } : { lbl: "Spend/ngày", val: fmtUsd(a.spend / win.len) };
-  const series = days.map(day => { const d = a.days.get(day); return d && d.spend > 0 ? d.rev / d.spend : null; });
+  const third = a.budget > 0
+    ? { lbl: "Budget/ngày", tip: "Tổng ngân sách ngày đang đặt của các camp đang bật", val: fmtUsd(a.budget) }
+    : { lbl: "Spend TB/ngày", tip: "Spend chia số ngày đang xem (camp không đặt ngân sách cấp camp)", val: fmtUsd(a.spend / win.len) };
   const id = `${a.acc}-${a.code}`;
   const panel = openPanels.get(id);
   const accName = accInfo.get(a.acc)?.name;
+  const filterVal = ov.filter?.trim() || a.prefix;
 
   return `<article class="card">
     <div class="top">
@@ -722,24 +801,27 @@ function card(a, days, win) {
         <div class="chips">
           <span class="chip">${ov.os ? esc(ov.os) : "OS?"}</span>
           <label class="chip kpi">KPI <input type="number" step="0.01" min="0" class="kpi-input" data-code="${esc(a.code)}" value="${kpi.toFixed(2)}" aria-label="KPI ROAS IAA D0 của ${esc(ov.name || a.code)}" ${readOnly ? "readonly" : ""}></label>
-          <span class="chip camp" title="${a.names.size} camp">${esc(a.prefix)}</span>
         </div>
+
       </div>
       <div class="score">
         <div class="val" style="color:${isNum(score) ? color : "var(--muted)"}">${isNum(score) ? score.toFixed(3) : "—"}</div>
         <div class="pct">${isNum(score) ? Math.round(ratio * 100) + "% KPI" : "chưa có spend"}</div>
       </div>
     </div>
+    <label class="filter-row" title="Chỉ tính camp có tên chứa đoạn này. Xóa trống để tự gom theo mã app.">
+          <input class="chip camp filter-input${ov.filter?.trim() ? " custom" : ""}" data-code="${esc(a.code)}" value="${esc(filterVal)}" spellcheck="false" aria-label="Lọc camp của ${esc(ov.name || a.code)}" ${readOnly ? "readonly" : ""}>
+          <span class="share">${a.names.size} camp${ov.filter?.trim() ? " · lọc riêng" : ""}</span>
+        </label>
 
-    <div class="bar"><span style="width:${Math.min(ratio, 1) * 100}%;background:${color}"></span></div>
-    ${sparkline(series, kpi)}
+    ${trendCharts(a, days, kpi)}
 
     <div class="stats">
       <div class="stat"><div class="lbl">Spend</div><div class="num">${fmtUsd(a.spend)}</div></div>
       <div class="stat"><div class="lbl">Δ Spend</div>${hasDelta
         ? `<div class="num ${delta >= 0 ? "up" : "down"}">${(delta >= 0 ? "+" : "-") + Math.abs(Math.round(delta * 100))}%</div>`
         : `<div class="num na">—</div>`}<div class="vs">so với ${spanText(win.prev.start, win.prev.end)} (${fmtUsd(a.prevSpend)})</div></div>
-      <div class="stat"><div class="lbl">${third.lbl}</div><div class="num">${third.val}</div></div>
+      <div class="stat" title="${third.tip}"><div class="lbl">${third.lbl}</div><div class="num">${third.val}</div></div>
     </div>
 
     <div class="foot">
@@ -763,25 +845,29 @@ function render() {
       : `<button class="empty" data-act="add-group">Bấm để thêm nhóm đầu tiên: đặt tên (vd. Apero) và dán ID tài khoản quảng cáo. Trang sẽ tự kéo các camp Ecomdy về.</button>`;
     return;
   }
+  if (activeTab >= config.groups.length) activeTab = 0;
   const win = rangeWindows();
   const days = trendDays();
-  el.innerHTML = config.groups.map((g, gi) => {
-    const r = results[gi] || { status: "idle", apps: [], errors: [] };
-    const total = r.apps.reduce((s, a) => s + a.spend, 0);
-    const kw = esc(g.keyword || "Ecomdy");
-    const sub = r.status === "ok"
-      ? `${r.apps.length} app · ${fmtUsd(Math.round(total))} · chỉ camp ${kw}`
-      : `${(g.accounts || []).length} tài khoản · chỉ camp ${kw}`;
-    const status = r.status === "loading" ? "Đang kéo số…"
-      : r.status === "ok" && r.storedAt ? `Số liệu lúc ${new Date(r.storedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`
-      : "";
-    let body;
-    if (r.status === "loading") body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
-    else if (r.pageError || r.status !== "ok") body = `<div class="empty">Chưa có số liệu.</div>`;
-    else if (!r.apps.length && !r.errors.length) body = `<div class="empty">Không có camp ${kw} nào có spend trong khoảng ngày này.</div>`;
-    else body = r.apps.map(a => card(a, days, win)).join("");
-    const errs = r.errors.length ? `<div class="acc-errors">${r.errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
-    return `<section>
+  const gi = activeTab, g = config.groups[gi];
+  const r = results[gi] || { status: "idle", apps: [], errors: [] };
+  const total = r.apps.reduce((s, a) => s + a.spend, 0);
+  const kw = esc(g.keyword || "Ecomdy");
+  const sub = r.status === "ok"
+    ? `${r.apps.length} app · ${fmtUsd(Math.round(total))} · chỉ camp ${kw}`
+    : `${(g.accounts || []).length} tài khoản · chỉ camp ${kw}`;
+  const status = r.status === "loading" ? "Đang kéo số…"
+    : r.status === "ok" && r.storedAt ? `Số liệu lúc ${new Date(r.storedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`
+    : "";
+  let body;
+  if (r.status === "loading") body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
+  else if (r.pageError || r.status !== "ok") body = `<div class="empty">Chưa có số liệu.</div>`;
+  else if (!r.apps.length && !r.errors.length) body = `<div class="empty">Không có camp ${kw} nào có spend trong khoảng ngày này.</div>`;
+  else body = r.apps.map(a => card(a, days, win)).join("");
+  const errs = r.errors.length ? `<div class="acc-errors">${r.errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
+  const tabs = `<nav class="tabs" role="tablist" aria-label="Nhóm tài khoản">${config.groups.map((x, i) =>
+      `<button role="tab" data-act="tab" data-g="${i}" aria-selected="${i === gi}">${esc(x.name)}</button>`).join("")}
+    <button class="tab-add edit-only" data-act="add-group" title="Thêm nhóm">+ Nhóm</button></nav>`;
+  el.innerHTML = `${tabs}<section role="tabpanel">
       <div class="group-head">
         <h1>${esc(g.name)}</h1>
         <span class="sub">${sub}</span>
@@ -791,7 +877,6 @@ function render() {
       ${errs}
       <div class="grid">${body}</div>
     </section>`;
-  }).join("");
 }
 
 /* ---------- Bảng camp của tài khoản ---------- */
@@ -815,7 +900,7 @@ function renderCamps() {
   const status = s => s === "ENABLE" ? `<span class="pill on">Đang chạy</span>` : s ? `<span class="pill">Tắt</span>` : `<span class="pill">—</span>`;
   box.innerHTML = `<table><thead><tr><th>Camp</th><th>App</th><th>Trạng thái</th><th>NS/ngày</th><th>Spend</th><th>ROAS IAA D0</th><th>KPI</th></tr></thead><tbody>${
     rows.map(c => { const k = kpiOf(c.code), r = c.spend > 0 ? c.rev / c.spend : null;
-      return `<tr><td>${esc(c.name)}<div class="share">${esc(c.id)}</div></td><td>${esc(config.apps[c.code]?.name || c.code)}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, k)}">${r == null ? "—" : r.toFixed(3)}</td><td>${k.toFixed(2)}</td></tr>`; }).join("")
+      return `<tr><td>${esc(c.name)}<div class="share">${esc(c.id)}</div></td><td>${c.code ? esc(config.apps[c.code]?.name || c.code) : '<span class="share">ngoài bộ lọc</span>'}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, k)}">${r == null ? "—" : r.toFixed(3)}</td><td>${k.toFixed(2)}</td></tr>`; }).join("")
   }</tbody><tfoot><tr><td>${rows.length} camp</td><td></td><td></td><td></td><td>${fmtUsd(sp)}</td><td>${sp > 0 ? (rv / sp).toFixed(3) : "—"}</td><td></td></tr></tfoot></table>`;
 }
 function openCamps(acc, code) {
@@ -879,11 +964,11 @@ groupDlg.addEventListener("close", () => {
   if (groupDlg.returnValue === "save") {
     const accounts = [...new Set(f.accounts.value.split(/[\s,;]+/).map(s => s.replace(/\D/g, "")).filter(Boolean))];
     const g = { name: f.name.value.trim(), keyword: f.keyword.value.trim() || "Ecomdy", accounts };
-    if (gi == null) config.groups.push(g); else config.groups[gi] = g;
-    saveConfig(); loadAll();
+    if (gi == null) { config.groups.push(g); setTab(config.groups.length - 1); } else config.groups[gi] = g;
+    results = []; saveConfig(); loadAll();
   } else if (groupDlg.returnValue === "delete") {
     ask(`Xóa nhóm "${config.groups[gi].name}"? Số liệu trên TikTok không bị ảnh hưởng.`).then(ok => {
-      if (ok) { config.groups.splice(gi, 1); results.splice(gi, 1); saveConfig(); render(); }
+      if (ok) { config.groups.splice(gi, 1); results = []; setTab(0); saveConfig(); loadAll(); }
     });
   }
 });
@@ -892,15 +977,15 @@ function openApp(code) {
   editing = { code };
   const f = appDlg.querySelector("form"), ov = config.apps[code] || {};
   document.getElementById("appDlgTitle").textContent = `App ${code}`;
-  f.name.value = ov.name || ""; f.kpi.value = kpiOf(code).toFixed(2); f.os.value = ov.os || "";
+  f.name.value = ov.name || ""; f.kpi.value = kpiOf(code).toFixed(2); f.os.value = ov.os || ""; f.filter.value = ov.filter || "";
   appDlg.showModal();
 }
 appDlg.addEventListener("close", () => {
   if (appDlg.returnValue !== "save") return;
   const f = appDlg.querySelector("form");
   const kpi = parseFloat(f.kpi.value);
-  config.apps[editing.code] = { ...config.apps[editing.code], name: f.name.value.trim(), kpi: isFinite(kpi) && kpi > 0 ? kpi : 1, os: f.os.value.trim() };
-  saveConfig(); render();
+  config.apps[editing.code] = { ...config.apps[editing.code], name: f.name.value.trim(), kpi: isFinite(kpi) && kpi > 0 ? kpi : 1, os: f.os.value.trim(), filter: f.filter.value.trim() };
+  saveConfig(); rebuild(activeTab); render();
 });
 
 function ask(message, okLabel = "Xóa") {
@@ -926,7 +1011,7 @@ function hideBanner() { document.getElementById("banner").hidden = true; }
   if (s > e) { if (id === "dStart") e = s; else s = e; }
   if (dayDiff(s, e) > 364) { toast("Chọn tối đa 365 ngày."); renderRangeUi(); return; }
   range = { start: s, end: e }; rangeTouched = true;
-  openPanels.clear();
+  openPanels.clear(); results = [];
   loadAll();
 }));
 
@@ -938,7 +1023,15 @@ document.addEventListener("change", e => {
   config.apps[code] = { ...config.apps[code], kpi: Math.round(v * 1000) / 1000 };
   saveConfig(); render();
 });
-document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.closest(".kpi-input")) e.target.blur(); });
+document.addEventListener("change", e => {
+  const inp = e.target.closest(".filter-input"); if (!inp || readOnly) return;
+  const code = inp.dataset.code, v = inp.value.trim();
+  const auto = results[activeTab]?.apps.find(a => a.code === code)?.prefix;
+  config.apps[code] = { ...config.apps[code], filter: v && v !== auto ? v : "" };
+  saveConfig(); rebuild(activeTab); render();
+  toast(config.apps[code].filter ? `Đã lọc camp chứa "${v}"` : "Đã trả về tự gom theo mã app");
+});
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.closest(".kpi-input, .filter-input")) e.target.blur(); });
 
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if (!el) return;
@@ -948,9 +1041,16 @@ document.addEventListener("click", e => {
       if (openPanels.get(id) === kind) openPanels.delete(id); else openPanels.set(id, kind);
       render();
       if (openPanels.get(id) === "geo") {
-        const a = results.flatMap(r => r.apps).find(x => `${x.acc}-${x.code}` === id);
+        const a = (results[activeTab]?.apps || []).find(x => `${x.acc}-${x.code}` === id);
         if (a) loadGeo(a);
       }
+      break;
+    }
+    case "tab": {
+      const i = +el.dataset.g; if (i === activeTab) break;
+      setTab(i); openPanels.clear();
+      const key = `${rangeWindows().cur.start}|${rangeWindows().cur.end}`;
+      if (results[i]?.status === "ok" && results[i].rangeKey === key) render(); else loadAll();
       break;
     }
     case "camps": openCamps(el.dataset.acc, el.dataset.code); break;
@@ -978,7 +1078,7 @@ async function boot() {
       const next = normalize(snap.exists ? structuredClone(snap.data()) : {});
       const accountsChanged = JSON.stringify(next.groups) !== JSON.stringify(config.groups);
       config = next;
-      if (first || accountsChanged) { first = false; loadAll(); } else render();
+      if (first || accountsChanged) { first = false; results = []; loadAll(); } else { rebuild(activeTab); render(); }
     }, () => toast("Mất kết nối dữ liệu. Tải lại trang để tiếp tục."));
     use("user").then(u => u?.can?.("data.write")).then(can => { if (can === false) { readOnly = true; render(); } }).catch(() => {});
   } else {
