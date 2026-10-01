@@ -460,8 +460,19 @@ function firstTz() {
 }
 
 /* ---------- Khoảng ngày ---------- */
-function rangeWindows() {
-  const cur = range || { start: ymd(new Date()), end: ymd(new Date()) };
+// Ngày theo múi giờ từng tài khoản: khoảng ngày có chứa "hôm nay" (giờ máy bạn) thì mỗi tài khoản
+// dùng "hôm nay" của chính nó (vd. 6h sáng VN, tài khoản UTC+0 vẫn đang ở ngày hôm qua).
+// Khoảng ngày trong quá khứ thì giữ nguyên ngày; TikTok tự tính theo múi giờ tài khoản.
+function accShift(acc) {
+  const base = range || { start: ymd(new Date()), end: ymd(new Date()) };
+  const tz = acc && accInfo.get(acc)?.tz;
+  if (!tz || base.end < ymd(new Date())) return 0;
+  return dayDiff(ymd(new Date()), todayIn(tz));
+}
+function rangeWindows(acc) {
+  const base = range || { start: ymd(new Date()), end: ymd(new Date()) };
+  const sh = accShift(acc);
+  const cur = sh ? { start: ymd(addDays(parseYmd(base.start), sh)), end: ymd(addDays(parseYmd(base.end), sh)) } : base;
   const len = dayDiff(cur.start, cur.end) + 1;
   // Kỳ trước: cùng số ngày, ngay trước kỳ đang xem (hôm nay → hôm qua)
   const prev = { start: ymd(addDays(parseYmd(cur.start), -len)), end: ymd(addDays(parseYmd(cur.start), -1)) };
@@ -473,17 +484,19 @@ function rangeWindows() {
 }
 function ensureDefaultRange() {
   if (rangeTouched && range) return;
-  const tz = firstTz();
-  const t = tz ? todayIn(tz) : ymd(new Date());
+  const t = ymd(new Date());
   range = { start: t, end: t };
 }
 function renderRangeUi() {
   const { cur, prev, len } = rangeWindows();
   document.getElementById("dStart").value = cur.start;
   document.getElementById("dEnd").value = cur.end;
-  const tzs = [...new Set(config.groups.flatMap(g => (g.accounts || []).map(a => accInfo.get(a)?.tz).filter(Boolean)).map(tzOffset))];
+  const accs = config.groups[activeTab]?.accounts || [];
+  const tzs = [...new Set(accs.map(a => accInfo.get(a)?.tz).filter(Boolean).map(tzOffset))];
+  const shifted = accs.filter(a => accShift(a) !== 0);
   document.getElementById("rangeLabel").textContent =
-    `${len} ngày · Δ so với ${spanText(prev.start, prev.end)}` + (tzs.length ? ` · giờ tài khoản ${tzs.join(", ")}` : "");
+    `${len} ngày · Δ so với ${spanText(prev.start, prev.end)}` + (tzs.length ? ` · theo giờ từng tài khoản (${tzs.join(", ")})` : "")
+    + (shifted.length ? ` · ${shifted.length} tài khoản đang ở ngày ${spanText(rangeWindows(shifted[0]).cur.start, rangeWindows(shifted[0]).cur.end)}` : "");
 }
 
 /* ---------- Lưu cấu hình ---------- */
@@ -788,7 +801,7 @@ async function loadAll(refresh = false) {
     if (gen !== loadGen) return;
     ensureDefaultRange(); renderRangeUi();
     if (refresh) geoCache.clear();
-    const win = rangeWindows();
+    const win = rangeWindows();   // khoảng ngày chung (khóa cache); mỗi tài khoản dùng rangeWindows(acc)
     const kw = (g.keyword || "Ecomdy").trim();
     const accounts = g.accounts || [];
     // Kéo lần lượt từng tài khoản trong nhóm; xong tài khoản nào hiện tài khoản đó
@@ -798,7 +811,7 @@ async function loadAll(refresh = false) {
       res.progress = `${i + 1}/${accounts.length}`;
       if (i) { rebuild(gi); render(); }
       try {
-        const raw = await fetchAccount(accounts[i], kw, win, refresh);
+        const raw = await fetchAccount(accounts[i], kw, rangeWindows(accounts[i]), refresh);
         if (gen !== loadGen) return;
         accRaw.set(`${accounts[i]}|${kw}`, raw); res.accs.push(accounts[i]);
         if (raw.storedAt && (!res.storedAt || raw.storedAt < res.storedAt)) res.storedAt = raw.storedAt;
@@ -828,7 +841,7 @@ async function loadAll(refresh = false) {
 
 /* ---------- Top geo ---------- */
 async function loadGeo(a) {
-  const { cur } = rangeWindows();
+  const { cur } = rangeWindows(a.acc);
   const key = `${a.acc}|${a.code}|${cur.start}|${cur.end}`;
   if (geoCache.get(key)?.status === "ok" || geoCache.get(key)?.status === "loading") return;
   geoCache.set(key, { status: "loading" }); render();
@@ -854,7 +867,7 @@ async function loadGeo(a) {
 }
 
 function geoPanel(a, kpi) {
-  const { cur } = rangeWindows();
+  const { cur } = rangeWindows(a.acc);
   const g = geoCache.get(`${a.acc}|${a.code}|${cur.start}|${cur.end}`);
   if (!g || g.status === "loading") return `<div class="note">Đang kéo top geo…</div>`;
   if (g.status === "error") return `<div class="note">${esc(errText(g.error))}</div>`;
@@ -870,8 +883,8 @@ function geoPanel(a, kpi) {
 }
 
 /* ---------- Render ---------- */
-function trendDays() {
-  const { trend } = rangeWindows(); const out = [];
+function trendDays(acc) {
+  const { trend } = rangeWindows(acc); const out = [];
   for (let d = parseYmd(trend.start); ymd(d) <= trend.end; d = addDays(d, 1)) out.push(ymd(d));
   return out;
 }
@@ -931,7 +944,8 @@ function dailyPanel(a, kpi, days) {
   return `<table><thead><tr><th>Ngày</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function card(a, days, win) {
+function card(a) {
+  const win = rangeWindows(a.acc), days = trendDays(a.acc);
   const ov = config.apps[a.code] || {};
   const kpi = kpiOf(a.code);
   const score = a.spend > 0 ? a.rev / a.spend : null;
@@ -997,8 +1011,7 @@ function render() {
     return;
   }
   if (activeTab >= config.groups.length) activeTab = 0;
-  const win = rangeWindows();
-  const days = trendDays();
+
   const gi = activeTab, g = config.groups[gi];
   const r0 = results[gi] || { status: "idle", apps: [], errors: [] };
   const hiddenN = r0.apps.filter(a => isHidden(gi, a)).length;
@@ -1016,7 +1029,7 @@ function render() {
   if (r.status === "loading" || (r.progress && !r.apps.length)) body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
   else if (r.pageError || r.status !== "ok") body = `<div class="empty">Chưa có số liệu.</div>`;
   else if (!r.apps.length && !r.errors.length) body = `<div class="empty">${hiddenN ? "Đã xóa hết app khỏi dashboard. Bấm \"Hiện lại\" ở trên để lấy lại." : `Không có camp ${kw} nào có spend trong khoảng ngày này.`}</div>`;
-  else body = [...r.apps].sort(bySort(appSort)).map(a => card(a, days, win)).join("") + (r.progress ? `<div class="card loading">Đang kéo tài khoản ${r.progress}…</div>` : "");
+  else body = [...r.apps].sort(bySort(appSort)).map(a => card(a)).join("") + (r.progress ? `<div class="card loading">Đang kéo tài khoản ${r.progress}…</div>` : "");
   const errs = r.errors.length ? `<div class="acc-errors">${r.errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
   const tabs = `<nav class="tabs" role="tablist" aria-label="Nhóm tài khoản">${config.groups.map((x, i) =>
       `<button role="tab" data-act="tab" data-g="${i}" aria-selected="${i === gi}">${esc(x.name)}</button>`).join("")}
@@ -1056,7 +1069,7 @@ function renderCamps() {
   if (!rows.length) { box.innerHTML = `<div class="panel"><div class="note" style="padding:12px">Không có camp nào khớp bộ lọc.</div></div>`; return; }
   const sp = rows.reduce((s, c) => s + c.spend, 0), rv = rows.reduce((s, c) => s + c.rev, 0);
   const status = s => s === "ENABLE" ? `<span class="pill on">Đang chạy</span>` : s ? `<span class="pill">Tắt</span>` : `<span class="pill">—</span>`;
-  const { len } = rangeWindows();
+  const { len } = rangeWindows(campView.acc);
   const maxCell = c => !c.budget || !/DAY|DAILY/.test(c.budgetMode || "") ? `<span class="share">—</span>`
     : c.maxDays ? `<span class="pill max">${len === 1 ? "Max" : `${c.maxDays}/${c.daysSpent || len} ngày`}</span>` : `<span class="share">chưa</span>`;
   const maxed = rows.filter(c => c.maxDays > 0).length;
@@ -1069,7 +1082,7 @@ function openCamps(acc, code, onlyMaxed = false) {
   campView = { acc, code };
   document.getElementById("campOnlyMaxed").checked = onlyMaxed;
   if (onlyMaxed) document.getElementById("campOnlyApp").checked = true;
-  const info = accInfo.get(acc); const { cur } = rangeWindows();
+  const info = accInfo.get(acc); const { cur } = rangeWindows(acc);
   document.getElementById("campTitle").textContent = info?.name || `Tài khoản ${acc}`;
   document.getElementById("campMeta").textContent = `${acc} · ${spanText(cur.start, cur.end)}${info?.tz ? " · " + tzOffset(info.tz) : ""}`;
   document.getElementById("campOnlyAppLabel").textContent = `Chỉ app ${config.apps[code]?.name || code}`;
@@ -1095,7 +1108,7 @@ async function saveFile(filename, text) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 function exportGeo(acc, code) {
-  const { cur } = rangeWindows();
+  const { cur } = rangeWindows(acc);
   const g = geoCache.get(`${acc}|${code}|${cur.start}|${cur.end}`);
   if (g?.status !== "ok") return;
   const name = config.apps[code]?.name || code;
@@ -1104,7 +1117,7 @@ function exportGeo(acc, code) {
 }
 function exportCamps() {
   if (!campView) return;
-  const { cur } = rangeWindows();
+  const { cur } = rangeWindows(campView.acc);
   saveFile(`campaigns_${campView.acc}_${cur.start}_${cur.end}.csv`,
     csv([["campaign_id", "campaign_name", "app", "status", "daily_budget", "max_budget_days", "spend", "roas_iaa_d0", "target_roas"],
       ...campRows().map(c => [c.id, c.name, c.code || "", c.status || "", c.budget || "", c.maxDays || 0, c.spend.toFixed(2), c.spend > 0 ? (c.rev / c.spend).toFixed(3) : "", c.roasBid || ""])]));
