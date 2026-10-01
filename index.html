@@ -346,6 +346,8 @@
       <label class="full">KPI ROAS IAA D0<input name="kpi" id="a-kpi" type="number" step="0.01" min="0" placeholder="1.00"></label>
     </div>
     <div class="dlg-actions">
+      <button class="tb danger" value="delete" formnovalidate>Xóa khỏi dashboard</button>
+      <span class="spacer"></span>
       <button class="tb" value="cancel" formnovalidate>Hủy</button>
       <button class="tb primary" value="save">Lưu</button>
     </div>
@@ -399,7 +401,7 @@ const LOCAL_KEY = "ecomdy-kpi-config-v2";
 const M_IAA = "ad_impression_ad_revenue_roas_day0";
 const MAX_RATIO = 0.98;   // spend ≥ 98% budget ngày → tính là max budget
 
-let config = { groups: [], apps: {} };
+let config = { groups: [], apps: {}, hidden: [] };
 let results = [];                 // theo chỉ số nhóm: { status, apps, errors }
 const accInfo = new Map();        // acc → { name, tz }
 const accData = new Map();        // acc → { campaigns: [...] }  (của lần tải gần nhất)
@@ -490,8 +492,12 @@ function loadLocal() {
   return { groups: [], apps: {} };
 }
 function normalize(c) {
-  return { groups: Array.isArray(c?.groups) ? c.groups : [], apps: c?.apps && typeof c.apps === "object" ? c.apps : {} };
+  return { groups: Array.isArray(c?.groups) ? c.groups : [], apps: c?.apps && typeof c.apps === "object" ? c.apps : {},
+    hidden: Array.isArray(c?.hidden) ? c.hidden : [] };
 }
+// App đã xóa khỏi dashboard: theo nhóm + tài khoản + mã app ("nhóm#tài khoản|mã")
+const hideKey = (gi, acc, code) => `${config.groups[gi]?.name || gi}#${acc}|${code}`;
+const isHidden = (gi, a) => (config.hidden || []).includes(hideKey(gi, a.acc, a.code));
 // Trạng thái lưu: mọi thay đổi tự lưu ngay; nút Lưu để lưu lại thủ công và xác nhận.
 let saveStatus = { state: "idle", at: null }, pendingSaves = 0;
 function showSaveState() {
@@ -942,8 +948,8 @@ function card(a, days, win) {
   return `<article class="card">
     <div class="top">
       <div>
-        <div class="name-row">${ov.name ? `<div class="name">${esc(ov.name)}</div>` : `<button class="name name-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}">Đặt tên app</button><div class="name readonly-only">${esc(ov.appCode || a.code)}</div>`}<button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}">Sửa</button></div>
-        <div class="pic">UA PIC: ${ov.pic ? `<b>${esc(ov.pic)}</b>` : `<button class="pic-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}">điền tên</button><span class="readonly-only">—</span>`}</div>
+        <div class="name-row">${ov.name ? `<div class="name">${esc(ov.name)}</div>` : `<button class="name name-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">Đặt tên app</button><div class="name readonly-only">${esc(ov.appCode || a.code)}</div>`}<button class="icon edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">Sửa</button></div>
+        <div class="pic">UA PIC: ${ov.pic ? `<b>${esc(ov.pic)}</b>` : `<button class="pic-empty edit-only" data-act="edit-app" data-code="${esc(a.code)}" data-acc="${esc(a.acc)}">điền tên</button><span class="readonly-only">—</span>`}</div>
       </div>
       <div class="score">
         <div class="val" style="color:${isNum(score) ? color : "var(--muted)"}">${isNum(score) ? score.toFixed(3) : "—"}</div>
@@ -994,11 +1000,13 @@ function render() {
   const win = rangeWindows();
   const days = trendDays();
   const gi = activeTab, g = config.groups[gi];
-  const r = results[gi] || { status: "idle", apps: [], errors: [] };
+  const r0 = results[gi] || { status: "idle", apps: [], errors: [] };
+  const hiddenN = r0.apps.filter(a => isHidden(gi, a)).length;
+  const r = { ...r0, apps: r0.apps.filter(a => !isHidden(gi, a)) };
   const total = r.apps.reduce((s, a) => s + a.spend, 0);
   const kw = esc(g.keyword || "Ecomdy");
   const sub = r.status === "ok"
-    ? `${r.apps.length} app · ${fmtUsd(Math.round(total))} · chỉ camp ${kw}`
+    ? `${r.apps.length} app · ${fmtUsd(Math.round(total))} · chỉ camp ${kw}${hiddenN ? ` · <button class="icon unhide edit-only" data-act="unhide" data-g="${esc(g.name)}">Hiện lại ${hiddenN} app đã xóa</button>` : ""}`
     : `${(g.accounts || []).length} tài khoản · chỉ camp ${kw}`;
   const status = r.status === "loading" ? "Đang kéo số…"
     : r.progress ? `Đang kéo tài khoản ${r.progress}…`
@@ -1007,7 +1015,7 @@ function render() {
   let body;
   if (r.status === "loading" || (r.progress && !r.apps.length)) body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
   else if (r.pageError || r.status !== "ok") body = `<div class="empty">Chưa có số liệu.</div>`;
-  else if (!r.apps.length && !r.errors.length) body = `<div class="empty">Không có camp ${kw} nào có spend trong khoảng ngày này.</div>`;
+  else if (!r.apps.length && !r.errors.length) body = `<div class="empty">${hiddenN ? "Đã xóa hết app khỏi dashboard. Bấm \"Hiện lại\" ở trên để lấy lại." : `Không có camp ${kw} nào có spend trong khoảng ngày này.`}</div>`;
   else body = [...r.apps].sort(bySort(appSort)).map(a => card(a, days, win)).join("") + (r.progress ? `<div class="card loading">Đang kéo tài khoản ${r.progress}…</div>` : "");
   const errs = r.errors.length ? `<div class="acc-errors">${r.errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
   const tabs = `<nav class="tabs" role="tablist" aria-label="Nhóm tài khoản">${config.groups.map((x, i) =>
@@ -1129,14 +1137,23 @@ groupDlg.addEventListener("close", () => {
   }
 });
 
-function openApp(code) {
-  editing = { code };
+function openApp(code, acc) {
+  editing = { code, acc };
   const f = appDlg.querySelector("form"), ov = config.apps[code] || {};
   document.getElementById("appDlgTitle").textContent = ov.name ? `Sửa ${ov.name}` : "Đặt tên app";
   f.name.value = ov.name || ""; f.kpi.value = kpiOf(code).toFixed(2); f.pic.value = ov.pic || ""; f.appcode.value = ov.appCode || "";
   appDlg.showModal();
 }
 appDlg.addEventListener("close", () => {
+  if (appDlg.returnValue === "delete") {
+    const { code, acc } = editing, name = config.apps[code]?.name || code;
+    ask(`Xóa "${name}" (tài khoản ${acc}) khỏi dashboard? Camp trên TikTok không bị ảnh hưởng; bấm "Hiện lại" ở đầu nhóm để lấy lại.`, "Xóa").then(ok => {
+      if (!ok) return;
+      config.hidden = [...new Set([...(config.hidden || []), hideKey(activeTab, acc, code)])];
+      saveConfig(); render(); toast(`Đã xóa ${name} khỏi dashboard.`);
+    });
+    return;
+  }
   if (appDlg.returnValue !== "save") return;
   const f = appDlg.querySelector("form");
   const kpi = parseFloat(f.kpi.value);
@@ -1217,7 +1234,10 @@ document.addEventListener("click", e => {
     case "camp-csv": exportCamps(); break;
     case "add-group": openGroup(null); break;
     case "edit-group": openGroup(+el.dataset.g); break;
-    case "edit-app": openApp(el.dataset.code); break;
+    case "edit-app": openApp(el.dataset.code, el.dataset.acc); break;
+    case "unhide":
+      config.hidden = (config.hidden || []).filter(k => !k.startsWith(`${el.dataset.g}#`));
+      saveConfig(); render(); toast("Đã hiện lại các app đã xóa."); break;
     case "refresh": loadAll(true); break;
     case "save": document.activeElement?.blur?.(); saveConfig(true); break;
   }
