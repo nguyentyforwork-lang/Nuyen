@@ -589,7 +589,9 @@ const RATE_RE = /rate.?limit|too many|too frequent|frequently|qps|exceed/i;
 const RATE_CODES = new Set([40100, 40133, 50002]);
 
 async function tt(tool, input, refresh) {
-  const opts = { cache: { staleTime: 300000, gcTime: 3600000, refresh: !!refresh } };
+  // Khoảng ngày có hôm nay: số còn chạy → chỉ dùng lại trong 1 phút; ngày cũ: 5 phút
+  const live = (range?.end || "") >= ymd(addDays(new Date(), -1));
+  const opts = { cache: { staleTime: live ? 60000 : 300000, gcTime: 3600000, refresh: !!refresh } };
   for (let attempt = 0; ; attempt++) {
     const backoff = () => sleep(Math.min(16000, 2000 * 2 ** attempt) + Math.random() * 1000);
     await acquireSlot();
