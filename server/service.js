@@ -63,6 +63,7 @@ function createService(client, config) {
       const info = byId[a.asset_id] || {};
       return {
         advertiser_id: a.asset_id,
+        bc_id: bcId,
         name: info.name || a.asset_name,
         timezone: info.timezone || 'UTC',
         display_timezone: info.display_timezone || info.timezone || 'UTC',
@@ -104,7 +105,7 @@ function createService(client, config) {
         data_level: 'AUCTION_AD',
         dimensions: ['ad_id'],
         metrics: [
-          'spend', REV, 'app_install', 'impressions', 'clicks',
+          'spend', REV,
           'ad_name', 'adgroup_id', 'adgroup_name', 'campaign_id', 'campaign_name', 'tt_app_id',
         ],
         order_field: 'spend',
@@ -118,7 +119,7 @@ function createService(client, config) {
         ...base,
         data_level: 'AUCTION_CAMPAIGN',
         dimensions: ['campaign_id', 'stat_time_day'],
-        metrics: ['spend', REV, 'app_install', 'campaign_name'],
+        metrics: ['spend', REV, 'campaign_name'],
         order_field: 'spend',
         order_type: 'DESC',
       },
@@ -142,15 +143,28 @@ function createService(client, config) {
         ...base,
         data_level: 'AUCTION_CAMPAIGN',
         dimensions: ['campaign_id', 'country_code'],
-        metrics: ['spend', REV, 'app_install'],
+        metrics: ['spend', REV],
         order_field: 'spend',
         order_type: 'DESC',
       },
       { stopWhenZeroSpend: true },
     );
 
-    const [apps, ads, campaignDaily, adgroupDaily, geo] = await Promise.all([
-      appsP, adsP, campaignDailyP, adgroupDailyP, geoP,
+    // Ad x country: top geo at creative level.
+    const adGeoP = client.report(
+      {
+        ...base,
+        data_level: 'AUCTION_AD',
+        dimensions: ['ad_id', 'country_code'],
+        metrics: ['spend', REV],
+        order_field: 'spend',
+        order_type: 'DESC',
+      },
+      { stopWhenZeroSpend: true },
+    );
+
+    const [apps, ads, campaignDaily, adgroupDaily, geo, adGeo] = await Promise.all([
+      appsP, adsP, campaignDailyP, adgroupDailyP, geoP, adGeoP,
     ]);
 
     // Current budgets for campaigns / ad groups that spent in range.
@@ -208,9 +222,6 @@ function createService(client, config) {
         app_id: r.tt_app_id && r.tt_app_id !== '-' ? String(r.tt_app_id) : null,
         spend: money(r.spend),
         rev: money(r[REV]),
-        installs: num(r.app_install),
-        impressions: num(r.impressions),
-        clicks: num(r.clicks),
       })),
       campaignDaily: campaignDaily.map((r) => ({
         campaign_id: r.campaign_id,
@@ -218,7 +229,6 @@ function createService(client, config) {
         date: String(r.stat_time_day).slice(0, 10),
         spend: money(r.spend),
         rev: money(r[REV]),
-        installs: num(r.app_install),
       })),
       adgroupDaily: adgroupDaily.map((r) => ({
         adgroup_id: r.adgroup_id,
@@ -232,23 +242,31 @@ function createService(client, config) {
         country: r.country_code,
         spend: money(r.spend),
         rev: money(r[REV]),
-        installs: num(r.app_install),
+      })),
+      adGeo: adGeo.map((r) => ({
+        ad_id: r.ad_id,
+        country: r.country_code,
+        spend: money(r.spend),
+        rev: money(r[REV]),
       })),
       campaigns,
       adgroups,
     };
   }
 
-  async function overview(bcId, rangeReq) {
-    const advertisers = await listAdvertisers(bcId);
+  // One or many BCs; an ad account shared by several BCs is counted once (first BC wins).
+  async function overview(bcIds, rangeReq) {
+    const lists = await pool(bcIds, 2, (id) => listAdvertisers(id));
+    const seen = new Set();
+    const advertisers = lists.flat().filter((a) => !seen.has(a.advertiser_id) && seen.add(a.advertiser_id));
     const results = await pool(advertisers, config.concurrency, async (adv) => {
       try {
         return await fetchAdvertiser(adv, rangeReq);
       } catch (e) {
-        return { ...adv, error: e.message, apps: [], ads: [], campaignDaily: [], adgroupDaily: [], geo: [], campaigns: {}, adgroups: {} };
+        return { ...adv, error: e.message, apps: [], ads: [], campaignDaily: [], adgroupDaily: [], geo: [], adGeo: [], campaigns: {}, adgroups: {} };
       }
     });
-    return { bc_id: bcId, generated_at: new Date().toISOString(), advertisers: results };
+    return { bc_ids: bcIds, generated_at: new Date().toISOString(), advertisers: results };
   }
 
   return { listBCs, listAdvertisers, overview };

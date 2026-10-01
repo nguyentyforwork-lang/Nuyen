@@ -17,24 +17,25 @@ const APPS = [
   { app_id: '7600000000000000003', app_name: 'Block Blast Master', platform: 'ANDROID' },
 ];
 const ACCOUNTS = [
-  { advertiser_id: '7543462408405139473', name: 'HIGAME_Tricky Prank 02', timezone: 'Asia/Bangkok', currency: 'USD', apps: [0] },
-  { advertiser_id: '7584379549048176656', name: 'HIGAME_Tricky Dramas_AND', timezone: 'Asia/Bangkok', currency: 'USD', apps: [1] },
-  { advertiser_id: '7590000000000000001', name: 'Studio_Multi_App_01', timezone: 'America/Los_Angeles', currency: 'USD', apps: [2, 3, 4] },
-  { advertiser_id: '7590000000000000002', name: 'Studio_Merge_iOS', timezone: 'Asia/Tokyo', currency: 'USD', apps: [2] },
-  { advertiser_id: '7590000000000000003', name: 'Studio_Idle_VN', timezone: 'Asia/Ho_Chi_Minh', currency: 'VND', apps: [3, 4] },
-  { advertiser_id: '7590000000000000004', name: 'Studio_Block_EU', timezone: 'Europe/London', currency: 'USD', apps: [4, 1] },
+  { advertiser_id: '7543462408405139473', name: 'HIGAME_Tricky Prank 02', timezone: 'Asia/Bangkok', currency: 'USD', apps: [0], bc_id: 'demo-bc-1' },
+  { advertiser_id: '7584379549048176656', name: 'HIGAME_Tricky Dramas_AND', timezone: 'Asia/Bangkok', currency: 'USD', apps: [1], bc_id: 'demo-bc-1' },
+  { advertiser_id: '7590000000000000001', name: 'Studio_Multi_App_01', timezone: 'America/Los_Angeles', currency: 'USD', apps: [2, 3, 4], bc_id: 'demo-bc-2' },
+  { advertiser_id: '7590000000000000002', name: 'Studio_Merge_iOS', timezone: 'Asia/Tokyo', currency: 'USD', apps: [2], bc_id: 'demo-bc-2' },
+  { advertiser_id: '7590000000000000003', name: 'Studio_Idle_VN', timezone: 'Asia/Ho_Chi_Minh', currency: 'VND', apps: [3, 4], bc_id: 'demo-bc-2' },
+  { advertiser_id: '7590000000000000004', name: 'Studio_Block_EU', timezone: 'Europe/London', currency: 'USD', apps: [4, 1], bc_id: 'demo-bc-1' },
 ];
 const GEOS = ['US', 'BR', 'ID', 'PH', 'TH', 'VN', 'MX', 'DE', 'JP', 'IN', 'TR', 'GB'];
 const HOOKS = ['hang', 'fail', 'asmr', 'ugc', 'gameplay', 'meme', 'pov', 'tutorial'];
 
 function mockBCs() {
   return [
-    { bc_id: 'demo-bc-1', name: 'DEMO BC – Gaming Clients', timezone: 'Asia/Ho_Chi_Minh', currency: 'USD', status: 'ENABLE' },
+    { bc_id: 'demo-bc-1', name: 'DEMO BC – HIGAME', timezone: 'Asia/Ho_Chi_Minh', currency: 'USD', status: 'ENABLE' },
+    { bc_id: 'demo-bc-2', name: 'DEMO BC – Studio X', timezone: 'Asia/Ho_Chi_Minh', currency: 'USD', status: 'ENABLE' },
   ];
 }
 
-function mockOverview(bcId, rangeReq, config) {
-  const advertisers = ACCOUNTS.map((acc, ai) => {
+function mockOverview(bcIds, rangeReq, config) {
+  const advertisers = ACCOUNTS.map((acc, ai) => ({ acc, ai })).filter(({ acc }) => bcIds.includes(acc.bc_id)).map(({ acc, ai }) => {
     const range = resolveRange(rangeReq, acc.timezone);
     const fx = config.fxToUsd[acc.currency] ?? 1;
     const r = rng(ai * 7919 + 17);
@@ -44,6 +45,7 @@ function mockOverview(bcId, rangeReq, config) {
     const campaignDaily = [];
     const adgroupDaily = [];
     const geo = [];
+    const adGeo = [];
     const campaigns = {};
     const adgroups = {};
     let cIdx = 0;
@@ -66,7 +68,7 @@ function mockOverview(bcId, rangeReq, config) {
           const rev = spend * roasBase * (0.7 + r() * 0.6);
           const inst = Math.round(spend / (0.08 + r() * 0.4));
           cSpend += spend; cRev += rev; cInst += inst;
-          campaignDaily.push({ campaign_id: cid, campaign_name: cname, date, spend, rev, installs: inst });
+          campaignDaily.push({ campaign_id: cid, campaign_name: cname, date, spend, rev });
           adgroupDaily.push({ adgroup_id: agid, adgroup_name: adgroups[agid].name, campaign_id: cid, date, spend });
         }
         const nAds = 3 + Math.floor(r() * 4);
@@ -77,21 +79,23 @@ function mockOverview(bcId, rangeReq, config) {
           const hook = HOOKS[Math.floor(r() * HOOKS.length)];
           const name = `${app.app_name.split(':')[0]}_${hook}_v${10 + Math.floor(r() * 50)}_9x16_${[15, 25, 35][k % 3]}s.mp4`;
           const spend = cSpend * share;
+          const rev = cRev * share * (0.5 + r());
+          const adId = `${agid}${k}`;
           ads.push({
-            ad_id: `${agid}${k}`, ad_name: name, adgroup_id: agid, adgroup_name: adgroups[agid].name,
-            campaign_id: cid, campaign_name: cname, app_id: app.app_id,
-            spend, rev: cRev * share * (0.5 + r()), installs: Math.round(cInst * share),
-            impressions: Math.round(spend * 120), clicks: Math.round(spend * 3),
+            ad_id: adId, ad_name: name, adgroup_id: agid, adgroup_name: adgroups[agid].name,
+            campaign_id: cid, campaign_name: cname, app_id: app.app_id, spend, rev,
           });
+          const ag = GEOS.slice().sort(() => r() - 0.5).slice(0, 3);
+          [0.6, 0.3, 0.1].forEach((x, j) => adGeo.push({ ad_id: adId, country: ag[j], spend: spend * x, rev: rev * x * (0.6 + r() * 0.8) }));
         });
         const g = GEOS.slice().sort(() => r() - 0.5).slice(0, 4);
         const gw = [0.5, 0.25, 0.15, 0.1];
-        g.forEach((country, k) => geo.push({ campaign_id: cid, country, spend: cSpend * gw[k], rev: cRev * gw[k] * (0.6 + r() * 0.8), installs: Math.round(cInst * gw[k]) }));
+        g.forEach((country, k) => geo.push({ campaign_id: cid, country, spend: cSpend * gw[k], rev: cRev * gw[k] * (0.6 + r() * 0.8) }));
       }
     }
-    return { ...acc, display_timezone: acc.timezone, fx, range, apps, ads, campaignDaily, adgroupDaily, geo, campaigns, adgroups };
+    return { ...acc, display_timezone: acc.timezone, fx, range, apps, ads, campaignDaily, adgroupDaily, geo, adGeo, campaigns, adgroups };
   });
-  return { bc_id: bcId, generated_at: new Date().toISOString(), demo: true, advertisers };
+  return { bc_ids: bcIds, generated_at: new Date().toISOString(), demo: true, advertisers };
 }
 
 module.exports = { mockBCs, mockOverview };

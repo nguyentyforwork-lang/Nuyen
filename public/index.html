@@ -12,9 +12,18 @@
   <header class="topbar">
     <div class="brand">App Tracker <span id="demoBadge" class="badge" hidden>DEMO</span></div>
     <div class="filters">
-      <label>BC
-        <select id="bcSelect"></select>
-      </label>
+      <div class="bcpick">
+        <button id="bcBtn" class="btn">BC: … ▾</button>
+        <div id="bcPanel" class="bcpanel" hidden>
+          <input id="bcSearch" type="search" placeholder="Tìm BC theo tên / ID…" />
+          <div class="bcactions">
+            <button class="btn sm" id="bcAll">Chọn tất cả</button>
+            <button class="btn sm" id="bcNone">Bỏ hết</button>
+            <button class="btn sm primary" id="bcApply">Áp dụng</button>
+          </div>
+          <div id="bcList" class="bclist"></div>
+        </div>
+      </div>
       <div class="seg" id="presetSeg" role="group" aria-label="Khoảng ngày">
         <button data-preset="today" class="active">Today</button>
         <button data-preset="yesterday">Yesterday</button>
@@ -39,15 +48,61 @@
   </div>
 
   <nav class="tabs">
-    <button data-tab="overview" class="active">Tổng quan</button>
-    <button data-tab="mapping">Account ↔ App</button>
+    <button data-tab="levels" class="active">Theo level</button>
+    <button data-tab="overview">Tổng quan</button>
     <button data-tab="campaigns">Campaign &amp; Budget</button>
     <button data-tab="creatives">Creative</button>
   </nav>
 
   <main>
+    <!-- LEVELS -->
+    <section id="tab-levels" class="tab active">
+      <div class="card">
+        <div class="pivotbar">
+          <span class="muted">Level:</span>
+          <span class="chip fixed">BC</span>
+          <span class="arrow">→</span>
+          <div class="chipzone" id="midLevels" title="Kéo thả hoặc bấm ⇄ để đổi Account / App"></div>
+          <button class="btn sm" id="swapLevels" title="Đổi Account ⇄ App">⇄</button>
+          <span class="arrow">→</span>
+          <span class="chip fixed">Campaign</span>
+          <span class="arrow">→</span>
+          <span class="chip fixed">Creative</span>
+        </div>
+        <div class="pivottools">
+          <label>Sort mọi level theo
+            <span class="seg sm" id="sortSeg">
+              <button data-sort="spend" class="active">Spend</button>
+              <button data-sort="roas">ROAS IAA D0</button>
+            </span>
+          </label>
+          <button class="btn sm" id="sortDir" title="Đổi chiều sort">↓ Cao → thấp</button>
+          <label>Ẩn dòng spend &lt; $ <input id="minSpendLv" type="number" value="0" min="0" step="10" style="width:80px" /></label>
+          <label>Creative theo
+            <select id="creativeGroupLv">
+              <option value="video">Video (tên file)</option>
+              <option value="ad">Ad name</option>
+            </select>
+          </label>
+          <label>Mở tới
+            <select id="expandTo">
+              <option value="0">BC</option>
+              <option value="1" selected>Level 2</option>
+              <option value="2">Level 3</option>
+              <option value="3">Campaign</option>
+              <option value="4">Creative</option>
+            </select>
+          </label>
+          <input id="pivotSearch" type="search" placeholder="Tìm BC / account / app / campaign / creative…" />
+          <label class="chk"><input type="checkbox" id="showLinkedOnly" checked /> Hiện app link Event Manager chưa spend</label>
+        </div>
+        <div class="tablewrap levelwrap"><table id="pivotTable" class="tbl pivot"></table></div>
+        <p class="muted small">Bấm dòng để xổ ra/thu lại · 🎯 lọc toàn bộ dashboard theo dòng đó · Top geo = 3 nước spend cao nhất (% spend), rê chuột để xem ROAS từng nước.</p>
+      </div>
+    </section>
+
     <!-- OVERVIEW -->
-    <section id="tab-overview" class="tab active">
+    <section id="tab-overview" class="tab">
       <div class="kpis" id="kpis"></div>
       <div class="grid2">
         <div class="card">
@@ -70,31 +125,6 @@
       <div class="card">
         <h3>⚠ Campaign / Ad group chạm max budget <span class="muted small" id="hitNote"></span></h3>
         <div class="tablewrap"><table id="hitTableMini" class="tbl"></table></div>
-      </div>
-    </section>
-
-    <!-- MAPPING -->
-    <section id="tab-mapping" class="tab">
-      <div class="card">
-        <div class="pivotbar">
-          <span class="muted">Kéo thả để đổi cách nhóm:</span>
-          <div class="chipzone" id="pivotLevels" title="Thứ tự nhóm (trái → phải)"></div>
-          <span class="muted">Kéo vào/ra:</span>
-          <div class="chipzone pool" id="pivotPool"></div>
-          <div class="presets">
-            <button class="btn sm" data-pivot="account,app">Account → App</button>
-            <button class="btn sm" data-pivot="app,account">App → Account</button>
-            <button class="btn sm" data-pivot="app,account,campaign">App → Account → Campaign</button>
-          </div>
-        </div>
-        <div class="pivottools">
-          <input id="pivotSearch" type="search" placeholder="Tìm account / app / campaign…" />
-          <label class="chk"><input type="checkbox" id="showLinkedOnly" checked /> Hiện cả app chỉ link trong Event Manager (chưa spend)</label>
-          <button class="btn sm" id="expandAll">Mở hết</button>
-          <button class="btn sm" id="collapseAll">Đóng hết</button>
-          <span class="muted small">Kéo tiêu đề cột để đổi thứ tự cột · bấm tiêu đề để sort · bấm 🎯 để lọc toàn bộ dashboard theo dòng đó</span>
-        </div>
-        <div class="tablewrap"><table id="pivotTable" class="tbl pivot"></table></div>
       </div>
     </section>
 
@@ -135,7 +165,6 @@
     </section>
   </main>
 
-  <div id="tooltip" class="tooltip" hidden></div>
   <script src="app.js"></script>
 </body>
 </html>

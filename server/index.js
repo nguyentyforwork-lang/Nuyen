@@ -18,7 +18,7 @@ const config = {
   token: process.env.TIKTOK_ACCESS_TOKEN || '',
   port: Number(process.env.PORT) || 3000,
   password: process.env.APP_PASSWORD || '',
-  iaaRevenueMetric: process.env.IAA_REVENUE_METRIC || 'total_in_app_ad_impr_value',
+  iaaRevenueMetric: process.env.IAA_REVENUE_METRIC || 'ad_impression_ad_revenue_day0',
   budgetHitThreshold: Number(process.env.BUDGET_HIT_THRESHOLD) || 0.95,
   fxToUsd: parseJson(process.env.FX_TO_USD, { USD: 1, VND: 0.000038 }),
   concurrency: Number(process.env.CONCURRENCY) || 4,
@@ -67,14 +67,15 @@ app.get('/api/bcs', async (req, res) => {
 });
 
 app.get('/api/overview', async (req, res) => {
-  const { bc_id: bcId, preset = 'today', start, end, include_today: inc, refresh } = req.query;
-  if (!bcId) return res.status(400).json({ error: 'bc_id is required' });
+  const { bc_ids: ids, preset = 'today', start, end, include_today: inc, refresh } = req.query;
+  const bcIds = [...new Set(String(ids || '').split(',').map((s) => s.trim()).filter(Boolean))].sort();
+  if (!bcIds.length) return res.status(400).json({ error: 'bc_ids is required' });
   if (!PRESETS.includes(preset)) return res.status(400).json({ error: 'invalid preset' });
   const rangeReq = { preset, start, end, includeToday: inc === '1' };
   try {
     const data = demo
-      ? mockOverview(bcId, rangeReq, config)
-      : await cached(`ov:${bcId}:${JSON.stringify(rangeReq)}`, () => service.overview(bcId, rangeReq), refresh === '1');
+      ? mockOverview(bcIds, rangeReq, config)
+      : await cached(`ov:${bcIds.join(',')}:${JSON.stringify(rangeReq)}`, () => service.overview(bcIds, rangeReq), refresh === '1');
     res.json(data);
   } catch (e) {
     res.status(502).json({ error: e.message });

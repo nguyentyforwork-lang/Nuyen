@@ -6,10 +6,10 @@ Web dashboard theo dõi **khách đang chạy app nào** dựa trên **BC ID**, 
 
 | Tab | Nội dung |
 |---|---|
-| **Tổng quan** | KPI (Spend, IAA revenue D0, ROAS IAA D0, Installs/CPI, số app đang chạy, số lần chạm budget) · Spend theo ngày · ROAS IAA D0 theo ngày · Top geo · Top campaign · Bảng chạm max budget |
-| **Account ↔ App** | Bảng pivot **kéo thả**: kéo chip `Account` / `App` / `Campaign` để đổi thứ tự nhóm (Account → App, App → Account, App → Account → Campaign…). Dòng có nhiều con thì bấm để xổ ra. Kéo tiêu đề cột để đổi thứ tự cột, bấm để sort. Nút 🎯 lọc toàn bộ dashboard theo dòng đó. Hiện cả app chỉ link trong Event Manager mà chưa spend. |
+| **Theo level** | Bảng phân cấp **BC → Ad account ⇄ App → Campaign → Creative**. Account/App đổi chỗ được (kéo thả chip hoặc bấm ⇄). Mỗi level đều có **Spend, ROAS IAA D0, Top geo** (3 nước spend cao nhất, rê chuột xem ROAS từng nước) và trạng thái (đang chạy / link Event Manager chưa spend / chạm max budget). **Sort mọi level** từ trên xuống theo Spend hoặc ROAS IAA D0 (cao→thấp hoặc ngược lại). Có ẩn dòng spend nhỏ, mở tới level, tìm kiếm, 🎯 lọc toàn dashboard. |
+| **Tổng quan** | KPI (Spend, IAA revenue D0, ROAS IAA D0, số app đang chạy, số lần chạm budget) · Spend theo ngày · ROAS IAA D0 theo ngày · Top geo · Top campaign · Bảng chạm max budget |
 | **Campaign & Budget** | Danh sách campaign với budget ngày (CBO hoặc tổng budget ad group), max % budget/ngày, số ngày chạm max · bảng chi tiết campaign/ad group-ngày có spend ≥ 95% budget |
-| **Creative** | Gom theo video (tên file `.mp4`) hoặc theo ad name: spend, IAA rev, ROAS IAA D0, installs, CPI, CTR + scatter Spend vs ROAS |
+| **Creative** | Gom theo video (tên file `.mp4`) hoặc theo ad name: spend, ROAS IAA D0, top geo + scatter Spend vs ROAS |
 
 Bộ lọc ngày: **Today / Yesterday / Last 3 days / Last 7 days / Custom** (tối đa 30 ngày), tuỳ chọn "gồm hôm nay" cho Last N days.
 
@@ -23,10 +23,11 @@ Bộ lọc ngày: **Today / Yesterday / Last 3 days / Last 7 days / Custom** (t�
 | Ad account trong BC | `bc/asset/get` (asset_type=ADVERTISER) + `advertiser/info` (timezone, currency) |
 | App trong **Event Manager** | `app/list` theo từng ad account |
 | App mà mỗi ad đang chạy | metric `tt_app_id` trong `report/integrated/get` (level ad) – khớp với `app_id` của Event Manager |
-| Spend / IAA revenue / installs | `report/integrated/get` (campaign×ngày, ad group×ngày, ad, campaign×country) |
+| Spend / IAA revenue D0 / geo | `report/integrated/get` (campaign×ngày, ad group×ngày, ad, campaign×country, ad×country) |
 | Budget | `campaign/get`, `adgroup/get` |
 
-- **ROAS IAA D0** = `total_in_app_ad_impr_value` / `spend`. Tên metric đã được kiểm tra trực tiếp với API. Có thể đổi bằng biến `IAA_REVENUE_METRIC` nếu tài khoản bạn dùng metric khác.
+- **ROAS IAA D0** = `ad_impression_ad_revenue_day0` / `spend` — chính là `ad_impression_ad_revenue_roas_day0` của TikTok, nhưng tính từ revenue để cộng dồn đúng ở mọi level (BC, account, app, campaign, creative, geo). Đổi được bằng `IAA_REVENUE_METRIC`.
+- Chọn được **nhiều BC** cùng lúc (ô "BC" trên cùng); ad account thuộc nhiều BC chỉ tính 1 lần.
 - **Chạm max budget**: spend trong ngày ≥ `BUDGET_HIT_THRESHOLD` (mặc định 95%) × budget ngày. Budget là budget **hiện tại** (API không trả budget theo lịch sử).
 - Account khác currency (VND…) được quy đổi về USD theo `FX_TO_USD` để cộng dồn.
 

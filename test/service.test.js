@@ -30,15 +30,16 @@ test('service maps ads to apps, converts currency and pulls budgets', async () =
     },
     async report(params) {
       calls.push(['report', params]);
-      if (params.data_level === 'AUCTION_AD') return [{ ad_id: 'a1', ad_name: 'v1.mp4', campaign_id: 'c1', adgroup_id: 'g1', tt_app_id: '99', spend: '1000000', total_in_app_ad_impr_value: '500000', app_install: '10' }];
-      if (params.data_level === 'AUCTION_CAMPAIGN' && params.dimensions.includes('stat_time_day')) return [{ campaign_id: 'c1', stat_time_day: '2026-10-01 00:00:00', spend: '1000000', total_in_app_ad_impr_value: '500000' }];
+      if (params.data_level === 'AUCTION_AD') return [{ ad_id: 'a1', ad_name: 'v1.mp4', campaign_id: 'c1', adgroup_id: 'g1', tt_app_id: '99', spend: '1000000', ad_impression_ad_revenue_day0: '500000' }];
+      if (params.data_level === 'AUCTION_CAMPAIGN' && params.dimensions.includes('stat_time_day')) return [{ campaign_id: 'c1', stat_time_day: '2026-10-01 00:00:00', spend: '1000000', ad_impression_ad_revenue_day0: '500000' }];
       return [];
     },
   };
-  const svc = createService(client, { iaaRevenueMetric: 'total_in_app_ad_impr_value', fxToUsd: { VND: 0.00004 }, concurrency: 2 });
-  const out = await svc.overview('bc', { preset: 'today' });
+  const svc = createService(client, { iaaRevenueMetric: 'ad_impression_ad_revenue_day0', fxToUsd: { VND: 0.00004 }, concurrency: 2 });
+  const out = await svc.overview(['bc'], { preset: 'today' });
   const adv = out.advertisers[0];
   assert.ifError(adv.error);
+  assert.strictEqual(adv.bc_id, 'bc');
   assert.strictEqual(adv.ads[0].app_id, '99');
   assert.strictEqual(adv.ads[0].spend, 40);
   assert.strictEqual(adv.ads[0].rev, 20);
