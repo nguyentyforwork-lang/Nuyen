@@ -429,8 +429,9 @@ function rangeWindows() {
   const len = dayDiff(cur.start, cur.end) + 1;
   // Kỳ trước: cùng số ngày, ngay trước kỳ đang xem (hôm nay → hôm qua)
   const prev = { start: ymd(addDays(parseYmd(cur.start), -len)), end: ymd(addDays(parseYmd(cur.start), -1)) };
-  // Biểu đồ: ít nhất 14 ngày, tối đa 30 ngày (giới hạn report theo ngày)
-  const trendLen = Math.min(30, Math.max(14, len));
+  // Biểu đồ + dữ liệu theo ngày: ít nhất 14 ngày, tối đa 30 (giới hạn report theo ngày).
+  // Khi kỳ ≤ 15 ngày, cửa sổ này phủ cả kỳ đang xem lẫn kỳ trước → chỉ cần 1 lần gọi report.
+  const trendLen = len <= 15 ? Math.max(14, len * 2) : Math.min(30, len);
   const trend = { start: ymd(addDays(parseYmd(cur.end), -(trendLen - 1))), end: cur.end };
   return { cur, prev, trend, len };
 }
@@ -481,24 +482,52 @@ const ERR_TEXT = {
   blocked_by_policy: `Tổ chức của bạn đang chặn ${SERVER} cho trang này.`,
   approval_required: `Tổ chức yêu cầu duyệt từng lần gọi ${SERVER}, trang này chưa hỗ trợ.`,
   server_unavailable: "TikTok không phản hồi. Đợi một lát rồi bấm Làm mới.",
+  tt_rate_limited: "TikTok đang giới hạn số lần gọi (rate limit). Đợi 1–2 phút rồi bấm Làm mới.",
+  rate_limited: "Trang gọi TikTok quá nhanh. Đợi 1 phút rồi bấm Làm mới.",
 };
 const PAGE_LEVEL = new Set(["server_not_connected", "needs_reauth", "selection_required", "not_in_manifest", "consent_required", "blocked_by_policy", "approval_required"]);
 const errText = e => ERR_TEXT[e?.code] || e?.message || "Không kéo được số liệu.";
 
+// Hàng đợi: TikTok giới hạn số request/giây, nên gọi lần lượt từng request, cách nhau ≥ 350 ms.
+const Q = { active: 0, next: 0, waiters: [] };
+const Q_MAX = 1, Q_GAP = 350;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function acquireSlot() {
+  while (Q.active >= Q_MAX) await new Promise(r => Q.waiters.push(r));
+  Q.active++;
+  const now = Date.now(), at = Math.max(now, Q.next);
+  Q.next = at + Q_GAP;
+  if (at > now) await sleep(at - now);
+}
+function releaseSlot() { Q.active--; const w = Q.waiters.shift(); if (w) w(); }
+const RATE_RE = /rate.?limit|too many|too frequent|frequently|qps|exceed/i;
+const RATE_CODES = new Set([40100, 40133, 50002]);
+
 async function tt(tool, input, refresh) {
-  const opts = { cache: { staleTime: 120000, gcTime: 1800000, refresh: !!refresh } };
-  let res;
-  try { res = await mcp.callTool(SERVER, tool, input, opts); }
-  catch (e) {
-    if (!e?.retryable) throw e;
-    await new Promise(r => setTimeout(r, Math.min(e.retryAfterMs || 0, 10000) + 800 + Math.random() * 1200));
-    res = await mcp.callTool(SERVER, tool, input, opts);
+  const opts = { cache: { staleTime: 300000, gcTime: 3600000, refresh: !!refresh } };
+  for (let attempt = 0; ; attempt++) {
+    const backoff = () => sleep(Math.min(16000, 2000 * 2 ** attempt) + Math.random() * 1000);
+    await acquireSlot();
+    let res, err;
+    try { res = await mcp.callTool(SERVER, tool, input, opts); } catch (e) { err = e; } finally { releaseSlot(); }
+    if (err) {
+      const limited = err.code === "rate_limited" || (err.code === "tool_error" && RATE_RE.test(err.message || ""));
+      if (limited && attempt < 3) { await (err.retryAfterMs ? sleep(Math.min(err.retryAfterMs, 30000)) : backoff()); continue; }
+      if (limited) throw { code: "tt_rate_limited", message: err.message };
+      if (err.retryable && attempt < 1) { await sleep(Math.min(err.retryAfterMs || 0, 10000) + 800 + Math.random() * 1200); continue; }
+      throw err;
+    }
+    let p = res?.payload;
+    if (typeof p === "string") { try { p = JSON.parse(p); } catch (e) {} }
+    if (!p || typeof p !== "object") throw { code: "bad_payload", message: "TikTok trả về dữ liệu không đọc được." };
+    if (p.code !== undefined && Number(p.code) !== 0) {
+      const limited = RATE_CODES.has(Number(p.code)) || RATE_RE.test(p.message || "");
+      if (limited && attempt < 3) { refresh = true; await backoff(); continue; }
+      if (limited) throw { code: "tt_rate_limited", message: p.message };
+      throw { code: "api_error", message: `TikTok: ${p.message || "lỗi " + p.code}` };
+    }
+    return { data: p.data || {}, storedAt: res.cache?.storedAt };
   }
-  let p = res?.payload;
-  if (typeof p === "string") { try { p = JSON.parse(p); } catch (e) {} }
-  if (!p || typeof p !== "object") throw { code: "bad_payload", message: "TikTok trả về dữ liệu không đọc được." };
-  if (p.code !== undefined && Number(p.code) !== 0) throw { code: "api_error", message: `TikTok: ${p.message || "lỗi " + p.code}` };
-  return { data: p.data || {}, storedAt: res.cache?.storedAt };
 }
 async function allPages(tool, input, refresh) {
   const rows = []; let storedAt;
@@ -544,14 +573,35 @@ function commonPrefix(names, kw) {
 async function fetchAccount(acc, kw, win, refresh) {
   const filtering = [{ field_name: "campaign_name", filter_type: "MATCH", filter_value: kw }];
   const base = { advertiser_id: acc, report_type: "BASIC", data_level: "AUCTION_CAMPAIGN", filtering };
-  const [cur, prev, trend, camps] = await Promise.all([
-    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end }, refresh),
-    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end }, refresh),
+  // Chỉ gọi report tổng riêng khi kỳ đang xem / kỳ trước nằm ngoài cửa sổ theo ngày
+  const curInTrend = win.cur.start >= win.trend.start;
+  const prevInTrend = win.prev.start >= win.trend.start;
+  const none = Promise.resolve(null);
+  const [trend, cur, prev, camps] = await Promise.all([
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end }, refresh),
+    curInTrend ? none : allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end }, refresh),
+    prevInTrend ? none : allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end }, refresh),
     allPages("campaign_get", { advertiser_id: acc, filtering: { campaign_name: kw }, fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status"] }, refresh)
       .catch(() => ({ rows: [] })), // ngân sách là phụ: lỗi thì hiện spend TB/ngày
   ]);
-  return { cur: cur.rows, prev: prev.rows, trend: trend.rows, camps: camps.rows, storedAt: cur.storedAt };
+  // Cộng các dòng theo ngày thành tổng theo camp cho một khoảng ngày (cùng dạng dòng report)
+  const sumRange = (start, end) => {
+    const by = new Map();
+    for (const r of trend.rows) {
+      const day = String(r.dimensions?.stat_time_day || "").slice(0, 10);
+      if (day < start || day > end) continue;
+      const id = String(r.dimensions?.campaign_id || ""), m = r.metrics || {}, sp = num(m.spend);
+      const x = by.get(id) || { id, name: m.campaign_name, spend: 0, rev: 0 };
+      x.spend += sp; x.rev += sp * num(m[M_IAA]); by.set(id, x);
+    }
+    return [...by.values()].map(x => ({ dimensions: { campaign_id: x.id },
+      metrics: { campaign_name: x.name, spend: String(x.spend), [M_IAA]: String(x.spend > 0 ? x.rev / x.spend : 0) } }));
+  };
+  return {
+    cur: cur ? cur.rows : sumRange(win.cur.start, win.cur.end),
+    prev: prev ? prev.rows : sumRange(win.prev.start, win.prev.end),
+    trend: trend.rows, camps: camps.rows, storedAt: trend.storedAt,
+  };
 }
 
 // Bộ lọc camp người dùng tự đặt cho từng app (config.apps[code].filter).
@@ -651,15 +701,28 @@ async function loadAll(refresh = false) {
     const win = rangeWindows();
     const kw = (g.keyword || "Ecomdy").trim();
     const accounts = g.accounts || [];
-    const settled = await Promise.allSettled(accounts.map(acc => fetchAccount(acc, kw, win, refresh)));
-    if (gen !== loadGen) return;
-    const res = { status: "ok", apps: [], errors: [], accs: [], storedAt: null, rangeKey: `${win.cur.start}|${win.cur.end}` };
-    settled.forEach((s, i) => {
-      if (s.status === "fulfilled") {
-        accRaw.set(`${accounts[i]}|${kw}`, s.value); res.accs.push(accounts[i]);
-        if (s.value.storedAt && (!res.storedAt || s.value.storedAt < res.storedAt)) res.storedAt = s.value.storedAt;
-      } else res.errors.push({ acc: accounts[i], err: s.reason });
-    });
+    // Kéo lần lượt từng tài khoản trong nhóm; xong tài khoản nào hiện tài khoản đó
+    const res = { status: "ok", apps: [], errors: [], accs: [], storedAt: null, rangeKey: `${win.cur.start}|${win.cur.end}`, progress: `0/${accounts.length}` };
+    results[gi] = res;
+    for (let i = 0; i < accounts.length; i++) {
+      res.progress = `${i + 1}/${accounts.length}`;
+      if (i) { rebuild(gi); render(); }
+      try {
+        const raw = await fetchAccount(accounts[i], kw, win, refresh);
+        if (gen !== loadGen) return;
+        accRaw.set(`${accounts[i]}|${kw}`, raw); res.accs.push(accounts[i]);
+        if (raw.storedAt && (!res.storedAt || raw.storedAt < res.storedAt)) res.storedAt = raw.storedAt;
+      } catch (e) {
+        if (gen !== loadGen) return;
+        res.errors.push({ acc: accounts[i], err: e });
+        // Lỗi kết nối connector thì các tài khoản sau cũng lỗi y vậy → dừng sớm, khỏi gọi thêm
+        if (PAGE_LEVEL.has(e?.code) || e?.code === "tt_rate_limited") {
+          for (const rest of accounts.slice(i + 1)) res.errors.push({ acc: rest, err: e });
+          break;
+        }
+      }
+    }
+    delete res.progress;
     // Mọi tài khoản cùng lỗi kết nối (vd. chưa kết nối connector) → báo một lần ở đầu trang
     const errs = res.errors.map(e => e.err);
     if (errs.length && errs.length === accounts.length && errs.every(e => e?.code === errs[0]?.code) && PAGE_LEVEL.has(errs[0]?.code)) {
@@ -856,13 +919,14 @@ function render() {
     ? `${r.apps.length} app · ${fmtUsd(Math.round(total))} · chỉ camp ${kw}`
     : `${(g.accounts || []).length} tài khoản · chỉ camp ${kw}`;
   const status = r.status === "loading" ? "Đang kéo số…"
+    : r.progress ? `Đang kéo tài khoản ${r.progress}…`
     : r.status === "ok" && r.storedAt ? `Số liệu lúc ${new Date(r.storedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`
     : "";
   let body;
-  if (r.status === "loading") body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
+  if (r.status === "loading" || (r.progress && !r.apps.length)) body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
   else if (r.pageError || r.status !== "ok") body = `<div class="empty">Chưa có số liệu.</div>`;
   else if (!r.apps.length && !r.errors.length) body = `<div class="empty">Không có camp ${kw} nào có spend trong khoảng ngày này.</div>`;
-  else body = r.apps.map(a => card(a, days, win)).join("");
+  else body = r.apps.map(a => card(a, days, win)).join("") + (r.progress ? `<div class="card loading">Đang kéo tài khoản ${r.progress}…</div>` : "");
   const errs = r.errors.length ? `<div class="acc-errors">${r.errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
   const tabs = `<nav class="tabs" role="tablist" aria-label="Nhóm tài khoản">${config.groups.map((x, i) =>
       `<button role="tab" data-act="tab" data-g="${i}" aria-selected="${i === gi}">${esc(x.name)}</button>`).join("")}
