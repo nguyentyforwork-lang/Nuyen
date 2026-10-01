@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apero Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f5f8;
+    --card: #ffffff;
+    --border: #e6e7ec;
+    --text: #15171c;
+    --muted: #8a8f99;
+    --chip-bg: #f1f2f5;
+    --chip-border: #e2e4e9;
+    --chip-text: #4a4f59;
+    --camp-bg: #f1f1fb;
+    --camp-text: #4338ca;
+    --good: #9a5b1e;      /* >= 90% KPI */
+    --bad: #a32d2d;       /* < 90% KPI */
+    --up: #2e7d32;
+    --down: #b3261e;
+    --line: #4f46e5;
+    --track: #eef0f3;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1115; --card: #181b21; --border: #262a33; --text: #eceef2; --muted: #8c93a0;
+      --chip-bg: #22262e; --chip-border: #2e333d; --chip-text: #c3c8d1;
+      --camp-bg: #23233d; --camp-text: #a5a3ff;
+      --good: #d4914a; --bad: #e0675f; --up: #5fbf68; --down: #ef6b62;
+      --line: #8b85ff; --track: #262a33;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1115; --card: #181b21; --border: #262a33; --text: #eceef2; --muted: #8c93a0;
+    --chip-bg: #22262e; --chip-border: #2e333d; --chip-text: #c3c8d1;
+    --camp-bg: #23233d; --camp-text: #a5a3ff;
+    --good: #d4914a; --bad: #e0675f; --up: #5fbf68; --down: #ef6b62;
+    --line: #8b85ff; --track: #262a33;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-feature-settings: "tnum";
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1680px; margin: 0 auto; padding: 16px; }
+
+  .group-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 4px 0 20px; }
+  .group-head h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+  .group-head .sub { color: var(--muted); font-size: 20px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
+    gap: 24px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 24px 24px 20px;
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+  }
+  .top { display: flex; justify-content: space-between; gap: 12px; }
+  .name { font-size: 24px; font-weight: 600; margin: 4px 0 12px; }
+  .score { text-align: right; flex-shrink: 0; }
+  .score .val { font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
+  .score .pct { color: var(--muted); font-size: 18px; margin-top: 8px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip {
+    font-size: 17px; font-weight: 500;
+    padding: 5px 11px; border-radius: 7px;
+    background: var(--chip-bg); border: 1px solid var(--chip-border); color: var(--chip-text);
+  }
+  .chip.camp { background: var(--camp-bg); color: var(--camp-text); border-color: transparent; }
+
+  .bar { height: 8px; border-radius: 99px; background: var(--track); margin: 22px 0 16px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 99px; }
+
+  .spark { width: 100%; height: 64px; display: block; overflow: visible; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 24px; }
+  .stat .lbl { font-size: 16px; font-weight: 500; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+  .stat .num { font-size: 23px; font-weight: 600; margin-top: 8px; letter-spacing: .01em; }
+  .num.up { color: var(--up); } .num.down { color: var(--down); }
+
+  .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 18px; }
+  .acc { color: var(--muted); font-size: 18px; letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; }
+  .btn {
+    font: inherit; font-size: 19px; color: var(--text);
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 8px 15px; cursor: pointer; flex-shrink: 0;
+  }
+  .btn:hover { background: var(--chip-bg); }
+  .btn[aria-expanded="true"] { background: var(--chip-bg); }
+
+  .daily { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; display: none; }
+  .daily.open { display: block; }
+  .daily table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .daily th { text-align: right; color: var(--muted); font-weight: 500; padding: 4px 6px; }
+  .daily td { text-align: right; padding: 4px 6px; border-top: 1px solid var(--border); }
+  .daily th:first-child, .daily td:first-child { text-align: left; }
+
+  @media (max-width: 520px) {
+    .card { padding: 18px 16px 16px; }
+    .name { font-size: 20px; }
+    .score .val { font-size: 36px; }
+    .stat .lbl { font-size: 13px; }
+    .stat .num { font-size: 19px; }
+    .acc { font-size: 14px; }
+    .btn { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+/* ---------- Dữ liệu (thay bằng API của bạn) ----------
+   roas:   chuỗi ROAS theo ngày (cũ -> mới), điểm cuối = hiện tại
+   spend:  tổng spend kỳ này; prevSpend: kỳ trước (tính Δ SPEND)
+   budget: ngân sách/ngày (NS/NGÀY). null => hiển thị SPEND/NGÀY
+*/
+const GROUPS = [
+  {
+    name: "Apero",
+    note: "chỉ camp Ecomdy",
+    apps: [
+      { name: "AI Chat", os: null, kpi: 1.0, campaign: "APB508_Global_ROAS_Ecomdy",
+        account: "7542372674190934023", spend: 728, prevSpend: 1486, budget: 1500,
+        roas: [1.12, 1.02, 1.03, 0.99, 1.06, 1.02, 1.01, 0.97, 1.00, 1.04, 1.00, 1.00, 0.95, 0.906] },
+      { name: "Elyra", os: null, kpi: 1.0, campaign: "Ecomdy_Elyra",
+        account: "7660741366342991879", spend: 343, prevSpend: 174, budget: null,
+        roas: [0.99, 0.92, 0.97, 0.94, 1.00, 0.96, 0.93, 0.97, 0.95, 0.91, 1.05, 1.03, 0.97, 0.957] },
+      { name: "Photo Editor (APL389)", os: null, kpi: 1.0, campaign: "APL389_Ecomdy",
+        account: "7546063697488691217", spend: 299, prevSpend: 498, budget: 500,
+        roas: [1.00, 0.97, 0.96, 0.75, 1.03, 1.02, 0.92, 0.94, 1.01, 0.91, 0.63, 0.99, 1.01, 0.929] },
+      { name: "TutorMe", os: null, kpi: 1.0, campaign: "Ecomdy_TutorMe",
+        account: "7660741366342991879", spend: 271, prevSpend: 207, budget: null,
+        roas: [0.89, 0.88, 0.89, 0.90, 0.89, 0.89, 0.87, 0.89, 0.93, 0.92, 0.88, 0.84, 0.85, 0.802] },
+      { name: "Cast to TV", os: null, kpi: 1.0, campaign: "AIP805_Global_ROAS_Ecomdy",
+        account: "7542372674190934023", spend: 94.31, prevSpend: 496, budget: 500,
+        roas: [0.70, 0.69, 0.63, 0.66, 0.10, 0.66, 0.62, 0.65, 0.66, 1.15, 0.80, 0.55, 0.53, 0.431] },
+    ],
+  },
+];
+
+/* ---------- Helpers ---------- */
+const fmtUsd = v => "$" + (v >= 1000 || Number.isInteger(v)
+  ? Math.round(v).toLocaleString("en-US")
+  : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const GOOD_RATIO = 0.9; // >= 90% KPI -> màu nâu, dưới -> đỏ
+
+function sparkline(series, kpi) {
+  const W = 480, H = 64, pad = 6;
+  const lo = Math.min(...series, kpi), hi = Math.max(...series, kpi);
+  const span = hi - lo || 1;
+  const x = i => (i / (series.length - 1)) * W;
+  const y = v => pad + (1 - (v - lo) / span) * (H - pad * 2);
+  const pts = series.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const ky = y(kpi).toFixed(1);
+  const dots = series.slice(-2).map((v, j) => {
+    const i = series.length - 2 + j;
+    const c = v >= kpi ? "var(--up)" : "var(--down)";
+    return `<circle cx="${x(i)}" cy="${y(v)}" r="5" fill="${c}"/>`;
+  }).join("");
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="0" x2="${W}" y1="${ky}" y2="${ky}" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="8 6" vector-effect="non-scaling-stroke" opacity=".7"/>
+    <polyline points="${pts}" fill="none" stroke="var(--line)" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    ${dots}
+  </svg>`;
+}
+
+function dailyTable(app) {
+  const days = app.roas.length;
+  const perDay = app.spend / days;
+  const today = new Date();
+  const rows = app.roas.map((r, i) => {
+    const d = new Date(today); d.setDate(today.getDate() - (days - 1 - i));
+    const label = d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+    const cls = r >= app.kpi ? "up" : "down";
+    return `<tr><td>${label}</td><td>${fmtUsd(perDay)}</td><td class="num ${cls}">${r.toFixed(3)}</td></tr>`;
+  }).reverse().join("");
+  return `<table><thead><tr><th>Ngày</th><th>Spend</th><th>ROAS</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function card(app, idx) {
+  const score = app.roas[app.roas.length - 1];
+  const ratio = score / app.kpi;
+  const color = ratio >= GOOD_RATIO ? "var(--good)" : "var(--bad)";
+  const delta = app.prevSpend ? (app.spend - app.prevSpend) / app.prevSpend : 0;
+  const deltaTxt = (delta >= 0 ? "+" : "-") + Math.abs(Math.round(delta * 100)) + "%";
+  const third = app.budget != null
+    ? { lbl: "NS/ngày", val: fmtUsd(app.budget) }
+    : { lbl: "Spend/ngày", val: fmtUsd(app.spend) };
+
+  return `<article class="card">
+    <div class="top">
+      <div>
+        <div class="name">${esc(app.name)}</div>
+        <div class="chips">
+          <span class="chip">${app.os ? esc(app.os) : "OS?"}</span>
+          <span class="chip">KPI ${app.kpi.toFixed(2)}</span>
+          ${app.campaign ? `<span class="chip camp">${esc(app.campaign)}</span>` : ""}
+        </div>
+      </div>
+      <div class="score">
+        <div class="val" style="color:${color}">${score.toFixed(3)}</div>
+        <div class="pct">${Math.round(ratio * 100)}% KPI</div>
+      </div>
+    </div>
+
+    <div class="bar"><span style="width:${Math.min(ratio, 1) * 100}%;background:${color}"></span></div>
+    ${sparkline(app.roas, app.kpi)}
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">Spend</div><div class="num">${fmtUsd(app.spend)}</div></div>
+      <div class="stat"><div class="lbl">Δ Spend</div><div class="num ${delta >= 0 ? "up" : "down"}">${deltaTxt}</div></div>
+      <div class="stat"><div class="lbl">${third.lbl}</div><div class="num">${third.val}</div></div>
+    </div>
+
+    <div class="foot">
+      <span class="acc">${esc(app.account)}</span>
+      <button class="btn" aria-expanded="false" aria-controls="d${idx}">Theo ngày</button>
+    </div>
+    <div class="daily" id="d${idx}">${dailyTable(app)}</div>
+  </article>`;
+}
+
+function render() {
+  let idx = 0;
+  document.getElementById("app").innerHTML = GROUPS.map(g => {
+    const total = g.apps.reduce((s, a) => s + a.spend, 0);
+    return `<section>
+      <div class="group-head">
+        <h1>${esc(g.name)}</h1>
+        <span class="sub">${g.apps.length} app · ${fmtUsd(Math.round(total))}${g.note ? " · " + esc(g.note) : ""}</span>
+      </div>
+      <div class="grid">${g.apps.map(a => card(a, idx++)).join("")}</div>
+    </section>`;
+  }).join("");
+}
+
+document.addEventListener("click", e => {
+  const btn = e.target.closest(".btn[aria-controls]");
+  if (!btn) return;
+  const open = btn.getAttribute("aria-expanded") !== "true";
+  btn.setAttribute("aria-expanded", open);
+  document.getElementById(btn.getAttribute("aria-controls")).classList.toggle("open", open);
+});
+
+render();
+</script>
+</body>
+</html>
