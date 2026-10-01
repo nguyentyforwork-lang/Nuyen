@@ -1,0 +1,709 @@
+<title>BC App Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one sticky control bar, a thin summary line, then a single full-width level table (BC > Account/App > Campaign > Geo > Creative). */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --row-1: #eef1f6;
+  --row-2: #f6f8fb;
+  --line: #e1e5ec;
+  --fg: #12161f;
+  --fg-2: #4b5466;
+  --muted: #7d8697;
+  --accent: #1f5fd6;
+  --accent-ink: #ffffff;
+  --hover: #e8effc;
+  --good: #0f7d3c;
+  --bad: #c43838;
+  --warn: #a86a00;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1217; --surface: #161a21; --row-1: #1d232d; --row-2: #191e26; --line: #2a313c;
+    --fg: #eef1f6; --fg-2: #b6becc; --muted: #828b9b; --accent: #5b8ff0; --accent-ink: #0b1220;
+    --hover: #1f2a3c; --good: #4cc27a; --bad: #ef7272; --warn: #e2a43a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1217; --surface: #161a21; --row-1: #1d232d; --row-2: #191e26; --line: #2a313c;
+  --fg: #eef1f6; --fg-2: #b6becc; --muted: #828b9b; --accent: #5b8ff0; --accent-ink: #0b1220;
+  --hover: #1f2a3c; --good: #4cc27a; --bad: #ef7272; --warn: #e2a43a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font-ui); }
+button, select, input { font: inherit; color: inherit; }
+a { color: inherit; }
+.wrap { padding-inline: 20px; padding-block: 0 40px; }
+@media (max-width: 640px) { .wrap { padding-inline: 16px; } .bar { position: static; } }
+
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  padding-block: 12px; background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; margin-right: auto; }
+.brand small { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: 6px; }
+.btn { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn:focus-visible, .seg button:focus-visible, th:focus-visible, tr:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.sm { padding: 3px 8px; font-size: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--surface); max-width: 100%; overflow-x: auto; }
+.seg button { border: 0; background: none; padding: 6px 10px; cursor: pointer; white-space: nowrap; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button.on { background: var(--accent); color: var(--accent-ink); }
+.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--fg-2); font-size: 13px; }
+input[type="date"] { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+
+.bcpick { position: relative; }
+#bcBtn { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bcpanel { position: absolute; left: 0; top: calc(100% + 6px); width: min(440px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.18); padding: 10px; z-index: 30; }
+.bcpanel input[type="search"] { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.bcacts { display: flex; gap: 6px; margin-block: 8px; }
+.bcacts .primary { margin-left: auto; }
+.bclist { max-height: 340px; overflow: auto; display: grid; }
+.bcitem { display: flex; gap: 8px; align-items: baseline; padding: 5px 4px; border-radius: 4px; cursor: pointer; }
+.bcitem:hover { background: var(--hover); }
+.bcitem .id { color: var(--muted); font: 11px var(--font-num); margin-left: auto; white-space: nowrap; }
+
+.sub { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; padding-block: 10px; font-size: 12px; color: var(--muted); }
+.sub b { color: var(--fg-2); font-weight: 600; }
+.sum { display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding-block: 6px 12px; }
+.sum .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); display: block; }
+.sum .v { font: 600 22px var(--font-num); letter-spacing: -0.02em; }
+.progress { margin-left: auto; font-size: 12px; color: var(--fg-2); }
+.notice { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; padding: 12px 14px; margin-block: 12px; max-width: 760px; }
+.notice.err { border-left-color: var(--bad); }
+
+.tablebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--surface); color: var(--fg-2); font-size: 12px; font-weight: 600; text-align: right; user-select: none; }
+th.l, td.l { text-align: left; }
+th.sortable { cursor: pointer; }
+th.sortable:hover { color: var(--fg); }
+th .dir { color: var(--accent); }
+tbody tr { cursor: default; }
+tbody tr.has-kids { cursor: pointer; }
+tbody tr:hover { background: var(--hover); }
+tr.d0 { background: var(--row-1); }
+tr.d0 td:first-child { font-weight: 700; }
+tr.d1 { background: var(--row-2); }
+tr.d1 td:first-child { font-weight: 600; }
+tr.d0:hover, tr.d1:hover { background: var(--hover); }
+.num { font-family: var(--font-num); font-size: 13px; }
+.namecell { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 640px; }
+.tog { width: 14px; flex: none; color: var(--muted); font-size: 11px; }
+.nm { overflow: hidden; text-overflow: ellipsis; }
+.meta { color: var(--muted); font: 11px var(--font-num); font-weight: 400; white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; font-size: 11px; font-weight: 500; color: var(--fg-2); white-space: nowrap; text-decoration: none; }
+a.pill:hover { border-color: var(--accent); color: var(--accent); }
+.pill.hit { color: var(--bad); border-color: var(--bad); }
+.pill.off { color: var(--muted); }
+a.applink { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; min-width: 0; }
+a.applink:hover .nm { text-decoration: underline; }
+.appicon { width: 18px; height: 18px; border-radius: 4px; flex: none; }
+.ext { font-size: 10px; opacity: 0.7; }
+.bar-s { display: inline-block; height: 6px; border-radius: 0 3px 3px 0; background: var(--accent); opacity: 0.55; vertical-align: middle; margin-right: 8px; }
+.r-good { color: var(--good); font-weight: 600; }
+.r-bad { color: var(--bad); }
+.geo { display: inline-flex; gap: 4px; }
+.g { font: 11px var(--font-num); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; color: var(--fg-2); white-space: nowrap; }
+.g b { font-family: var(--font-ui); color: var(--fg); font-weight: 600; margin-right: 2px; }
+.g .gr-good { color: var(--good); }
+.g .gr-bad { color: var(--bad); }
+.empty { padding: 28px 14px; color: var(--muted); text-align: center; white-space: normal; }
+.foot { margin-top: 10px; font-size: 12px; color: var(--muted); max-width: 900px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="bar">
+    <div class="brand">BC App Tracker<small>TikTok · ROAS IAA D0</small></div>
+    <div class="bcpick">
+      <button id="bcBtn" class="btn" type="button">BC: đang tải…</button>
+      <div id="bcPanel" class="bcpanel" hidden>
+        <input id="bcSearch" type="search" placeholder="Tìm BC theo tên hoặc ID">
+        <div class="bcacts">
+          <button class="btn sm" id="bcAll" type="button">Chọn tất cả</button>
+          <button class="btn sm" id="bcNone" type="button">Bỏ hết</button>
+          <button class="btn sm primary" id="bcApply" type="button">Áp dụng</button>
+        </div>
+        <div id="bcList" class="bclist"></div>
+      </div>
+    </div>
+    <div class="seg" id="presetSeg" role="group" aria-label="Khoảng ngày">
+      <button type="button" data-preset="today" class="on">Today</button>
+      <button type="button" data-preset="yesterday">Yesterday</button>
+      <button type="button" data-preset="last3">Last 3 days</button>
+      <button type="button" data-preset="last7">Last 7 days</button>
+      <button type="button" data-preset="custom">Custom</button>
+    </div>
+    <span id="customRange" hidden>
+      <input type="date" id="startDate" aria-label="Từ ngày"> → <input type="date" id="endDate" aria-label="Đến ngày">
+    </span>
+    <label class="chk"><input type="checkbox" id="includeToday"> gồm hôm nay</label>
+    <div class="seg" id="lvl2Seg" role="group" aria-label="Level 2">
+      <button type="button" data-lvl2="account" class="on">Account</button>
+      <button type="button" data-lvl2="app">App</button>
+    </div>
+    <button id="refreshBtn" class="btn" type="button">↻ Refresh</button>
+  </header>
+
+  <div class="sub" id="tzInfo"></div>
+  <div id="notice"></div>
+  <div class="sum" id="summary"></div>
+
+  <div class="tablebox"><table id="tbl"></table></div>
+  <p class="foot">Level: BC → Account (hoặc App) → Campaign → Geo → Creative. Bấm dòng để xổ ra. Bấm tiêu đề Spend hoặc ROAS IAA D0 để sort mọi level. Chỉ hiện dòng có spend &gt; 0. Ngày tính theo múi giờ của từng ad account. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
+</div>
+
+<script>
+'use strict';
+const SERVER = 'TikTok MCP';
+const REV = 'ad_impression_ad_revenue_day0';
+const HIT = 0.95; // spend/day >= 95% of daily budget = "max budget"
+// Approximate rates to add up accounts in other currencies (USD per unit).
+const FX = { USD: 1, VND: 0.000038, EUR: 1.08, GBP: 1.27, JPY: 0.0067, KRW: 0.00072, CNY: 0.14, HKD: 0.128, TWD: 0.031, SGD: 0.75, THB: 0.028, IDR: 0.000061, PHP: 0.017, MYR: 0.22, INR: 0.012, AUD: 0.66, CAD: 0.73, BRL: 0.18, MXN: 0.054, TRY: 0.029 };
+const DAILY = new Set(['BUDGET_MODE_DAY', 'BUDGET_MODE_DYNAMIC_DAILY_BUDGET']);
+const NONE_APP = '__none__';
+
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
+};
+const state = {
+  bcs: [], selected: LS.get('bcat.selected', []),
+  preset: 'today', includeToday: LS.get('bcat.inc', false), start: '', end: '',
+  lvl2: LS.get('bcat.lvl2', 'account'),
+  sort: LS.get('bcat.sort', { key: 'spend', dir: 'desc' }),
+  open: new Map(), results: [], loading: false, done: 0, total: 0, refresh: false, run: 0,
+};
+let mcp = null;
+
+// ---------- utils ----------
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
+const roas = (rev, spend) => (spend > 0 ? rev / spend : null);
+const money = (v) => (v == null ? '–' : '$' + v.toLocaleString('en-US', { minimumFractionDigits: v >= 1000 ? 0 : 2, maximumFractionDigits: v >= 1000 ? 0 : 2 }));
+const kmoney = (v) => (v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1e4 ? '$' + Math.round(v / 1e3) + 'k' : v >= 1e3 ? '$' + (v / 1e3).toFixed(1) + 'k' : '$' + Math.round(v));
+const pct = (v, d = 1) => (v == null || !Number.isFinite(v) ? '–' : (v * 100).toFixed(d) + '%');
+const rcls = (r) => (r == null ? '' : r >= 1 ? 'r-good' : r < 0.5 ? 'r-bad' : '');
+const chunk = (a, n) => { const o = []; for (let i = 0; i < a.length; i += n) o.push(a.slice(i, i + n)); return o; };
+let regionNames = null;
+try { regionNames = new Intl.DisplayNames(['vi'], { type: 'region' }); } catch { /* old browser */ }
+const country = (c) => { try { return regionNames?.of(c) || c; } catch { return c; } };
+
+// ---------- dates (in each ad account's time zone) ----------
+function todayIn(tz) {
+  let zone = tz;
+  try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); } catch { zone = 'UTC'; }
+  return new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+function addDays(ymd, n) { const [y, m, d] = ymd.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); }
+function rangeFor(tz) {
+  const t = todayIn(tz);
+  if (state.preset === 'today') return { start: t, end: t };
+  if (state.preset === 'yesterday') { const y = addDays(t, -1); return { start: y, end: y }; }
+  const m = /^last(\d+)$/.exec(state.preset);
+  if (m) { const end = state.includeToday ? t : addDays(t, -1); return { start: addDays(end, -(Number(m[1]) - 1)), end }; }
+  let { start, end } = state;
+  if (!start || !end) return { start: t, end: t };
+  if (start > end) [start, end] = [end, start];
+  if ((Date.parse(end) - Date.parse(start)) / 864e5 > 29) start = addDays(end, -29);
+  return { start, end };
+}
+
+// ---------- TikTok via the viewer's connector ----------
+const THROTTLE = new Set([40100, 40133, 50000, 50002, 51021, 61000]);
+async function call(tool, input, attempt = 0) {
+  const fresh = state.refresh || attempt > 0;
+  let res;
+  try {
+    res = await mcp.callTool(SERVER, tool, input, { cache: { staleTime: 300000, gcTime: 1800000, refresh: fresh } });
+  } catch (e) {
+    if (e && e.retryable && attempt < 1) { await sleep((e.retryAfterMs || 1500) + Math.random() * 800); return call(tool, input, attempt + 1); }
+    throw e;
+  }
+  let p = res.payload;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch { /* keep text */ } }
+  if (p && typeof p === 'object' && 'code' in p) {
+    if (p.code === 0) return p.data || {};
+    if (THROTTLE.has(p.code) && attempt < 3) { await sleep(1500 * 2 ** attempt + Math.random() * 500); return call(tool, input, attempt + 1); }
+    const err = new Error(`TikTok ${p.code}: ${p.message}`); err.code = 'tiktok'; throw err;
+  }
+  return p || {};
+}
+async function getAll(tool, input, pageSize, max = 40) {
+  const out = [];
+  for (let page = 1; page <= max; page++) {
+    const d = await call(tool, { ...input, page, page_size: pageSize });
+    const list = d.list || [];
+    out.push(...list);
+    if (!list.length || page >= (d.page_info?.total_page ?? 1)) break;
+  }
+  return out;
+}
+// Report rows flattened, ordered by spend; stops at the first zero-spend page.
+async function report(input) {
+  const out = [];
+  for (let page = 1; page <= 40; page++) {
+    const d = await call('report_integrated_get', { report_type: 'BASIC', service_type: 'AUCTION', order_field: 'spend', order_type: 'DESC', ...input, page, page_size: 500 });
+    const list = (d.list || []).map((r) => ({ ...r.dimensions, ...r.metrics }));
+    out.push(...list);
+    if (!list.length || num(list[list.length - 1].spend) === 0 || page >= (d.page_info?.total_page ?? 1)) break;
+  }
+  return out.filter((r) => num(r.spend) > 0);
+}
+async function pool(items, limit, fn) {
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) { const k = i++; await fn(items[k], k); }
+  }));
+}
+
+async function listBCs() {
+  const list = await getAll('bc_get', {}, 50);
+  return list.map((x) => ({ bc_id: String(x.bc_info.bc_id), name: x.bc_info.name, status: x.bc_info.status }));
+}
+async function listAdvertisers(bcId) {
+  const assets = await getAll('bc_asset_get', { bc_id: bcId, asset_type: 'ADVERTISER' }, 50);
+  const info = {};
+  for (const ids of chunk(assets.map((a) => String(a.asset_id)), 100)) {
+    const d = await call('advertiser_info_get', { advertiser_ids: ids, fields: ['advertiser_id', 'name', 'timezone', 'currency'] });
+    for (const x of d.list || []) info[String(x.advertiser_id)] = x;
+  }
+  return assets.map((a) => {
+    const id = String(a.asset_id), x = info[id] || {};
+    return { id, bc: bcId, name: x.name || a.asset_name, tz: x.timezone || 'UTC', cur: x.currency || 'USD' };
+  });
+}
+
+async function fetchAccount(adv) {
+  const range = rangeFor(adv.tz);
+  const fx = FX[adv.cur] ?? 1;
+  const m = (v) => num(v) * fx;
+  const base = { advertiser_id: adv.id, start_date: range.start, end_date: range.end };
+  const [appsD, ads, campDaily, agDaily, geo, adGeo] = await Promise.all([
+    call('app_list_get', { advertiser_id: adv.id }),
+    report({ ...base, data_level: 'AUCTION_AD', dimensions: ['ad_id'], metrics: ['spend', REV, 'ad_name', 'campaign_id', 'campaign_name', 'tt_app_id'] }),
+    report({ ...base, data_level: 'AUCTION_CAMPAIGN', dimensions: ['campaign_id', 'stat_time_day'], metrics: ['spend', REV, 'campaign_name'] }),
+    report({ ...base, data_level: 'AUCTION_ADGROUP', dimensions: ['adgroup_id', 'stat_time_day'], metrics: ['spend', 'campaign_id'] }),
+    report({ ...base, data_level: 'AUCTION_CAMPAIGN', dimensions: ['campaign_id', 'country_code'], metrics: ['spend', REV] }),
+    report({ ...base, data_level: 'AUCTION_AD', dimensions: ['ad_id', 'country_code'], metrics: ['spend', REV] }),
+  ]);
+  const campIds = [...new Set(campDaily.map((r) => String(r.campaign_id)))];
+  const camps = {}, ags = {};
+  for (const ids of chunk(campIds, 100)) {
+    const [cs, gs] = await Promise.all([
+      getAll('campaign_get', { advertiser_id: adv.id, fields: ['campaign_id', 'campaign_name', 'budget', 'budget_mode', 'operation_status'], filtering: { campaign_ids: ids } }, 500),
+      getAll('adgroup_get', { advertiser_id: adv.id, fields: ['adgroup_id', 'campaign_id', 'budget', 'budget_mode', 'operation_status', 'app_id'], filtering: { campaign_ids: ids } }, 500),
+    ]);
+    for (const c of cs) camps[String(c.campaign_id)] = { budget: m(c.budget), daily: DAILY.has(c.budget_mode) && num(c.budget) > 0, status: c.operation_status };
+    for (const g of gs) ags[String(g.adgroup_id)] = { cid: String(g.campaign_id), budget: m(g.budget), daily: DAILY.has(g.budget_mode) && num(g.budget) > 0, status: g.operation_status, app: g.app_id ? String(g.app_id) : null };
+  }
+  return {
+    ...adv, range,
+    apps: (appsD.apps || []).map((a) => ({ id: String(a.app_id), name: a.app_name, platform: a.platform, url: a.download_url || '', icon: a.icon?.web_uri || '' })),
+    ads: ads.map((r) => ({ id: String(r.ad_id), name: r.ad_name || String(r.ad_id), cid: String(r.campaign_id), cname: r.campaign_name, app: r.tt_app_id && r.tt_app_id !== '-' ? String(r.tt_app_id) : null, spend: m(r.spend), rev: m(r[REV]) })),
+    campDaily: campDaily.map((r) => ({ cid: String(r.campaign_id), cname: r.campaign_name, date: String(r.stat_time_day).slice(0, 10), spend: m(r.spend), rev: m(r[REV]) })),
+    agDaily: agDaily.map((r) => ({ agid: String(r.adgroup_id), cid: String(r.campaign_id), date: String(r.stat_time_day).slice(0, 10), spend: m(r.spend) })),
+    geo: geo.map((r) => ({ cid: String(r.campaign_id), c: r.country_code, spend: m(r.spend), rev: m(r[REV]) })),
+    adGeo: adGeo.map((r) => ({ ad: String(r.ad_id), c: r.country_code, spend: m(r.spend), rev: m(r[REV]) })),
+    camps, ags,
+  };
+}
+
+// ---------- model ----------
+function addGeo(target, c, e) {
+  const t = target.get(c) || { spend: 0, rev: 0 };
+  t.spend += e.spend; t.rev += e.rev; target.set(c, t);
+}
+function buildModel(results) {
+  const apps = new Map([[NONE_APP, { id: NONE_APP, name: '(Không gắn app)', platform: '', url: '' }]]);
+  const accounts = new Map();
+  const facts = [];
+  const campGeo = new Map(), campAds = new Map(), adGeo = new Map();
+  for (const a of results) {
+    if (a.error) continue;
+    accounts.set(a.id, a);
+    for (const p of a.apps) if (!apps.has(p.id)) apps.set(p.id, p);
+  }
+  for (const a of results) {
+    if (a.error) continue;
+    const votes = new Map();
+    for (const ad of a.ads) {
+      const k = `${a.id}|${ad.cid}`;
+      if (!campAds.has(k)) campAds.set(k, []);
+      campAds.get(k).push(ad);
+      if (!ad.app) continue;
+      const v = votes.get(k) || new Map();
+      v.set(ad.app, (v.get(ad.app) || 0) + ad.spend + 1e-9);
+      votes.set(k, v);
+    }
+    const campApp = new Map();
+    for (const [k, v] of votes) campApp.set(k, [...v.entries()].sort((x, y) => y[1] - x[1])[0][0]);
+    for (const g of Object.values(a.ags)) { const k = `${a.id}|${g.cid}`; if (!campApp.has(k) && g.app) campApp.set(k, g.app); }
+    for (const g of a.geo) { const k = `${a.id}|${g.cid}`; if (!campGeo.has(k)) campGeo.set(k, new Map()); addGeo(campGeo.get(k), g.c, g); }
+    for (const g of a.adGeo) { const k = `${a.id}|${g.ad}`; if (!adGeo.has(k)) adGeo.set(k, new Map()); addGeo(adGeo.get(k), g.c, g); }
+
+    const byCamp = new Map();
+    for (const r of a.campDaily) {
+      const k = `${a.id}|${r.cid}`;
+      let f = byCamp.get(k);
+      if (!f) {
+        const c = a.camps[r.cid] || {};
+        const appId = campApp.get(k) || NONE_APP;
+        if (!apps.has(appId)) apps.set(appId, { id: appId, name: `App ${appId}`, platform: '', url: '' });
+        f = { key: k, bc: a.bc, account: a.id, app: appId, cid: r.cid, name: r.cname || r.cid, spend: 0, rev: 0, status: c.status, budget: null, budgetLevel: '', maxPct: null, hitDays: new Set() };
+        if (c.daily) { f.budget = c.budget; f.budgetLevel = 'campaign'; }
+        else {
+          const list = Object.values(a.ags).filter((g) => g.cid === r.cid && g.daily && g.status !== 'DISABLE');
+          if (list.length) { f.budget = sum(list, (g) => g.budget); f.budgetLevel = `${list.length} ad group`; }
+        }
+        byCamp.set(k, f);
+      }
+      f.spend += r.spend; f.rev += r.rev;
+      const c = a.camps[r.cid];
+      if (c?.daily && c.budget > 0) {
+        const p = r.spend / c.budget;
+        f.maxPct = Math.max(f.maxPct ?? 0, p);
+        if (p >= HIT) f.hitDays.add(r.date);
+      }
+    }
+    for (const r of a.agDaily) {
+      const g = a.ags[r.agid], f = byCamp.get(`${a.id}|${r.cid}`);
+      if (!f || !g?.daily || !(g.budget > 0) || a.camps[r.cid]?.daily) continue;
+      const p = r.spend / g.budget;
+      f.maxPct = Math.max(f.maxPct ?? 0, p);
+      if (p >= HIT) f.hitDays.add(r.date);
+    }
+    facts.push(...byCamp.values());
+  }
+  return { apps, accounts, facts, campGeo, campAds, adGeo };
+}
+
+function creativeKey(name) {
+  const m = /^(.*?\.(mp4|mov|m4v|webm|avi))/i.exec(name || '');
+  return m ? m[1] : name;
+}
+function geoOf(model, rows) {
+  const g = new Map();
+  for (const f of rows) for (const [c, e] of model.campGeo.get(f.key) || []) addGeo(g, c, e);
+  return g;
+}
+
+// BC > lvl2 > campaign > geo > creative
+function buildTree(model) {
+  const dims = ['bc', state.lvl2];
+  const make = (rows, depth, prefix) => {
+    if (depth < 2) {
+      const dim = dims[depth];
+      const groups = new Map();
+      for (const f of rows) { const id = f[dim]; if (!groups.has(id)) groups.set(id, []); groups.get(id).push(f); }
+      return [...groups].map(([id, rs]) => {
+        const path = `${prefix}/${dim}:${id}`;
+        const spend = sum(rs, (r) => r.spend), rev = sum(rs, (r) => r.rev);
+        return { path, dim, id, depth, rows: rs, spend, rev, roas: roas(rev, spend), geo: geoOf(model, rs), hits: rs.filter((r) => r.hitDays.size).length, kids: () => make(rs, depth + 1, path) };
+      });
+    }
+    return rows.map((f) => {
+      const path = `${prefix}/campaign:${f.key}`;
+      return { path, dim: 'campaign', id: f.cid, depth, fact: f, rows: [f], spend: f.spend, rev: f.rev, roas: roas(f.rev, f.spend), geo: model.campGeo.get(f.key) || new Map(), kids: () => geoNodes(model, f, path, depth + 1) };
+    });
+  };
+  return make(model.facts.filter((f) => f.spend > 0), 0, '');
+}
+function geoNodes(model, f, prefix, depth) {
+  return [...(model.campGeo.get(f.key) || [])].filter(([, e]) => e.spend > 0).map(([c, e]) => {
+    const path = `${prefix}/geo:${c}`;
+    return { path, dim: 'geo', id: c, depth, spend: e.spend, rev: e.rev, roas: roas(e.rev, e.spend), share: f.spend ? e.spend / f.spend : 0, kids: () => creativeNodes(model, f, c, e, path, depth + 1) };
+  });
+}
+function creativeNodes(model, f, c, total, prefix, depth) {
+  const groups = new Map();
+  for (const ad of model.campAds.get(f.key) || []) {
+    const e = model.adGeo.get(`${f.account}|${ad.id}`)?.get(c);
+    if (!e || !(e.spend > 0)) continue;
+    const k = creativeKey(ad.name);
+    const g = groups.get(k) || { name: k, spend: 0, rev: 0, ads: 0 };
+    g.spend += e.spend; g.rev += e.rev; g.ads++; groups.set(k, g);
+  }
+  const nodes = [...groups.values()].map((g) => ({ path: `${prefix}/cr:${g.name}`, dim: 'creative', id: g.name, depth, spend: g.spend, rev: g.rev, roas: roas(g.rev, g.spend), ads: g.ads, kids: null }));
+  const rest = total.spend - sum(nodes, (n) => n.spend);
+  if (rest > Math.max(1, total.spend * 0.01)) {
+    const rr = Math.max(0, total.rev - sum(nodes, (n) => n.rev));
+    nodes.push({ path: `${prefix}/cr:__rest`, dim: 'creative', id: '__rest', depth, spend: rest, rev: rr, roas: roas(rr, rest), rest: true, kids: null });
+  }
+  return nodes;
+}
+
+// ---------- render ----------
+let model = null;
+function cmp(a, b) {
+  const { key, dir } = state.sort;
+  const x = a[key], y = b[key];
+  const xn = x == null, yn = y == null;
+  if (xn || yn) return xn === yn ? b.spend - a.spend : xn ? 1 : -1;
+  return (dir === 'asc' ? x - y : y - x) || b.spend - a.spend;
+}
+const bcName = (id) => state.bcs.find((b) => b.bc_id === id)?.name || id;
+function appLink(id, withIcon) {
+  const a = model.apps.get(id) || { name: id };
+  const icon = withIcon && a.icon ? `<img class="appicon" src="${esc(a.icon)}" alt="" loading="lazy">` : '';
+  const label = `${icon}<span class="nm">${esc(a.name)}</span>`;
+  return a.url ? `<a class="applink" href="${esc(a.url)}" target="_blank" rel="noopener" title="Mở store: ${esc(a.url)}">${label} <span class="ext">↗</span></a>` : label;
+}
+function appPill(id) {
+  const a = model.apps.get(id);
+  if (!a || id === NONE_APP) return '';
+  return a.url ? `<a class="pill" href="${esc(a.url)}" target="_blank" rel="noopener" title="Mở store">${esc(a.name)} ↗</a>` : `<span class="pill">${esc(a.name)}</span>`;
+}
+function label(n) {
+  if (n.dim === 'bc') return `<span class="nm">${esc(bcName(n.id))}</span><span class="meta">${esc(n.id)}</span>`;
+  if (n.dim === 'account') {
+    const a = model.accounts.get(n.id) || {};
+    const appIds = [...new Set(n.rows.map((r) => r.app))].filter((x) => x !== NONE_APP);
+    return `<span class="nm">${esc(a.name || n.id)}</span><span class="meta">${esc(n.id)} · ${esc(a.tz || '')}${a.cur && a.cur !== 'USD' ? ' · ' + esc(a.cur) : ''}</span>${appIds.slice(0, 3).map(appPill).join('')}${appIds.length > 3 ? `<span class="pill">+${appIds.length - 3}</span>` : ''}`;
+  }
+  if (n.dim === 'app') {
+    const a = model.apps.get(n.id) || {};
+    return `${appLink(n.id, true)}<span class="meta">${esc(a.platform || '')}${n.id !== NONE_APP ? ' · ' + esc(n.id) : ''}</span>`;
+  }
+  if (n.dim === 'campaign') {
+    const f = n.fact;
+    const other = state.lvl2 === 'account' ? appPill(f.app) : `<span class="pill">${esc(model.accounts.get(f.account)?.name || f.account)}</span>`;
+    return `<span class="nm" title="${esc(f.name)} (${esc(f.cid)})">${esc(f.name)}</span>${other}`;
+  }
+  if (n.dim === 'geo') return `<b>${esc(n.id)}</b><span class="meta">${esc(country(n.id))} · ${pct(n.share, 0)}</span>`;
+  if (n.rest) return '<span class="nm meta">(ad đã xoá / không có dữ liệu ad)</span>';
+  return `<span class="nm" title="${esc(n.id)}">${esc(n.id)}</span>${n.ads > 1 ? `<span class="meta">${n.ads} ads</span>` : ''}`;
+}
+function geoCell(n) {
+  if (n.dim === 'geo' || n.dim === 'creative' || !n.geo?.size) return '';
+  const top = [...n.geo].sort((a, b) => b[1].spend - a[1].spend);
+  const title = top.slice(0, 10).map(([c, e]) => `${c}  ${money(e.spend)}  ROAS ${pct(roas(e.rev, e.spend))}`).join('\n');
+  return `<span class="geo" title="${esc(title)}">${top.slice(0, 3).map(([c, e]) => { const r = roas(e.rev, e.spend); return `<span class="g"><b>${esc(c)}</b>${kmoney(e.spend)} · <span class="${r == null ? '' : r >= 1 ? 'gr-good' : r < 0.5 ? 'gr-bad' : ''}">${pct(r, 0)}</span></span>`; }).join('')}</span>`;
+}
+function budgetCell(n) {
+  if (n.dim === 'campaign') {
+    const f = n.fact, parts = [];
+    if (f.hitDays.size) parts.push(`<span class="pill hit" title="Spend ≥ 95% budget ngày vào: ${esc([...f.hitDays].sort().join(', '))}">Max budget ${f.hitDays.size > 1 ? '×' + f.hitDays.size : ''}</span>`);
+    if (f.budget) parts.push(`<span class="meta" title="Budget hiện tại (${esc(f.budgetLevel)})">${money(f.budget)}/ngày · max ${pct(f.maxPct, 0)}</span>`);
+    if (f.status && f.status !== 'ENABLE') parts.push(`<span class="pill off">${esc(f.status)}</span>`);
+    return parts.join(' ');
+  }
+  if (n.hits) return `<span class="pill hit">${n.hits} camp max budget</span>`;
+  return '';
+}
+function isOpen(n) { return state.open.has(n.path) ? state.open.get(n.path) : n.depth === 0; }
+
+function render() {
+  const results = state.results;
+  // time zones
+  const tz = new Map();
+  for (const a of results) { const e = tz.get(a.tz) || { n: 0, r: rangeFor(a.tz) }; e.n++; tz.set(a.tz, e); }
+  $('#tzInfo').innerHTML = tz.size ? 'Múi giờ theo ad account: ' + [...tz].map(([z, e]) => `<span><b>${esc(z)}</b> ${e.r.start === e.r.end ? e.r.start : e.r.start + ' → ' + e.r.end} (${e.n} acc)</span>`).join('') : '';
+
+  model = buildModel(results);
+  const tree = buildTree(model);
+  const spend = sum(tree, (n) => n.spend), rev = sum(tree, (n) => n.rev);
+  const errs = results.filter((a) => a.error);
+  const accs = new Set(model.facts.filter((f) => f.spend > 0).map((f) => f.account));
+  const appSet = new Set(model.facts.filter((f) => f.spend > 0 && f.app !== NONE_APP).map((f) => f.app));
+  $('#summary').innerHTML = results.length || state.loading ? `
+    <div><span class="k">Spend</span><span class="v">${money(spend)}</span></div>
+    <div><span class="k">ROAS IAA D0</span><span class="v ${rcls(roas(rev, spend))}">${pct(roas(rev, spend))}</span></div>
+    <div><span class="k">IAA revenue D0</span><span class="v">${money(rev)}</span></div>
+    <div><span class="k">Account có spend</span><span class="v">${accs.size}</span></div>
+    <div><span class="k">App đang chạy</span><span class="v">${appSet.size}</span></div>
+    <div class="progress">${state.loading ? `Đang tải ${state.done}/${state.total || '…'} ad account…` : `${results.length} ad account`}${errs.length ? ` · <span class="r-bad" title="${esc(errs.map((e) => `${e.name}: ${e.error}`).join('\n'))}">${errs.length} account lỗi</span>` : ''}</div>` : '';
+
+  const sortTh = (k, t) => `<th class="sortable" data-sort="${k}" tabindex="0" aria-sort="${state.sort.key === k ? (state.sort.dir === 'desc' ? 'descending' : 'ascending') : 'none'}">${t} <span class="dir">${state.sort.key === k ? (state.sort.dir === 'desc' ? '▼' : '▲') : ''}</span></th>`;
+  const rows = [];
+  const walk = (nodes, parentSpend) => {
+    for (const n of nodes.sort(cmp)) {
+      const kids = n.kids ? n.kids() : [];
+      const open = kids.length && isOpen(n);
+      const share = parentSpend > 0 ? n.spend / parentSpend : 0;
+      rows.push(`<tr class="d${n.depth}${kids.length ? ' has-kids' : ''}" data-path="${esc(n.path)}" ${kids.length ? 'tabindex="0" aria-expanded="' + !!open + '"' : ''}>
+        <td class="l"><div class="namecell" style="padding-left:${n.depth * 20}px"><span class="tog">${kids.length ? (open ? '▾' : '▸') : ''}</span>${label(n)}</div></td>
+        <td class="num"><span class="bar-s" style="width:${Math.max(2, Math.round(share * 56))}px"></span>${money(n.spend)}</td>
+        <td class="num ${rcls(n.roas)}">${pct(n.roas)}</td>
+        <td class="l">${geoCell(n)}</td>
+        <td class="l">${budgetCell(n)}</td>
+      </tr>`);
+      if (open) walk(kids, n.spend);
+    }
+  };
+  walk(tree, spend);
+  const emptyMsg = state.loading ? 'Đang tải dữ liệu từ TikTok…' : state.selected.length ? 'Không có spend trong khoảng ngày này.' : 'Chọn BC để bắt đầu.';
+  $('#tbl').innerHTML = `<thead><tr><th class="l">BC → ${state.lvl2 === 'account' ? 'Account' : 'App'} → Campaign → Geo → Creative</th>${sortTh('spend', 'Spend')}${sortTh('roas', 'ROAS IAA D0')}<th class="l">Top geo (spend · ROAS IAA D0)</th><th class="l">Budget</th></tr></thead>
+    <tbody>${rows.join('') || `<tr><td colspan="5" class="empty">${emptyMsg}</td></tr>`}</tbody>`;
+}
+
+let renderQueued = false;
+function queueRender() { if (renderQueued) return; renderQueued = true; requestAnimationFrame(() => { renderQueued = false; render(); }); }
+
+// ---------- loading ----------
+function mcpMessage(e) {
+  switch (e?.code) {
+    case 'server_not_connected': return 'Chưa có connector TikTok MCP. Thêm TikTok MCP trong claude.ai → Settings → Connectors rồi tải lại trang.';
+    case 'needs_reauth': return 'Connector TikTok MCP cần đăng nhập lại: claude.ai → Settings → Connectors → TikTok MCP → Reconnect.';
+    case 'selection_required': return 'Bạn có nhiều connector tên TikTok MCP. Chọn một connector trong hộp thoại của claude.ai rồi bấm Refresh.';
+    case 'not_in_manifest': case 'consent_required': return 'Trang chưa được phép dùng TikTok MCP. Bấm Refresh và chọn Cho phép khi claude.ai hỏi.';
+    case 'blocked_by_policy': case 'approval_required': return 'Tổ chức của bạn đang chặn tool TikTok này cho trang.';
+    case 'tiktok': return e.message;
+    default: return `Không gọi được TikTok (${esc(e?.code || 'lỗi')}): ${esc(e?.message || '')}. Bấm Refresh để thử lại.`;
+  }
+}
+function notice(html, err) { $('#notice').innerHTML = html ? `<div class="notice${err ? ' err' : ''}">${html}</div>` : ''; }
+
+async function load() {
+  if (!mcp || !state.selected.length) { render(); return; }
+  const run = ++state.run;
+  state.loading = true; state.results = []; state.done = 0; state.total = 0;
+  notice('');
+  render();
+  try {
+    const lists = [];
+    await pool(state.selected, 2, async (bc) => { lists.push(...await listAdvertisers(bc)); });
+    if (run !== state.run) return;
+    const seen = new Set();
+    const accounts = lists.filter((a) => !seen.has(a.id) && seen.add(a.id));
+    state.total = accounts.length;
+    queueRender();
+    await pool(accounts, 4, async (adv) => {
+      let r;
+      try { r = await fetchAccount(adv); } catch (e) {
+        if (['server_not_connected', 'needs_reauth', 'not_in_manifest', 'consent_required', 'blocked_by_policy', 'user_changed'].includes(e?.code)) throw e;
+        r = { ...adv, error: e?.message || String(e), apps: [], ads: [], campDaily: [], agDaily: [], geo: [], adGeo: [], camps: {}, ags: {} };
+      }
+      if (run !== state.run) return;
+      state.results.push(r); state.done++;
+      queueRender();
+    });
+  } catch (e) {
+    if (run === state.run) notice(mcpMessage(e), true);
+  } finally {
+    if (run === state.run) { state.loading = false; state.refresh = false; queueRender(); }
+  }
+}
+
+// ---------- BC picker ----------
+let draft = new Set();
+function renderBcBtn() {
+  const n = state.selected.length;
+  $('#bcBtn').textContent = n === 0 ? 'BC: chọn…' : n === 1 ? `BC: ${bcName(state.selected[0])} ▾` : `BC: ${n}/${state.bcs.length} đã chọn ▾`;
+}
+function renderBcList() {
+  const q = $('#bcSearch').value.trim().toLowerCase();
+  $('#bcList').innerHTML = state.bcs.filter((b) => !q || b.name.toLowerCase().includes(q) || b.bc_id.includes(q))
+    .map((b) => `<label class="bcitem"><input type="checkbox" value="${esc(b.bc_id)}" ${draft.has(b.bc_id) ? 'checked' : ''}><span>${esc(b.name)}</span><span class="id">${esc(b.bc_id)}${b.status && b.status !== 'ENABLE' ? ' · ' + esc(b.status) : ''}</span></label>`).join('')
+    || '<div class="meta" style="padding:8px">Không tìm thấy BC</div>';
+}
+function initBcPicker() {
+  const panel = $('#bcPanel');
+  $('#bcBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) { draft = new Set(state.selected); $('#bcSearch').value = ''; renderBcList(); $('#bcSearch').focus(); }
+  });
+  panel.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => { panel.hidden = true; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') panel.hidden = true; });
+  $('#bcList').addEventListener('change', (e) => { if (e.target.checked) draft.add(e.target.value); else draft.delete(e.target.value); });
+  $('#bcSearch').addEventListener('input', renderBcList);
+  $('#bcAll').addEventListener('click', () => { $$('#bcList input').forEach((i) => draft.add(i.value)); renderBcList(); });
+  $('#bcNone').addEventListener('click', () => { draft.clear(); renderBcList(); });
+  $('#bcApply').addEventListener('click', () => {
+    state.selected = [...draft]; LS.set('bcat.selected', state.selected);
+    state.open.clear(); panel.hidden = true; renderBcBtn(); load();
+  });
+}
+
+// ---------- controls ----------
+function initControls() {
+  $('#includeToday').checked = state.includeToday;
+  $$('#lvl2Seg button').forEach((b) => b.classList.toggle('on', b.dataset.lvl2 === state.lvl2));
+  $$('#presetSeg button').forEach((b) => b.addEventListener('click', () => {
+    $$('#presetSeg button').forEach((x) => x.classList.toggle('on', x === b));
+    state.preset = b.dataset.preset;
+    $('#customRange').hidden = state.preset !== 'custom';
+    if (state.preset === 'custom') {
+      const t = todayIn('UTC');
+      if (!$('#endDate').value) $('#endDate').value = t;
+      if (!$('#startDate').value) $('#startDate').value = addDays(t, -6);
+      state.start = $('#startDate').value; state.end = $('#endDate').value;
+    }
+    load();
+  }));
+  ['#startDate', '#endDate'].forEach((s) => $(s).addEventListener('change', () => { state.start = $('#startDate').value; state.end = $('#endDate').value; load(); }));
+  $('#includeToday').addEventListener('change', (e) => { state.includeToday = e.target.checked; LS.set('bcat.inc', state.includeToday); if (/^last/.test(state.preset)) load(); });
+  $$('#lvl2Seg button').forEach((b) => b.addEventListener('click', () => {
+    state.lvl2 = b.dataset.lvl2; LS.set('bcat.lvl2', state.lvl2); state.open.clear();
+    $$('#lvl2Seg button').forEach((x) => x.classList.toggle('on', x === b));
+    render();
+  }));
+  $('#refreshBtn').addEventListener('click', () => { state.refresh = true; load(); });
+
+  const tbl = $('#tbl');
+  const toggleSort = (k) => { state.sort = { key: k, dir: state.sort.key === k && state.sort.dir === 'desc' ? 'asc' : 'desc' }; LS.set('bcat.sort', state.sort); render(); };
+  const toggleRow = (tr) => {
+    const p = tr.dataset.path;
+    const depth = Number(/d(\d)/.exec(tr.className)[1]);
+    const cur = state.open.has(p) ? state.open.get(p) : depth === 0;
+    state.open.set(p, !cur); render();
+  };
+  tbl.addEventListener('click', (e) => {
+    if (e.target.closest('a')) return; // store links open normally
+    const th = e.target.closest('th[data-sort]');
+    if (th) return toggleSort(th.dataset.sort);
+    const tr = e.target.closest('tr.has-kids');
+    if (tr) toggleRow(tr);
+  });
+  tbl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const th = e.target.closest('th[data-sort]');
+    if (th) { e.preventDefault(); return toggleSort(th.dataset.sort); }
+    const tr = e.target.closest('tr.has-kids');
+    if (tr && e.target === tr) { e.preventDefault(); toggleRow(tr); }
+  });
+}
+
+async function boot() {
+  initControls();
+  initBcPicker();
+  render();
+  mcp = window.claude?.use ? await window.claude.use('mcp') : null;
+  if (!mcp) {
+    $('#bcBtn').textContent = 'BC: không khả dụng';
+    notice('Trang này lấy dữ liệu qua connector TikTok MCP của bạn. Hãy mở trang trong claude.ai (đã đăng nhập) và kết nối TikTok MCP trong Settings → Connectors.', true);
+    return;
+  }
+  try {
+    state.bcs = await listBCs();
+  } catch (e) {
+    $('#bcBtn').textContent = 'BC: lỗi';
+    notice(mcpMessage(e), true);
+    return;
+  }
+  state.selected = state.selected.filter((id) => state.bcs.some((b) => b.bc_id === id));
+  renderBcBtn();
+  if (!state.selected.length) {
+    notice('Bấm nút <b>BC</b> ở trên để chọn một hoặc nhiều Business Center.');
+    $('#bcBtn').click();
+    return;
+  }
+  load();
+}
+boot();
+</script>
