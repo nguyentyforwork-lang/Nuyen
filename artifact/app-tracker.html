@@ -1,6 +1,6 @@
 <title>BC App Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: one sticky control bar, a thin summary line, then a single full-width level table (BC > Account/App > Campaign > Geo > Creative). */
 :root {
@@ -18,8 +18,8 @@
   --good: #0f7d3c;
   --bad: #c43838;
   --warn: #a86a00;
-  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-ui: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-num: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -34,7 +34,7 @@
   --hover: #1f2a3c; --good: #4cc27a; --bad: #ef7272; --warn: #e2a43a; color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font-ui); }
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--font-ui); font-variant-numeric: tabular-nums; }
 button, select, input { font: inherit; color: inherit; }
 a { color: inherit; }
 .wrap { padding-inline: 20px; padding-block: 0 40px; }
@@ -68,13 +68,13 @@ input[type="date"] { background: var(--surface); border: 1px solid var(--line); 
 .bclist { max-height: 340px; overflow: auto; display: grid; }
 .bcitem { display: flex; gap: 8px; align-items: baseline; padding: 5px 4px; border-radius: 4px; cursor: pointer; }
 .bcitem:hover { background: var(--hover); }
-.bcitem .id { color: var(--muted); font: 11px var(--font-num); margin-left: auto; white-space: nowrap; }
+.bcitem .id { color: var(--muted); font-size: 11px; margin-left: auto; white-space: nowrap; }
 
 .sub { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; padding-block: 10px; font-size: 12px; color: var(--muted); }
 .sub b { color: var(--fg-2); font-weight: 600; }
 .sum { display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding-block: 6px 12px; }
 .sum .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); display: block; }
-.sum .v { font: 600 22px var(--font-num); letter-spacing: -0.02em; }
+.sum .v { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
 .progress { margin-left: auto; font-size: 12px; color: var(--fg-2); }
 .notice { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; padding: 12px 14px; margin-block: 12px; max-width: 760px; }
 .notice.err { border-left-color: var(--bad); }
@@ -88,18 +88,19 @@ th.sortable { cursor: pointer; }
 th.sortable:hover { color: var(--fg); }
 th .dir { color: var(--accent); }
 tbody tr { cursor: default; }
-tbody tr.has-kids { cursor: pointer; }
+tbody tr.has-kids, tbody tr.pending { cursor: pointer; }
 tbody tr:hover { background: var(--hover); }
 tr.d0 { background: var(--row-1); }
 tr.d0 td:first-child { font-weight: 700; }
 tr.d1 { background: var(--row-2); }
 tr.d1 td:first-child { font-weight: 600; }
 tr.d0:hover, tr.d1:hover { background: var(--hover); }
-.num { font-family: var(--font-num); font-size: 13px; }
+.num { font-family: var(--font-num); font-size: 14px; font-weight: 500; }
 .namecell { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 640px; }
 .tog { width: 14px; flex: none; color: var(--muted); font-size: 11px; }
 .nm { overflow: hidden; text-overflow: ellipsis; }
-.meta { color: var(--muted); font: 11px var(--font-num); font-weight: 400; white-space: nowrap; }
+.meta { color: var(--muted); font-size: 12px; font-weight: 400; white-space: nowrap; }
+.meta.loading { color: var(--accent); }
 .pill { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; font-size: 11px; font-weight: 500; color: var(--fg-2); white-space: nowrap; text-decoration: none; }
 a.pill:hover { border-color: var(--accent); color: var(--accent); }
 .pill.hit { color: var(--bad); border-color: var(--bad); }
@@ -112,7 +113,7 @@ a.applink:hover .nm { text-decoration: underline; }
 .r-good { color: var(--good); font-weight: 600; }
 .r-bad { color: var(--bad); }
 .geo { display: inline-flex; gap: 4px; }
-.g { font: 11px var(--font-num); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; color: var(--fg-2); white-space: nowrap; }
+.g { font-size: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; color: var(--fg-2); white-space: nowrap; }
 .g b { font-family: var(--font-ui); color: var(--fg); font-weight: 600; margin-right: 2px; }
 .g .gr-good { color: var(--good); }
 .g .gr-bad { color: var(--bad); }
@@ -159,7 +160,7 @@ a.applink:hover .nm { text-decoration: underline; }
   <div class="sum" id="summary"></div>
 
   <div class="tablebox"><table id="tbl"></table></div>
-  <p class="foot">Level: BC → Account (hoặc App) → Campaign → Geo → Creative. Bấm dòng để xổ ra. Bấm tiêu đề Spend hoặc ROAS IAA D0 để sort mọi level. Chỉ hiện dòng có spend &gt; 0. Ngày tính theo múi giờ của từng ad account. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
+  <p class="foot">Level: BC → Account (hoặc App) → Campaign → Geo → Creative. Bấm dòng để xổ ra. Bấm tiêu đề Spend hoặc ROAS IAA D0 để sort mọi level. Chỉ hiện dòng có spend &gt; 0. Ngày tính theo múi giờ của từng ad account. Dữ liệu tải lần lượt từng account, spend cao trước; bấm account đang chờ để tải nó trước. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
 </div>
 
 <script>
@@ -171,6 +172,7 @@ const HIT = 0.95; // spend/day >= 95% of daily budget = "max budget"
 const FX = { USD: 1, VND: 0.000038, EUR: 1.08, GBP: 1.27, JPY: 0.0067, KRW: 0.00072, CNY: 0.14, HKD: 0.128, TWD: 0.031, SGD: 0.75, THB: 0.028, IDR: 0.000061, PHP: 0.017, MYR: 0.22, INR: 0.012, AUD: 0.66, CAD: 0.73, BRL: 0.18, MXN: 0.054, TRY: 0.029 };
 const DAILY = new Set(['BUDGET_MODE_DAY', 'BUDGET_MODE_DYNAMIC_DAILY_BUDGET']);
 const NONE_APP = '__none__';
+const PENDING_APP = '__pending__';
 
 const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
@@ -181,7 +183,7 @@ const state = {
   preset: 'today', includeToday: LS.get('bcat.inc', false), start: '', end: '',
   lvl2: LS.get('bcat.lvl2', 'account'),
   sort: LS.get('bcat.sort', { key: 'spend', dir: 'desc' }),
-  open: new Map(), results: [], loading: false, done: 0, total: 0, refresh: false, run: 0,
+  open: new Map(), accounts: [], queue: [], phase: null, paused: false, refresh: false, run: 0,
 };
 let mcp = null;
 
@@ -224,12 +226,28 @@ function rangeFor(tz) {
 
 // ---------- TikTok via the viewer's connector ----------
 const THROTTLE = new Set([40100, 40133, 50000, 50002, 51021, 61000]);
+// Every TikTok call goes through one queue: one request at a time, with a short gap,
+// so the connector is never hit with a burst. Rate limits back off and retry.
+const GAP_MS = 350;
+let chain = Promise.resolve();
+let lastCall = 0;
+function enqueue(fn) {
+  const p = chain.then(async () => {
+    const wait = lastCall + GAP_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    try { return await fn(); } finally { lastCall = Date.now(); }
+  });
+  chain = p.catch(() => {});
+  return p;
+}
+const isRateLimit = (e) => /rate limit|-32005|too many/i.test(String(e?.message || '')) || e?.code === 'rate_limited';
 async function call(tool, input, attempt = 0) {
   const fresh = state.refresh || attempt > 0;
   let res;
   try {
-    res = await mcp.callTool(SERVER, tool, input, { cache: { staleTime: 300000, gcTime: 1800000, refresh: fresh } });
+    res = await enqueue(() => mcp.callTool(SERVER, tool, input, { cache: { staleTime: 300000, gcTime: 1800000, refresh: fresh } }));
   } catch (e) {
+    if (isRateLimit(e) && attempt < 4) { setPause(true); await sleep((e.retryAfterMs || 5000 * 2 ** attempt) + Math.random() * 1000); setPause(false); return call(tool, input, attempt + 1); }
     if (e && e.retryable && attempt < 1) { await sleep((e.retryAfterMs || 1500) + Math.random() * 800); return call(tool, input, attempt + 1); }
     throw e;
   }
@@ -237,11 +255,12 @@ async function call(tool, input, attempt = 0) {
   if (typeof p === 'string') { try { p = JSON.parse(p); } catch { /* keep text */ } }
   if (p && typeof p === 'object' && 'code' in p) {
     if (p.code === 0) return p.data || {};
-    if (THROTTLE.has(p.code) && attempt < 3) { await sleep(1500 * 2 ** attempt + Math.random() * 500); return call(tool, input, attempt + 1); }
+    if (THROTTLE.has(p.code) && attempt < 4) { setPause(true); await sleep(3000 * 2 ** attempt + Math.random() * 1000); setPause(false); return call(tool, input, attempt + 1); }
     const err = new Error(`TikTok ${p.code}: ${p.message}`); err.code = 'tiktok'; throw err;
   }
   return p || {};
 }
+function setPause(on) { state.paused = on; queueRender(); }
 async function getAll(tool, input, pageSize, max = 40) {
   const out = [];
   for (let page = 1; page <= max; page++) {
@@ -287,6 +306,40 @@ async function listAdvertisers(bcId) {
   });
 }
 
+async function summarize(accounts) {
+  const groups = new Map();
+  for (const a of accounts) {
+    const r = rangeFor(a.tz);
+    const k = r.start + '|' + r.end;
+    if (!groups.has(k)) groups.set(k, { r, list: [] });
+    groups.get(k).list.push(a);
+  }
+  const byId = new Map(accounts.map((a) => [a.id, a]));
+  const apply = (rows) => {
+    for (const row of rows) {
+      const a = byId.get(String(row.advertiser_id));
+      if (!a) continue;
+      const fx = FX[a.cur] ?? 1;
+      a.spend = num(row.spend) * fx; a.rev = num(row[REV]) * fx;
+    }
+  };
+  for (const { r, list } of groups.values()) {
+    for (const five of chunk(list, 5)) {
+      const base = { data_level: 'AUCTION_ADVERTISER', dimensions: ['advertiser_id'], metrics: ['spend', REV], start_date: r.start, end_date: r.end };
+      try {
+        apply(await report({ ...base, advertiser_ids: five.map((a) => a.id) }));
+      } catch (e) {
+        if (isFatal(e)) throw e;
+        for (const a of five) { // fall back to one account per call
+          try { apply(await report({ ...base, advertiser_id: a.id })); } catch (e2) { if (isFatal(e2)) throw e2; a.status = 'error'; a.error = e2.message; }
+        }
+      }
+      for (const a of five) if (a.status === 'new') a.status = a.spend > 0 ? 'pending' : 'nospend';
+      queueRender();
+    }
+  }
+}
+
 async function fetchAccount(adv) {
   const range = rangeFor(adv.tz);
   const fx = FX[adv.cur] ?? 1;
@@ -311,7 +364,7 @@ async function fetchAccount(adv) {
     for (const g of gs) ags[String(g.adgroup_id)] = { cid: String(g.campaign_id), budget: m(g.budget), daily: DAILY.has(g.budget_mode) && num(g.budget) > 0, status: g.operation_status, app: g.app_id ? String(g.app_id) : null };
   }
   return {
-    ...adv, range,
+    range,
     apps: (appsD.apps || []).map((a) => ({ id: String(a.app_id), name: a.app_name, platform: a.platform, url: a.download_url || '', icon: a.icon?.web_uri || '' })),
     ads: ads.map((r) => ({ id: String(r.ad_id), name: r.ad_name || String(r.ad_id), cid: String(r.campaign_id), cname: r.campaign_name, app: r.tt_app_id && r.tt_app_id !== '-' ? String(r.tt_app_id) : null, spend: m(r.spend), rev: m(r[REV]) })),
     campDaily: campDaily.map((r) => ({ cid: String(r.campaign_id), cname: r.campaign_name, date: String(r.stat_time_day).slice(0, 10), spend: m(r.spend), rev: m(r[REV]) })),
@@ -327,18 +380,22 @@ function addGeo(target, c, e) {
   const t = target.get(c) || { spend: 0, rev: 0 };
   t.spend += e.spend; t.rev += e.rev; target.set(c, t);
 }
-function buildModel(results) {
-  const apps = new Map([[NONE_APP, { id: NONE_APP, name: '(Không gắn app)', platform: '', url: '' }]]);
+function buildModel(accountsList) {
+  const apps = new Map([[NONE_APP, { id: NONE_APP, name: '(Không gắn app)', platform: '', url: '' }], [PENDING_APP, { id: PENDING_APP, name: 'Đang tải chi tiết…', platform: '', url: '' }]]);
   const accounts = new Map();
   const facts = [];
   const campGeo = new Map(), campAds = new Map(), adGeo = new Map();
-  for (const a of results) {
-    if (a.error) continue;
-    accounts.set(a.id, a);
-    for (const p of a.apps) if (!apps.has(p.id)) apps.set(p.id, p);
+  for (const acc of accountsList) {
+    accounts.set(acc.id, acc);
+    for (const p of acc.d?.apps || []) if (!apps.has(p.id)) apps.set(p.id, p);
   }
+  // Accounts whose details are not loaded yet still count with their summary spend.
+  for (const acc of accountsList) {
+    if (acc.d || !(acc.spend > 0)) continue;
+    facts.push({ key: acc.id + '|pending', bc: acc.bc, account: acc.id, app: PENDING_APP, cid: null, name: '', spend: acc.spend, rev: acc.rev, placeholder: true, hitDays: new Set() });
+  }
+  const results = accountsList.filter((acc) => acc.d).map((acc) => ({ ...acc.d, id: acc.id, bc: acc.bc }));
   for (const a of results) {
-    if (a.error) continue;
     const votes = new Map();
     for (const ad of a.ads) {
       const k = `${a.id}|${ad.cid}`;
@@ -412,10 +469,11 @@ function buildTree(model) {
       return [...groups].map(([id, rs]) => {
         const path = `${prefix}/${dim}:${id}`;
         const spend = sum(rs, (r) => r.spend), rev = sum(rs, (r) => r.rev);
-        return { path, dim, id, depth, rows: rs, spend, rev, roas: roas(rev, spend), geo: geoOf(model, rs), hits: rs.filter((r) => r.hitDays.size).length, kids: () => make(rs, depth + 1, path) };
+        const real = rs.filter((r) => !r.placeholder);
+        return { path, dim, id, depth, rows: rs, spend, rev, roas: roas(rev, spend), geo: geoOf(model, real), hits: real.filter((r) => r.hitDays.size).length, kids: depth === 1 && !real.length ? null : () => make(depth === 0 ? rs : real, depth + 1, path) };
       });
     }
-    return rows.map((f) => {
+    return rows.filter((f) => !f.placeholder).map((f) => {
       const path = `${prefix}/campaign:${f.key}`;
       return { path, dim: 'campaign', id: f.cid, depth, fact: f, rows: [f], spend: f.spend, rev: f.rev, roas: roas(f.rev, f.spend), geo: model.campGeo.get(f.key) || new Map(), kids: () => geoNodes(model, f, path, depth + 1) };
     });
@@ -471,9 +529,11 @@ function label(n) {
   if (n.dim === 'bc') return `<span class="nm">${esc(bcName(n.id))}</span><span class="meta">${esc(n.id)}</span>`;
   if (n.dim === 'account') {
     const a = model.accounts.get(n.id) || {};
-    const appIds = [...new Set(n.rows.map((r) => r.app))].filter((x) => x !== NONE_APP);
-    return `<span class="nm">${esc(a.name || n.id)}</span><span class="meta">${esc(n.id)} · ${esc(a.tz || '')}${a.cur && a.cur !== 'USD' ? ' · ' + esc(a.cur) : ''}</span>${appIds.slice(0, 3).map(appPill).join('')}${appIds.length > 3 ? `<span class="pill">+${appIds.length - 3}</span>` : ''}`;
+    const appIds = [...new Set(n.rows.map((r) => r.app))].filter((x) => x !== NONE_APP && x !== PENDING_APP);
+    const st = a.status === 'loading' ? '<span class="meta loading">đang tải…</span>' : a.status === 'pending' ? '<span class="meta">chờ tải · bấm để tải trước</span>' : a.status === 'error' ? `<span class="meta r-bad" title="${esc(a.error || '')}">lỗi tải</span>` : '';
+    return `<span class="nm">${esc(a.name || n.id)}</span>${st}<span class="meta">${esc(n.id)} · ${esc(a.tz || '')}${a.cur && a.cur !== 'USD' ? ' · ' + esc(a.cur) : ''}</span>${appIds.slice(0, 3).map(appPill).join('')}${appIds.length > 3 ? `<span class="pill">+${appIds.length - 3}</span>` : ''}`;
   }
+  if (n.dim === 'app' && n.id === PENDING_APP) return `<span class="nm meta loading">Đang tải chi tiết…</span><span class="meta">${new Set(n.rows.map((r) => r.account)).size} account</span>`;
   if (n.dim === 'app') {
     const a = model.apps.get(n.id) || {};
     return `${appLink(n.id, true)}<span class="meta">${esc(a.platform || '')}${n.id !== NONE_APP ? ' · ' + esc(n.id) : ''}</span>`;
@@ -507,7 +567,7 @@ function budgetCell(n) {
 function isOpen(n) { return state.open.has(n.path) ? state.open.get(n.path) : n.depth === 0; }
 
 function render() {
-  const results = state.results;
+  const results = state.accounts;
   // time zones
   const tz = new Map();
   for (const a of results) { const e = tz.get(a.tz) || { n: 0, r: rangeFor(a.tz) }; e.n++; tz.set(a.tz, e); }
@@ -516,16 +576,23 @@ function render() {
   model = buildModel(results);
   const tree = buildTree(model);
   const spend = sum(tree, (n) => n.spend), rev = sum(tree, (n) => n.rev);
-  const errs = results.filter((a) => a.error);
+  const errs = results.filter((a) => a.status === 'error');
   const accs = new Set(model.facts.filter((f) => f.spend > 0).map((f) => f.account));
-  const appSet = new Set(model.facts.filter((f) => f.spend > 0 && f.app !== NONE_APP).map((f) => f.app));
-  $('#summary').innerHTML = results.length || state.loading ? `
+  const appSet = new Set(model.facts.filter((f) => f.spend > 0 && f.app !== NONE_APP && f.app !== PENDING_APP).map((f) => f.app));
+  const withSpend = results.filter((a) => a.spend > 0);
+  const doneN = withSpend.filter((a) => a.d || a.status === 'error').length;
+  const cur = results.find((a) => a.status === 'loading');
+  const prog = state.phase === 'accounts' ? 'Đang lấy danh sách ad account…'
+    : state.phase === 'summary' ? `Đang lấy spend từng account… (${results.filter((a) => a.status !== 'new').length}/${results.length})`
+    : state.phase === 'details' ? `Đang tải chi tiết theo spend cao → thấp: ${doneN}/${withSpend.length}${cur ? ' · ' + esc(cur.name) : ''}`
+    : `${withSpend.length} account có spend / ${results.length} account`;
+  $('#summary').innerHTML = results.length || state.phase ? `
     <div><span class="k">Spend</span><span class="v">${money(spend)}</span></div>
     <div><span class="k">ROAS IAA D0</span><span class="v ${rcls(roas(rev, spend))}">${pct(roas(rev, spend))}</span></div>
     <div><span class="k">IAA revenue D0</span><span class="v">${money(rev)}</span></div>
     <div><span class="k">Account có spend</span><span class="v">${accs.size}</span></div>
     <div><span class="k">App đang chạy</span><span class="v">${appSet.size}</span></div>
-    <div class="progress">${state.loading ? `Đang tải ${state.done}/${state.total || '…'} ad account…` : `${results.length} ad account`}${errs.length ? ` · <span class="r-bad" title="${esc(errs.map((e) => `${e.name}: ${e.error}`).join('\n'))}">${errs.length} account lỗi</span>` : ''}</div>` : '';
+    <div class="progress">${prog}${state.paused ? ' · <span class="r-bad">TikTok giới hạn tốc độ, đang chờ rồi thử lại…</span>' : ''}${errs.length ? ` · <span class="r-bad" title="${esc(errs.map((e) => `${e.name}: ${e.error}`).join('\n'))}">${errs.length} account lỗi</span>` : ''}</div>` : '';
 
   const sortTh = (k, t) => `<th class="sortable" data-sort="${k}" tabindex="0" aria-sort="${state.sort.key === k ? (state.sort.dir === 'desc' ? 'descending' : 'ascending') : 'none'}">${t} <span class="dir">${state.sort.key === k ? (state.sort.dir === 'desc' ? '▼' : '▲') : ''}</span></th>`;
   const rows = [];
@@ -534,7 +601,8 @@ function render() {
       const kids = n.kids ? n.kids() : [];
       const open = kids.length && isOpen(n);
       const share = parentSpend > 0 ? n.spend / parentSpend : 0;
-      rows.push(`<tr class="d${n.depth}${kids.length ? ' has-kids' : ''}" data-path="${esc(n.path)}" ${kids.length ? 'tabindex="0" aria-expanded="' + !!open + '"' : ''}>
+      const pend = n.dim === 'account' && ['pending', 'loading'].includes(model.accounts.get(n.id)?.status);
+      rows.push(`<tr class="d${n.depth}${kids.length ? ' has-kids' : ''}${pend ? ' pending' : ''}" data-path="${esc(n.path)}" ${pend ? `data-acc="${esc(n.id)}"` : ''} ${kids.length ? 'tabindex="0" aria-expanded="' + !!open + '"' : ''}>
         <td class="l"><div class="namecell" style="padding-left:${n.depth * 20}px"><span class="tog">${kids.length ? (open ? '▾' : '▸') : ''}</span>${label(n)}</div></td>
         <td class="num"><span class="bar-s" style="width:${Math.max(2, Math.round(share * 56))}px"></span>${money(n.spend)}</td>
         <td class="num ${rcls(n.roas)}">${pct(n.roas)}</td>
@@ -545,7 +613,7 @@ function render() {
     }
   };
   walk(tree, spend);
-  const emptyMsg = state.loading ? 'Đang tải dữ liệu từ TikTok…' : state.selected.length ? 'Không có spend trong khoảng ngày này.' : 'Chọn BC để bắt đầu.';
+  const emptyMsg = state.phase ? 'Đang tải dữ liệu từ TikTok…' : state.selected.length ? 'Không có spend trong khoảng ngày này.' : 'Chọn BC để bắt đầu.';
   $('#tbl').innerHTML = `<thead><tr><th class="l">BC → ${state.lvl2 === 'account' ? 'Account' : 'App'} → Campaign → Geo → Creative</th>${sortTh('spend', 'Spend')}${sortTh('roas', 'ROAS IAA D0')}<th class="l">Top geo (spend · ROAS IAA D0)</th><th class="l">Budget</th></tr></thead>
     <tbody>${rows.join('') || `<tr><td colspan="5" class="empty">${emptyMsg}</td></tr>`}</tbody>`;
 }
@@ -570,32 +638,44 @@ function notice(html, err) { $('#notice').innerHTML = html ? `<div class="notice
 async function load() {
   if (!mcp || !state.selected.length) { render(); return; }
   const run = ++state.run;
-  state.loading = true; state.results = []; state.done = 0; state.total = 0;
+  state.accounts = []; state.queue = []; state.phase = 'accounts';
   notice('');
   render();
+  const alive = () => run === state.run;
   try {
     const lists = [];
-    await pool(state.selected, 2, async (bc) => { lists.push(...await listAdvertisers(bc)); });
-    if (run !== state.run) return;
+    for (const bc of state.selected) { lists.push(...await listAdvertisers(bc)); if (!alive()) return; }
     const seen = new Set();
-    const accounts = lists.filter((a) => !seen.has(a.id) && seen.add(a.id));
-    state.total = accounts.length;
-    queueRender();
-    await pool(accounts, 4, async (adv) => {
-      let r;
-      try { r = await fetchAccount(adv); } catch (e) {
-        if (['server_not_connected', 'needs_reauth', 'not_in_manifest', 'consent_required', 'blocked_by_policy', 'user_changed'].includes(e?.code)) throw e;
-        r = { ...adv, error: e?.message || String(e), apps: [], ads: [], campDaily: [], agDaily: [], geo: [], adGeo: [], camps: {}, ags: {} };
+    state.accounts = lists.filter((a) => !seen.has(a.id) && seen.add(a.id)).map((a) => ({ ...a, spend: 0, rev: 0, status: 'new' }));
+    state.phase = 'summary'; queueRender();
+    await summarize(state.accounts);
+    if (!alive()) return;
+    // Details one account at a time, highest spend first.
+    state.queue = state.accounts.filter((a) => a.status === 'pending').sort((a, b) => b.spend - a.spend);
+    state.phase = 'details'; queueRender();
+    while (state.queue.length) {
+      const acc = state.queue.shift();
+      if (acc.d) continue;
+      acc.status = 'loading'; queueRender();
+      try { acc.d = await fetchAccount(acc); acc.status = 'done'; } catch (e) {
+        if (isFatal(e)) throw e;
+        acc.status = 'error'; acc.error = e?.message || String(e);
       }
-      if (run !== state.run) return;
-      state.results.push(r); state.done++;
+      if (!alive()) return;
       queueRender();
-    });
+    }
   } catch (e) {
-    if (run === state.run) notice(mcpMessage(e), true);
+    if (alive()) notice(mcpMessage(e), true);
   } finally {
-    if (run === state.run) { state.loading = false; state.refresh = false; queueRender(); }
+    if (alive()) { state.phase = null; state.refresh = false; queueRender(); }
   }
+}
+const FATAL = ['server_not_connected', 'needs_reauth', 'not_in_manifest', 'consent_required', 'blocked_by_policy', 'approval_required', 'selection_required', 'user_changed', 'not_granted', 'capability_disabled'];
+function isFatal(e) { return FATAL.includes(e?.code); }
+// Clicking an account that is still waiting moves it to the front of the queue.
+function prioritize(id) {
+  const i = state.queue.findIndex((a) => a.id === id);
+  if (i > 0) state.queue.unshift(...state.queue.splice(i, 1));
 }
 
 // ---------- BC picker ----------
@@ -667,6 +747,8 @@ function initControls() {
     if (e.target.closest('a')) return; // store links open normally
     const th = e.target.closest('th[data-sort]');
     if (th) return toggleSort(th.dataset.sort);
+    const pend = e.target.closest('tr.pending');
+    if (pend) { prioritize(pend.dataset.acc); state.open.set(pend.dataset.path, true); render(); return; }
     const tr = e.target.closest('tr.has-kids');
     if (tr) toggleRow(tr);
   });
