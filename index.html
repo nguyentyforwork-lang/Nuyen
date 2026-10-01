@@ -283,6 +283,8 @@
   .save-state { font-size: 13px; color: var(--muted); }
   .save-state.saved { color: var(--up); }
   .save-state.error { color: var(--down); font-weight: 600; }
+  .acc-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .acc-date { font-size: 13px; color: var(--muted); }
   .match-err { margin-top: 8px; font-size: 13px; color: var(--down); background: color-mix(in srgb, var(--down) 8%, transparent); border-radius: 8px; padding: 6px 10px; }
   .f-code, .f-kw { font: inherit; font-size: 15px; font-weight: 500; min-width: 0; border: 1px dashed transparent; outline: none; }
   .f-code { flex: 1 1 120px; } .f-kw { flex: 1 1 100px; }
@@ -616,13 +618,20 @@ async function tt(tool, input, refresh) {
     return { data: p.data || {}, storedAt: res.cache?.storedAt };
   }
 }
+// Report xếp spend giảm dần: gặp dòng spend = 0 thì các trang sau toàn 0 → dừng (đỡ request, đỡ rate limit)
 async function allPages(tool, input, refresh) {
-  const rows = []; let storedAt;
+  const stopAtZero = input.order_field === "spend";
+  const rows = [], seen = new Set(); let storedAt;
   for (let page = 1; page <= 20; page++) {
     const { data, storedAt: s } = await tt(tool, { ...input, page, page_size: 1000 }, refresh);
     if (s && (!storedAt || s < storedAt)) storedAt = s;
-    rows.push(...(data.list || []));
+    for (const row of data.list || []) {
+      const k = JSON.stringify(row.dimensions || row.campaign_id || row);
+      if (!seen.has(k)) { seen.add(k); rows.push(row); }
+    }
     if (page >= (data.page_info?.total_page || 1)) break;
+    const last = (data.list || []).at(-1);
+    if (stopAtZero && last && num(last.metrics?.spend) === 0) break;
   }
   return { rows, storedAt };
 }
@@ -660,34 +669,18 @@ function commonPrefix(names, kw) {
 async function fetchAccount(acc, kw, win, refresh) {
   const filtering = [{ field_name: "campaign_name", filter_type: "MATCH", filter_value: kw }];
   const base = { advertiser_id: acc, report_type: "BASIC", data_level: "AUCTION_CAMPAIGN", filtering };
-  // Chỉ gọi report tổng riêng khi kỳ đang xem / kỳ trước nằm ngoài cửa sổ theo ngày
-  const curInTrend = win.cur.start >= win.trend.start;
-  const prevInTrend = win.prev.start >= win.trend.start;
-  const none = Promise.resolve(null);
-  const [trend, cur, prev, camps] = await Promise.all([
-    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end }, refresh),
-    curInTrend ? none : allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end }, refresh),
-    prevInTrend ? none : allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end }, refresh),
+  // Số chính (spend, ROAS, Δ) lấy từ report TỔNG theo camp — giống TTAM, ít dòng (thường 1 trang) nên không
+  // sót dòng khi số đang chạy. Report theo ngày (nhiều trang) chỉ dùng cho biểu đồ / bảng theo ngày / max budget.
+  const [cur, prev, trend, camps] = await Promise.all([
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end, order_field: "spend" }, refresh),
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end, order_field: "spend" }, refresh),
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end, order_field: "spend" }, refresh),
     allPages("campaign_get", { advertiser_id: acc, filtering: { campaign_name: kw }, fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status", "roas_bid"] }, refresh)
       .catch(() => ({ rows: [] })), // ngân sách là phụ: lỗi thì hiện spend TB/ngày
   ]);
-  // Cộng các dòng theo ngày thành tổng theo camp cho một khoảng ngày (cùng dạng dòng report)
-  const sumRange = (start, end) => {
-    const by = new Map();
-    for (const r of trend.rows) {
-      const day = String(r.dimensions?.stat_time_day || "").slice(0, 10);
-      if (day < start || day > end) continue;
-      const id = String(r.dimensions?.campaign_id || ""), m = r.metrics || {}, sp = num(m.spend);
-      const x = by.get(id) || { id, name: m.campaign_name, spend: 0, rev: 0 };
-      x.spend += sp; x.rev += sp * num(m[M_IAA]); by.set(id, x);
-    }
-    return [...by.values()].map(x => ({ dimensions: { campaign_id: x.id },
-      metrics: { campaign_name: x.name, spend: String(x.spend), [M_IAA]: String(x.spend > 0 ? x.rev / x.spend : 0) } }));
-  };
   return {
-    cur: cur ? cur.rows : sumRange(win.cur.start, win.cur.end),
-    prev: prev ? prev.rows : sumRange(win.prev.start, win.prev.end),
-    trend: trend.rows, camps: camps.rows, storedAt: trend.storedAt, curRange: { ...win.cur },
+    cur: cur.rows, prev: prev.rows,
+    trend: trend.rows, camps: camps.rows, storedAt: cur.storedAt, curRange: { ...win.cur },
   };
 }
 
@@ -1025,7 +1018,8 @@ function card(a) {
     </div>
 
     <div class="foot">
-      <button class="acc-link" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" title="${esc(accName || "Xem camp")}">${esc(a.acc)}</button>
+      <span class="acc-wrap"><button class="acc-link" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" title="${esc(accName || "Xem camp")}">${esc(a.acc)}</button>
+        <span class="acc-date">${spanText(win.cur.start, win.cur.end)}${accInfo.get(a.acc)?.tz ? " · " + tzOffset(accInfo.get(a.acc).tz) : ""}</span></span>
       <span class="foot-btns">
         <button class="btn" data-act="panel" data-kind="geo" data-id="${esc(id)}" aria-expanded="${panel === "geo"}">Top geo</button>
         <button class="btn" data-act="panel" data-kind="daily" data-id="${esc(id)}" aria-expanded="${panel === "daily"}">Theo ngày</button>
