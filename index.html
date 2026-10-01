@@ -290,8 +290,9 @@
   .acc-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .acc-date { font-size: 13px; color: var(--muted); }
   .new-row { display: flex; justify-content: flex-end; margin-top: 12px; }
-  .new-badge { font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid var(--new-bd); background: var(--new-bg); color: var(--new-fg); border-radius: 99px; padding: 5px 12px; }
-  .new-badge b { font-weight: 700; }
+  .new-badge { font: inherit; cursor: pointer; border: 1px solid var(--new-bd); background: var(--new-bg); color: var(--new-fg); border-radius: 12px; padding: 8px 16px; display: flex; flex-direction: column; align-items: center; min-width: 110px; line-height: 1.1; }
+  .new-badge b { font-size: 32px; font-weight: 700; }
+  .new-badge span { font-size: 13px; font-weight: 500; margin-top: 4px; white-space: nowrap; }
   .new-badge.zero { background: transparent; border-color: var(--border); color: var(--muted); }
   .match-err { margin-top: 8px; font-size: 13px; color: var(--down); background: color-mix(in srgb, var(--down) 8%, transparent); border-radius: 8px; padding: 6px 10px; }
   .f-code, .f-kw { font: inherit; font-size: 15px; font-weight: 500; min-width: 0; border: 1px dashed transparent; outline: none; }
@@ -1047,7 +1048,7 @@ function card(a) {
     </div>
     <div class="new-row"><button class="new-badge${a.newCamps ? "" : " zero"}" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" data-new="1"
       title="Camp ${esc(config.groups[activeTab]?.keyword || "Ecomdy")} được tạo trong khoảng ngày đang xem (theo giờ tài khoản). Bấm để xem.">
-      <b>${a.newCamps}</b> camp mới ${win.cur.start === win.cur.end ? (win.cur.end === todayIn(accInfo.get(a.acc)?.tz) ? "hôm nay" : shortDate(win.cur.end)) : spanText(win.cur.start, win.cur.end)}</button></div>
+      <b>${a.newCamps}</b><span>camp mới ${win.cur.start === win.cur.end ? (win.cur.end === todayIn(accInfo.get(a.acc)?.tz) ? "hôm nay" : shortDate(win.cur.end)) : spanText(win.cur.start, win.cur.end)}</span></button></div>
     ${panel === "daily" ? `<div class="panel">${dailyPanel(a, kpi, days)}</div>` : ""}
     ${panel === "geo" ? `<div class="panel">${geoPanel(a, kpi)}</div>` : ""}
   </article>`;
