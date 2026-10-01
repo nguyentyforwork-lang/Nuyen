@@ -72,10 +72,22 @@ input[type="date"] { background: var(--surface); border: 1px solid var(--line); 
 
 .sub { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; padding-block: 10px; font-size: 12px; color: var(--muted); }
 .sub b { color: var(--fg-2); font-weight: 600; }
-.sum { display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; padding-block: 6px 12px; }
-.sum .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); display: block; }
-.sum .v { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
-.progress { margin-left: auto; font-size: 12px; color: var(--fg-2); }
+.sum { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; padding-block: 14px 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; min-width: 150px; text-align: left; display: grid; gap: 2px; }
+button.card { cursor: pointer; }
+button.card:hover { border-color: var(--accent); }
+button.card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.card .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.card .v { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+.card .s { font-size: 12px; color: var(--muted); }
+button.card .k::after { content: " ▾"; color: var(--accent); }
+button.card.on .k::after { content: " ▴"; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; overflow-x: auto; }
+.panel h4 { margin: 0; padding: 10px 12px 4px; font-size: 13px; }
+.panel .note { padding: 0 12px 8px; font-size: 12px; color: var(--muted); }
+.lvswap { border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: 6px; padding: 1px 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.lvswap:hover { background: var(--hover); }
+.progress { margin-left: auto; align-self: center; font-size: 12px; color: var(--fg-2); max-width: 420px; text-align: right; }
 .notice { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; padding: 12px 14px; margin-block: 12px; max-width: 760px; }
 .notice.err { border-left-color: var(--bad); }
 
@@ -148,19 +160,15 @@ a.applink:hover .nm { text-decoration: underline; }
       <input type="date" id="startDate" aria-label="Từ ngày"> → <input type="date" id="endDate" aria-label="Đến ngày">
     </span>
     <label class="chk"><input type="checkbox" id="includeToday"> gồm hôm nay</label>
-    <div class="seg" id="lvl2Seg" role="group" aria-label="Level 2">
-      <button type="button" data-lvl2="account" class="on">Account</button>
-      <button type="button" data-lvl2="app">App</button>
-    </div>
     <button id="refreshBtn" class="btn" type="button">↻ Refresh</button>
   </header>
 
-  <div class="sub" id="tzInfo"></div>
   <div id="notice"></div>
   <div class="sum" id="summary"></div>
+  <div id="panel"></div>
 
   <div class="tablebox"><table id="tbl"></table></div>
-  <p class="foot">Level: BC → Account (hoặc App) → Campaign → Geo → Creative. Bấm dòng để xổ ra. Bấm tiêu đề Spend hoặc ROAS IAA D0 để sort mọi level. Chỉ hiện dòng có spend &gt; 0. Ngày tính theo múi giờ của từng ad account. Dữ liệu tải lần lượt từng account, spend cao trước; bấm account đang chờ để tải nó trước. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
+  <p class="foot">Level: BC → Account (hoặc App, bấm nút ⇄ trên tiêu đề bảng để đổi) → Campaign → Creative. Bấm dòng để xổ ra. Bấm tiêu đề Spend hoặc ROAS IAA D0 để sort mọi level. Chỉ hiện dòng có spend &gt; 0. Ngày tính theo múi giờ của từng ad account. Dữ liệu tải lần lượt từng account, spend cao trước; bấm account đang chờ để tải nó trước. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
 </div>
 
 <script>
@@ -183,6 +191,7 @@ const state = {
   preset: 'today', includeToday: LS.get('bcat.inc', false), start: '', end: '',
   lvl2: LS.get('bcat.lvl2', 'account'),
   sort: LS.get('bcat.sort', { key: 'spend', dir: 'desc' }),
+  panel: null,
   open: new Map(), accounts: [], queue: [], phase: null, paused: false, refresh: false, run: 0,
 };
 let mcp = null;
@@ -409,6 +418,7 @@ function buildModel(accountsList) {
     const campApp = new Map();
     for (const [k, v] of votes) campApp.set(k, [...v.entries()].sort((x, y) => y[1] - x[1])[0][0]);
     for (const g of Object.values(a.ags)) { const k = `${a.id}|${g.cid}`; if (!campApp.has(k) && g.app) campApp.set(k, g.app); }
+    const onlyApp = a.apps.length === 1 ? a.apps[0].id : null; // account with a single Event Manager app
     for (const g of a.geo) { const k = `${a.id}|${g.cid}`; if (!campGeo.has(k)) campGeo.set(k, new Map()); addGeo(campGeo.get(k), g.c, g); }
     for (const g of a.adGeo) { const k = `${a.id}|${g.ad}`; if (!adGeo.has(k)) adGeo.set(k, new Map()); addGeo(adGeo.get(k), g.c, g); }
 
@@ -418,7 +428,7 @@ function buildModel(accountsList) {
       let f = byCamp.get(k);
       if (!f) {
         const c = a.camps[r.cid] || {};
-        const appId = campApp.get(k) || NONE_APP;
+        const appId = campApp.get(k) || onlyApp || NONE_APP;
         if (!apps.has(appId)) apps.set(appId, { id: appId, name: `App ${appId}`, platform: '', url: '' });
         f = { key: k, bc: a.bc, account: a.id, app: appId, cid: r.cid, name: r.cname || r.cid, spend: 0, rev: 0, status: c.status, budget: null, budgetLevel: '', maxPct: null, hitDays: new Set() };
         if (c.daily) { f.budget = c.budget; f.budgetLevel = 'campaign'; }
@@ -475,30 +485,25 @@ function buildTree(model) {
     }
     return rows.filter((f) => !f.placeholder).map((f) => {
       const path = `${prefix}/campaign:${f.key}`;
-      return { path, dim: 'campaign', id: f.cid, depth, fact: f, rows: [f], spend: f.spend, rev: f.rev, roas: roas(f.rev, f.spend), geo: model.campGeo.get(f.key) || new Map(), kids: () => geoNodes(model, f, path, depth + 1) };
+      return { path, dim: 'campaign', id: f.cid, depth, fact: f, rows: [f], spend: f.spend, rev: f.rev, roas: roas(f.rev, f.spend), geo: model.campGeo.get(f.key) || new Map(), kids: () => creativeNodes(model, f, path, depth + 1) };
     });
   };
   return make(model.facts.filter((f) => f.spend > 0), 0, '');
 }
-function geoNodes(model, f, prefix, depth) {
-  return [...(model.campGeo.get(f.key) || [])].filter(([, e]) => e.spend > 0).map(([c, e]) => {
-    const path = `${prefix}/geo:${c}`;
-    return { path, dim: 'geo', id: c, depth, spend: e.spend, rev: e.rev, roas: roas(e.rev, e.spend), share: f.spend ? e.spend / f.spend : 0, kids: () => creativeNodes(model, f, c, e, path, depth + 1) };
-  });
-}
-function creativeNodes(model, f, c, total, prefix, depth) {
+function creativeNodes(model, f, prefix, depth) {
   const groups = new Map();
   for (const ad of model.campAds.get(f.key) || []) {
-    const e = model.adGeo.get(`${f.account}|${ad.id}`)?.get(c);
-    if (!e || !(e.spend > 0)) continue;
+    if (!(ad.spend > 0)) continue;
     const k = creativeKey(ad.name);
-    const g = groups.get(k) || { name: k, spend: 0, rev: 0, ads: 0 };
-    g.spend += e.spend; g.rev += e.rev; g.ads++; groups.set(k, g);
+    const g = groups.get(k) || { name: k, spend: 0, rev: 0, ads: 0, geo: new Map() };
+    g.spend += ad.spend; g.rev += ad.rev; g.ads++;
+    for (const [c, e] of model.adGeo.get(`${f.account}|${ad.id}`) || []) addGeo(g.geo, c, e);
+    groups.set(k, g);
   }
-  const nodes = [...groups.values()].map((g) => ({ path: `${prefix}/cr:${g.name}`, dim: 'creative', id: g.name, depth, spend: g.spend, rev: g.rev, roas: roas(g.rev, g.spend), ads: g.ads, kids: null }));
-  const rest = total.spend - sum(nodes, (n) => n.spend);
-  if (rest > Math.max(1, total.spend * 0.01)) {
-    const rr = Math.max(0, total.rev - sum(nodes, (n) => n.rev));
+  const nodes = [...groups.values()].map((g) => ({ path: `${prefix}/cr:${g.name}`, dim: 'creative', id: g.name, depth, spend: g.spend, rev: g.rev, roas: roas(g.rev, g.spend), ads: g.ads, geo: g.geo, kids: null }));
+  const rest = f.spend - sum(nodes, (n) => n.spend);
+  if (rest > Math.max(1, f.spend * 0.01)) {
+    const rr = Math.max(0, f.rev - sum(nodes, (n) => n.rev));
     nodes.push({ path: `${prefix}/cr:__rest`, dim: 'creative', id: '__rest', depth, spend: rest, rev: rr, roas: roas(rr, rest), rest: true, kids: null });
   }
   return nodes;
@@ -548,7 +553,7 @@ function label(n) {
   return `<span class="nm" title="${esc(n.id)}">${esc(n.id)}</span>${n.ads > 1 ? `<span class="meta">${n.ads} ads</span>` : ''}`;
 }
 function geoCell(n) {
-  if (n.dim === 'geo' || n.dim === 'creative' || !n.geo?.size) return '';
+  if (!n.geo?.size) return '';
   const top = [...n.geo].sort((a, b) => b[1].spend - a[1].spend);
   const title = top.slice(0, 10).map(([c, e]) => `${c}  ${money(e.spend)}  ROAS ${pct(roas(e.rev, e.spend))}`).join('\n');
   return `<span class="geo" title="${esc(title)}">${top.slice(0, 3).map(([c, e]) => { const r = roas(e.rev, e.spend); return `<span class="g"><b>${esc(c)}</b>${kmoney(e.spend)} · <span class="${r == null ? '' : r >= 1 ? 'gr-good' : r < 0.5 ? 'gr-bad' : ''}">${pct(r, 0)}</span></span>`; }).join('')}</span>`;
@@ -564,15 +569,42 @@ function budgetCell(n) {
   if (n.hits) return `<span class="pill hit">${n.hits} camp max budget</span>`;
   return '';
 }
+function renderPanel(withSpend, loadingApps, doneN) {
+  const el = $('#panel');
+  if (!state.panel) { el.innerHTML = ''; return; }
+  const row = (cells) => `<tr>${cells.join('')}</tr>`;
+  let html;
+  if (state.panel === 'accounts') {
+    const list = [...withSpend].sort((a, b) => b.spend - a.spend);
+    html = `<h4>Account có spend (${list.length})</h4><table><thead><tr><th class="l">Account</th><th class="l">BC</th><th class="l">App</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
+      list.map((a) => {
+        const appIds = a.d ? [...new Set(model.facts.filter((f) => f.account === a.id).map((f) => f.app))].filter((x) => x !== NONE_APP && x !== PENDING_APP) : [];
+        const apps = a.d ? appIds.map(appPill).join(' ') || '<span class="meta">–</span>' : `<span class="meta${a.status === 'loading' ? ' loading' : ''}">${a.status === 'error' ? 'lỗi tải' : a.status === 'loading' ? 'đang tải…' : 'chờ tải'}</span>`;
+        const r = roas(a.rev, a.spend);
+        return row([`<td class="l"><span class="nm">${esc(a.name)}</span> <span class="meta">${esc(a.id)}</span></td>`, `<td class="l meta">${esc(bcName(a.bc))}</td>`, `<td class="l">${apps}</td>`, `<td class="num">${money(a.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
+      }).join('') + '</tbody></table>';
+  } else {
+    const byApp = new Map();
+    for (const f of model.facts) {
+      if (f.placeholder || !(f.spend > 0) || f.app === NONE_APP) continue;
+      const e = byApp.get(f.app) || { spend: 0, rev: 0, accs: new Set() };
+      e.spend += f.spend; e.rev += f.rev; e.accs.add(f.account); byApp.set(f.app, e);
+    }
+    const list = [...byApp].sort((a, b) => b[1].spend - a[1].spend);
+    html = `<h4>App đang chạy (${list.length})</h4>${loadingApps ? `<div class="note">Đã tải chi tiết ${doneN}/${withSpend.length} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}<table><thead><tr><th class="l">App</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
+      (list.map(([id, e]) => {
+        const a = model.apps.get(id) || {};
+        const names = [...e.accs].map((x) => model.accounts.get(x)?.name || x);
+        const r = roas(e.rev, e.spend);
+        return row([`<td class="l"><div class="namecell">${appLink(id, true)}<span class="meta">${esc(a.platform || '')}</span></div></td>`, `<td class="l" title="${esc(names.join('\n'))}">${e.accs.size} account <span class="meta">${esc(names.slice(0, 2).join(', '))}${names.length > 2 ? '…' : ''}</span></td>`, `<td class="num">${money(e.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
+      }).join('') || '<tr><td colspan="4" class="empty">Chưa có app nào — đang chờ tải chi tiết account.</td></tr>') + '</tbody></table>';
+  }
+  el.innerHTML = `<div class="panel">${html}</div>`;
+}
 function isOpen(n) { return state.open.has(n.path) ? state.open.get(n.path) : n.depth === 0; }
 
 function render() {
   const results = state.accounts;
-  // time zones
-  const tz = new Map();
-  for (const a of results) { const e = tz.get(a.tz) || { n: 0, r: rangeFor(a.tz) }; e.n++; tz.set(a.tz, e); }
-  $('#tzInfo').innerHTML = tz.size ? 'Múi giờ theo ad account: ' + [...tz].map(([z, e]) => `<span><b>${esc(z)}</b> ${e.r.start === e.r.end ? e.r.start : e.r.start + ' → ' + e.r.end} (${e.n} acc)</span>`).join('') : '';
-
   model = buildModel(results);
   const tree = buildTree(model);
   const spend = sum(tree, (n) => n.spend), rev = sum(tree, (n) => n.rev);
@@ -586,13 +618,14 @@ function render() {
     : state.phase === 'summary' ? `Đang lấy spend từng account… (${results.filter((a) => a.status !== 'new').length}/${results.length})`
     : state.phase === 'details' ? `Đang tải chi tiết theo spend cao → thấp: ${doneN}/${withSpend.length}${cur ? ' · ' + esc(cur.name) : ''}`
     : `${withSpend.length} account có spend / ${results.length} account`;
+  const loadingApps = withSpend.length > doneN;
   $('#summary').innerHTML = results.length || state.phase ? `
-    <div><span class="k">Spend</span><span class="v">${money(spend)}</span></div>
-    <div><span class="k">ROAS IAA D0</span><span class="v ${rcls(roas(rev, spend))}">${pct(roas(rev, spend))}</span></div>
-    <div><span class="k">IAA revenue D0</span><span class="v">${money(rev)}</span></div>
-    <div><span class="k">Account có spend</span><span class="v">${accs.size}</span></div>
-    <div><span class="k">App đang chạy</span><span class="v">${appSet.size}</span></div>
+    <div class="card"><span class="k">Spend</span><span class="v">${money(spend)}</span></div>
+    <div class="card"><span class="k">ROAS IAA D0</span><span class="v ${rcls(roas(rev, spend))}">${pct(roas(rev, spend))}</span></div>
+    <button type="button" class="card ${state.panel === 'accounts' ? 'on' : ''}" data-panel="accounts"><span class="k">Account có spend</span><span class="v">${accs.size}</span><span class="s">/ ${results.length} account</span></button>
+    <button type="button" class="card ${state.panel === 'apps' ? 'on' : ''}" data-panel="apps"><span class="k">App đang chạy</span><span class="v">${appSet.size}</span><span class="s">${loadingApps ? `đã tải ${doneN}/${withSpend.length} account` : 'theo campaign có spend'}</span></button>
     <div class="progress">${prog}${state.paused ? ' · <span class="r-bad">TikTok giới hạn tốc độ, đang chờ rồi thử lại…</span>' : ''}${errs.length ? ` · <span class="r-bad" title="${esc(errs.map((e) => `${e.name}: ${e.error}`).join('\n'))}">${errs.length} account lỗi</span>` : ''}</div>` : '';
+  renderPanel(withSpend, loadingApps, doneN);
 
   const sortTh = (k, t) => `<th class="sortable" data-sort="${k}" tabindex="0" aria-sort="${state.sort.key === k ? (state.sort.dir === 'desc' ? 'descending' : 'ascending') : 'none'}">${t} <span class="dir">${state.sort.key === k ? (state.sort.dir === 'desc' ? '▼' : '▲') : ''}</span></th>`;
   const rows = [];
@@ -614,7 +647,7 @@ function render() {
   };
   walk(tree, spend);
   const emptyMsg = state.phase ? 'Đang tải dữ liệu từ TikTok…' : state.selected.length ? 'Không có spend trong khoảng ngày này.' : 'Chọn BC để bắt đầu.';
-  $('#tbl').innerHTML = `<thead><tr><th class="l">BC → ${state.lvl2 === 'account' ? 'Account' : 'App'} → Campaign → Geo → Creative</th>${sortTh('spend', 'Spend')}${sortTh('roas', 'ROAS IAA D0')}<th class="l">Top geo (spend · ROAS IAA D0)</th><th class="l">Budget</th></tr></thead>
+  $('#tbl').innerHTML = `<thead><tr><th class="l">BC → <button type="button" class="lvswap" id="lvswap" title="Đổi level 2 giữa Account và App">${state.lvl2 === 'account' ? 'Account' : 'App'} ⇄ ${state.lvl2 === 'account' ? 'App' : 'Account'}</button> → Campaign → Creative</th>${sortTh('spend', 'Spend')}${sortTh('roas', 'ROAS IAA D0')}<th class="l">Top geo (spend · ROAS IAA D0)</th><th class="l">Budget</th></tr></thead>
     <tbody>${rows.join('') || `<tr><td colspan="5" class="empty">${emptyMsg}</td></tr>`}</tbody>`;
 }
 
@@ -713,7 +746,6 @@ function initBcPicker() {
 // ---------- controls ----------
 function initControls() {
   $('#includeToday').checked = state.includeToday;
-  $$('#lvl2Seg button').forEach((b) => b.classList.toggle('on', b.dataset.lvl2 === state.lvl2));
   $$('#presetSeg button').forEach((b) => b.addEventListener('click', () => {
     $$('#presetSeg button').forEach((x) => x.classList.toggle('on', x === b));
     state.preset = b.dataset.preset;
@@ -728,11 +760,12 @@ function initControls() {
   }));
   ['#startDate', '#endDate'].forEach((s) => $(s).addEventListener('change', () => { state.start = $('#startDate').value; state.end = $('#endDate').value; load(); }));
   $('#includeToday').addEventListener('change', (e) => { state.includeToday = e.target.checked; LS.set('bcat.inc', state.includeToday); if (/^last/.test(state.preset)) load(); });
-  $$('#lvl2Seg button').forEach((b) => b.addEventListener('click', () => {
-    state.lvl2 = b.dataset.lvl2; LS.set('bcat.lvl2', state.lvl2); state.open.clear();
-    $$('#lvl2Seg button').forEach((x) => x.classList.toggle('on', x === b));
+  $('#summary').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-panel]');
+    if (!c) return;
+    state.panel = state.panel === c.dataset.panel ? null : c.dataset.panel;
     render();
-  }));
+  });
   $('#refreshBtn').addEventListener('click', () => { state.refresh = true; load(); });
 
   const tbl = $('#tbl');
@@ -745,6 +778,7 @@ function initControls() {
   };
   tbl.addEventListener('click', (e) => {
     if (e.target.closest('a')) return; // store links open normally
+    if (e.target.closest('#lvswap')) { state.lvl2 = state.lvl2 === 'account' ? 'app' : 'account'; LS.set('bcat.lvl2', state.lvl2); state.open.clear(); render(); return; }
     const th = e.target.closest('th[data-sort]');
     if (th) return toggleSort(th.dataset.sort);
     const pend = e.target.closest('tr.pending');
