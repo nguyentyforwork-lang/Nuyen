@@ -105,7 +105,7 @@ button.card.on .k::after { content: " ▴"; }
 .panel .note { padding: 0 12px 8px; font-size: 12px; color: var(--muted); }
 .lvswap { border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: 6px; padding: 1px 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .lvswap:hover { background: var(--hover); }
-.progress { grid-column: 1 / -1; order: -1; font-size: 12px; color: var(--fg-2); text-align: right; min-height: 18px; }
+
 .notice { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; padding: 12px 14px; margin-block: 12px; max-width: 760px; }
 .notice.err { border-left-color: var(--bad); }
 
@@ -147,6 +147,21 @@ a.applink:hover .nm { text-decoration: underline; }
 .g b { font-family: var(--font-ui); color: var(--fg); font-weight: 600; margin-right: 2px; }
 .g .gr-good { color: var(--good); }
 .g .gr-bad { color: var(--bad); }
+.report { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-block: 14px 4px; display: grid; gap: 10px; }
+.report h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.rp-row { display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: end; }
+.rp-field { display: grid; gap: 5px; min-width: 0; }
+.rp-lb { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.rp-types { display: flex; gap: 8px; flex-wrap: wrap; }
+.rp-type { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; background: var(--bg); }
+.rp-type:has(input:checked) { border-color: var(--accent); background: var(--hover); }
+.rp-type small { color: var(--muted); font-size: 11px; }
+.run { padding: 8px 22px; font-weight: 700; font-size: 15px; margin-left: auto; }
+.run:disabled { opacity: 0.5; cursor: not-allowed; }
+.rp-note { font-size: 12px; color: var(--muted); }
+.progress-line { font-size: 12px; color: var(--fg-2); text-align: right; min-height: 18px; padding-top: 8px; }
+.placeholder { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 36px 16px; text-align: center; color: var(--muted); margin-top: 12px; }
+.section-h { font-size: 13px; font-weight: 700; color: var(--fg-2); margin: 14px 0 6px; }
 .empty { padding: 28px 14px; color: var(--muted); text-align: center; white-space: normal; }
 .foot { margin-top: 10px; font-size: 12px; color: var(--muted); max-width: 900px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -155,37 +170,63 @@ a.applink:hover .nm { text-decoration: underline; }
 <div class="wrap">
   <header class="bar">
     <div class="brand">BC App Tracker<small>TikTok · ROAS IAA D0</small></div>
-    <div class="bcpick">
-      <button id="bcBtn" class="btn" type="button">BC: đang tải…</button>
-      <div id="bcPanel" class="bcpanel" hidden>
-        <input id="bcSearch" type="search" placeholder="Tìm BC theo tên hoặc ID">
-        <div class="bcacts">
-          <button class="btn sm" id="bcAll" type="button">Chọn tất cả</button>
-          <button class="btn sm" id="bcNone" type="button">Bỏ hết</button>
-          <button class="btn sm primary" id="bcApply" type="button">Áp dụng</button>
-        </div>
-        <div id="bcList" class="bclist"></div>
-      </div>
-    </div>
-    <div class="seg" id="presetSeg" role="group" aria-label="Khoảng ngày">
-      <button type="button" data-preset="today" class="on">Today</button>
-      <button type="button" data-preset="yesterday">Yesterday</button>
-      <button type="button" data-preset="last3">Last 3 days</button>
-      <button type="button" data-preset="last7">Last 7 days</button>
-      <button type="button" data-preset="custom">Custom</button>
-    </div>
-    <span id="customRange" hidden>
-      <input type="date" id="startDate" aria-label="Từ ngày"> → <input type="date" id="endDate" aria-label="Đến ngày">
-    </span>
-    <button id="refreshBtn" class="btn" type="button">↻ Refresh</button>
   </header>
 
-  <div id="notice"></div>
-  <div class="sum" id="summary"></div>
-  <div id="panel"></div>
+  <section class="report" aria-labelledby="rpTitle">
+    <h2 id="rpTitle">Custom report</h2>
+    <div class="rp-row">
+      <div class="rp-field">
+        <span class="rp-lb">1 · BC</span>
+        <div class="bcpick">
+          <button id="bcBtn" class="btn" type="button">BC: đang tải…</button>
+          <div id="bcPanel" class="bcpanel" hidden>
+            <input id="bcSearch" type="search" placeholder="Tìm BC theo tên hoặc ID">
+            <div class="bcacts">
+              <button class="btn sm" id="bcAll" type="button">Chọn tất cả</button>
+              <button class="btn sm" id="bcNone" type="button">Bỏ hết</button>
+              <button class="btn sm primary" id="bcApply" type="button">Xong</button>
+            </div>
+            <div id="bcList" class="bclist"></div>
+          </div>
+        </div>
+      </div>
+      <div class="rp-field">
+        <span class="rp-lb">2 · Khoảng ngày</span>
+        <div class="seg" id="presetSeg" role="group" aria-label="Khoảng ngày">
+          <button type="button" data-preset="today" class="on">Today</button>
+          <button type="button" data-preset="yesterday">Yesterday</button>
+          <button type="button" data-preset="last3">Last 3 days</button>
+          <button type="button" data-preset="last7">Last 7 days</button>
+          <button type="button" data-preset="custom">Custom</button>
+        </div>
+        <span id="customRange" hidden>
+          <input type="date" id="startDate" aria-label="Từ ngày"> → <input type="date" id="endDate" aria-label="Đến ngày">
+        </span>
+      </div>
+      <div class="rp-field">
+        <span class="rp-lb">3 · Loại report</span>
+        <div class="rp-types">
+          <label class="rp-type"><input type="checkbox" id="optOverview"> Tổng quan <small>4 khung số</small></label>
+          <label class="rp-type"><input type="checkbox" id="optDetail"> Detail <small>breakdown đến creative</small></label>
+        </div>
+      </div>
+      <button id="runBtn" class="btn primary run" type="button">Run</button>
+    </div>
+    <div class="rp-note">Tổng quan nhanh: khoảng 2 lệnh gọi TikTok cho mỗi account có spend. Detail chậm hơn: khoảng 8 lệnh mỗi account, tải spend cao trước. Chọn cả hai thì 4 khung số ra trước.</div>
+  </section>
 
+  <div class="progress-line" id="progress"></div>
+  <div id="notice"></div>
+  <div id="placeholder" class="placeholder">Chọn BC, khoảng ngày và loại report rồi bấm <b>Run</b>.</div>
+  <div id="overviewBox" hidden>
+    <div class="sum" id="summary"></div>
+    <div id="panel"></div>
+  </div>
+
+  <div id="detailBox" hidden>
   <div class="tablebox"><table id="tbl"></table></div>
   <p class="foot">Level: BC → Account → App → Campaign → Creative, hoặc BC → App → Account → Campaign → Creative (bấm nút ⇄ trên tiêu đề bảng để đổi). Bấm dòng để xổ ra. BC xếp A–Z; bấm tiêu đề Spend hoặc ROAS IAA D0 để sort các level bên dưới. Chỉ hiện dòng có spend &gt; 0. Dữ liệu tải lần lượt từng account, spend cao trước; bấm account đang chờ để tải nó trước. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
+  </div>
 </div>
 
 <script>
@@ -208,7 +249,7 @@ const state = {
   preset: 'today', start: '', end: '',
   lvl2: LS.get('bcat.lvl2', 'account'),
   sort: LS.get('bcat.sort', { key: 'spend', dir: 'desc' }),
-  panel: null,
+  panel: null, opts: LS.get('bcat.opts', { overview: true, detail: false }), ran: null, lastKey: '',
   open: new Map(), accounts: [], queue: [], phase: null, paused: false, refresh: false, run: 0,
 };
 let mcp = null;
@@ -368,14 +409,28 @@ async function summarize(accounts) {
   }
 }
 
+const appIdOf = (v) => (v && v !== '-' && String(v) !== '0' ? String(v) : null);
+// Overview needs only: Event Manager apps + ad-level spend with the app each ad promotes.
+async function fetchLite(adv) {
+  const range = rangeFor(adv.tz);
+  const fx = FX[adv.cur] ?? 1;
+  const m = (v) => num(v) * fx;
+  const base = { advertiser_id: adv.id, start_date: range.start, end_date: range.end };
+  const appsD = await call('app_list_get', { advertiser_id: adv.id });
+  const ads = await report({ ...base, data_level: 'AUCTION_AD', dimensions: ['ad_id'], metrics: ['spend', REV, 'ad_name', 'campaign_id', 'campaign_name', 'tt_app_id'] });
+  return {
+    apps: (appsD.apps || []).map((a) => ({ id: String(a.app_id), name: a.app_name, platform: a.platform, url: a.download_url || '', icon: a.icon?.web_uri || '' })),
+    ads: ads.map((r) => ({ id: String(r.ad_id), name: r.ad_name || String(r.ad_id), cid: String(r.campaign_id), cname: r.campaign_name, app: appIdOf(r.tt_app_id), spend: m(r.spend), rev: m(r[REV]) })),
+  };
+}
+
 async function fetchAccount(adv) {
   const range = rangeFor(adv.tz);
   const fx = FX[adv.cur] ?? 1;
   const m = (v) => num(v) * fx;
   const base = { advertiser_id: adv.id, start_date: range.start, end_date: range.end };
-  const [appsD, ads, campDaily, agDaily, geo, adGeo] = await Promise.all([
-    call('app_list_get', { advertiser_id: adv.id }),
-    report({ ...base, data_level: 'AUCTION_AD', dimensions: ['ad_id'], metrics: ['spend', REV, 'ad_name', 'campaign_id', 'campaign_name', 'tt_app_id'] }),
+  const lite = adv.lite || await fetchLite(adv);
+  const [campDaily, agDaily, geo, adGeo] = await Promise.all([
     report({ ...base, data_level: 'AUCTION_CAMPAIGN', dimensions: ['campaign_id', 'stat_time_day'], metrics: ['spend', REV, 'campaign_name'] }),
     report({ ...base, data_level: 'AUCTION_ADGROUP', dimensions: ['adgroup_id', 'stat_time_day'], metrics: ['spend', 'campaign_id'] }),
     report({ ...base, data_level: 'AUCTION_CAMPAIGN', dimensions: ['campaign_id', 'country_code'], metrics: ['spend', REV] }),
@@ -389,12 +444,12 @@ async function fetchAccount(adv) {
       getAll('adgroup_get', { advertiser_id: adv.id, fields: ['adgroup_id', 'campaign_id', 'budget', 'budget_mode', 'operation_status', 'app_id'], filtering: { campaign_ids: ids } }, 500),
     ]);
     for (const c of cs) camps[String(c.campaign_id)] = { budget: m(c.budget), daily: DAILY.has(c.budget_mode) && num(c.budget) > 0, status: c.operation_status };
-    for (const g of gs) ags[String(g.adgroup_id)] = { cid: String(g.campaign_id), budget: m(g.budget), daily: DAILY.has(g.budget_mode) && num(g.budget) > 0, status: g.operation_status, app: g.app_id ? String(g.app_id) : null };
+    for (const g of gs) ags[String(g.adgroup_id)] = { cid: String(g.campaign_id), budget: m(g.budget), daily: DAILY.has(g.budget_mode) && num(g.budget) > 0, status: g.operation_status, app: appIdOf(g.app_id) };
   }
   return {
     range,
-    apps: (appsD.apps || []).map((a) => ({ id: String(a.app_id), name: a.app_name, platform: a.platform, url: a.download_url || '', icon: a.icon?.web_uri || '' })),
-    ads: ads.map((r) => ({ id: String(r.ad_id), name: r.ad_name || String(r.ad_id), cid: String(r.campaign_id), cname: r.campaign_name, app: r.tt_app_id && r.tt_app_id !== '-' ? String(r.tt_app_id) : null, spend: m(r.spend), rev: m(r[REV]) })),
+    apps: lite.apps,
+    ads: lite.ads,
     campDaily: campDaily.map((r) => ({ cid: String(r.campaign_id), cname: r.campaign_name, date: String(r.stat_time_day).slice(0, 10), spend: m(r.spend), rev: m(r[REV]) })),
     agDaily: agDaily.map((r) => ({ agid: String(r.adgroup_id), cid: String(r.campaign_id), date: String(r.stat_time_day).slice(0, 10), spend: m(r.spend) })),
     geo: geo.map((r) => ({ cid: String(r.campaign_id), c: r.country_code, spend: m(r.spend), rev: m(r[REV]) })),
@@ -415,7 +470,7 @@ function buildModel(accountsList) {
   const campGeo = new Map(), campAds = new Map(), adGeo = new Map();
   for (const acc of accountsList) {
     accounts.set(acc.id, acc);
-    for (const p of acc.d?.apps || []) if (!apps.has(p.id)) apps.set(p.id, p);
+    for (const p of acc.d?.apps || acc.lite?.apps || []) if (!apps.has(p.id)) apps.set(p.id, p);
   }
   // Accounts whose details are not loaded yet still count with their summary spend.
   for (const acc of accountsList) {
@@ -558,7 +613,7 @@ function cmp(a, b) {
 const bcName = (id) => state.bcs.find((b) => b.bc_id === id)?.name || id;
 function appLink(id, withIcon) {
   const a = model.apps.get(id) || { name: id };
-  const icon = withIcon && a.icon ? `<img class="appicon" src="${esc(a.icon)}" alt="" loading="lazy">` : '';
+  const icon = withIcon && a.icon ? `<img class="appicon" src="${esc(a.icon)}" alt="" loading="lazy" onerror="this.remove()">` : '';
   const label = `${icon}<span class="nm">${esc(a.name)}</span>`;
   return a.url ? `<a class="applink" href="${esc(a.url)}" target="_blank" rel="noopener" title="Mở store: ${esc(a.url)}">${label} <span class="ext">↗</span></a>` : label;
 }
@@ -607,35 +662,54 @@ function budgetCell(n) {
   if (n.hits) return `<span class="pill hit">${n.hits} camp max budget</span>`;
   return '';
 }
-function renderPanel(withSpend, loadingApps, doneN) {
+// Account -> app spend from ad-level rows (overview or detail data).
+function overviewStats() {
+  const accs = state.accounts.filter((a) => a.spend > 0);
+  const apps = new Map(); // app id -> {spend, rev, accs:Set}
+  const accApps = new Map();
+  let loaded = 0;
+  for (const a of accs) {
+    const ads = a.d?.ads || a.lite?.ads;
+    if (!ads) continue;
+    loaded++;
+    const per = new Map();
+    for (const ad of ads) {
+      if (!ad.app || !(ad.spend > 0)) continue;
+      const e = apps.get(ad.app) || { spend: 0, rev: 0, accs: new Set() };
+      e.spend += ad.spend; e.rev += ad.rev; e.accs.add(a.id); apps.set(ad.app, e);
+      per.set(ad.app, (per.get(ad.app) || 0) + ad.spend);
+    }
+    accApps.set(a.id, [...per].sort((x, y) => y[1] - x[1]).map(([id]) => id));
+  }
+  return { accs, apps, accApps, loaded, spend: sum(accs, (a) => a.spend), rev: sum(accs, (a) => a.rev) };
+}
+
+function renderPanel(st) {
+  const withSpend = st.accs, loadingApps = st.loaded < withSpend.length, doneN = st.loaded;
   const el = $('#panel');
   if (!state.panel) { el.innerHTML = ''; return; }
   const row = (cells) => `<tr>${cells.join('')}</tr>`;
   let html;
   if (state.panel === 'accounts') {
-    const list = [...withSpend].sort((a, b) => b.spend - a.spend);
-    html = `<h4>Account có spend (${list.length})</h4><table><thead><tr><th class="l">Account</th><th class="l">BC</th><th class="l">App</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
+    // BC A–Z, then spend high → low inside each BC
+    const list = [...withSpend].sort((a, b) => bcName(a.bc).localeCompare(bcName(b.bc), 'vi', { sensitivity: 'base', numeric: true }) || b.spend - a.spend);
+    html = `<h4>Account có spend (${list.length})</h4><table><thead><tr><th class="l">BC</th><th class="l">Account</th><th class="l">App</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
       list.map((a) => {
-        const appIds = a.d ? [...new Set(model.facts.filter((f) => f.account === a.id).map((f) => f.app))].filter((x) => x !== NONE_APP && x !== PENDING_APP) : [];
-        const apps = a.d ? appIds.map(appPill).join(' ') || '<span class="meta">–</span>' : `<span class="meta${a.status === 'loading' ? ' loading' : ''}">${a.status === 'error' ? 'lỗi tải' : a.status === 'loading' ? 'đang tải…' : 'chờ tải'}</span>`;
+        const loaded = st.accApps.has(a.id);
+        const apps = loaded ? st.accApps.get(a.id).map(appPill).join(' ') || '<span class="meta">–</span>' : `<span class="meta${a.liteStatus === 'loading' || a.status === 'loading' ? ' loading' : ''}">${a.status === 'error' || a.liteStatus === 'error' ? 'lỗi tải' : a.liteStatus === 'loading' || a.status === 'loading' ? 'đang tải…' : 'chờ tải'}</span>`;
         const r = roas(a.rev, a.spend);
-        return row([`<td class="l"><span class="nm">${esc(a.name)}</span> <span class="meta">${esc(a.id)}</span></td>`, `<td class="l meta">${esc(bcName(a.bc))}</td>`, `<td class="l">${apps}</td>`, `<td class="num">${money(a.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
+        return row([`<td class="l meta">${esc(bcName(a.bc))}</td>`, `<td class="l"><span class="nm">${esc(a.name)}</span> <span class="meta">${esc(a.id)}</span></td>`, `<td class="l">${apps}</td>`, `<td class="num">${money(a.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
       }).join('') + '</tbody></table>';
   } else {
-    const byApp = new Map();
-    for (const f of model.facts) {
-      if (f.placeholder || !(f.spend > 0) || f.app === NONE_APP) continue;
-      const e = byApp.get(f.app) || { spend: 0, rev: 0, accs: new Set() };
-      e.spend += f.spend; e.rev += f.rev; e.accs.add(f.account); byApp.set(f.app, e);
-    }
+    const byApp = st.apps;
     const list = [...byApp].sort((a, b) => b[1].spend - a[1].spend);
-    html = `<h4>App đang chạy (${list.length})</h4>${loadingApps ? `<div class="note">Đã tải chi tiết ${doneN}/${withSpend.length} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}<table><thead><tr><th class="l">App</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
+    html = `<h4>App đang chạy (${list.length})</h4>${loadingApps ? `<div class="note">Đã tải ${doneN}/${withSpend.length} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}<table><thead><tr><th class="l">App</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
       (list.map(([id, e]) => {
         const a = model.apps.get(id) || {};
         const names = [...e.accs].map((x) => model.accounts.get(x)?.name || x);
         const r = roas(e.rev, e.spend);
         return row([`<td class="l"><div class="namecell">${appLink(id, true)}<span class="meta">${esc(a.platform || '')}</span></div></td>`, `<td class="l" title="${esc(names.join('\n'))}">${e.accs.size} account <span class="meta">${esc(names.slice(0, 2).join(', '))}${names.length > 2 ? '…' : ''}</span></td>`, `<td class="num">${money(e.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
-      }).join('') || '<tr><td colspan="4" class="empty">Chưa có app nào — đang chờ tải chi tiết account.</td></tr>') + '</tbody></table>';
+      }).join('') || '<tr><td colspan="4" class="empty">Chưa có app nào.</td></tr>') + '</tbody></table>';
   }
   el.innerHTML = `<div class="panel">${html}</div>`;
 }
@@ -645,25 +719,36 @@ function render() {
   const results = state.accounts;
   model = buildModel(results);
   const tree = buildTree(model);
-  const spend = sum(tree, (n) => n.spend), rev = sum(tree, (n) => n.rev);
-  const errs = results.filter((a) => a.status === 'error');
-  const accs = new Set(model.facts.filter((f) => f.spend > 0).map((f) => f.account));
-  const appSet = new Set(model.facts.filter((f) => f.spend > 0 && f.app !== NONE_APP && f.app !== PENDING_APP).map((f) => f.app));
-  const withSpend = results.filter((a) => a.spend > 0);
-  const doneN = withSpend.filter((a) => a.d || a.status === 'error').length;
-  const cur = results.find((a) => a.status === 'loading');
+  const ran = state.ran;
+  $('#placeholder').hidden = !!ran;
+  $('#overviewBox').hidden = !ran?.overview;
+  $('#detailBox').hidden = !ran?.detail;
+  $('#runBtn').textContent = state.phase ? 'Run lại' : 'Run';
+
+  const st = overviewStats();
+  const errs = results.filter((a) => a.status === 'error' || a.liteStatus === 'error');
+  const withSpend = st.accs;
+  const detailDone = withSpend.filter((a) => a.d || a.status === 'error').length;
+  const cur = results.find((a) => a.status === 'loading' || a.liteStatus === 'loading');
   const prog = state.phase === 'accounts' ? 'Đang lấy danh sách ad account…'
     : state.phase === 'summary' ? `Đang lấy spend từng account… (${results.filter((a) => a.status !== 'new').length}/${results.length})`
-    : state.phase === 'details' ? `Đang tải chi tiết theo spend cao → thấp: ${doneN}/${withSpend.length}${cur ? ' · ' + esc(cur.name) : ''}`
-    : `${withSpend.length} account có spend / ${results.length} account`;
-  const loadingApps = withSpend.length > doneN;
-  $('#summary').innerHTML = results.length || state.phase ? `
-    <div class="card c-spend"><span class="k">Spend</span><span class="v">${money(spend)}</span></div>
-    <div class="card ${(() => { const r = roas(rev, spend); return r == null ? '' : r >= 1 ? 'c-good' : r >= 0.5 ? 'c-mid' : 'c-bad'; })()}"><span class="k">ROAS IAA D0</span><span class="v">${pct(roas(rev, spend))}</span></div>
-    <button type="button" class="card c-acc ${state.panel === 'accounts' ? 'on' : ''}" data-panel="accounts"><span class="k">Account có spend</span><span class="v">${accs.size}</span><span class="s">/ ${results.length} account</span></button>
-    <button type="button" class="card c-app ${state.panel === 'apps' ? 'on' : ''}" data-panel="apps"><span class="k">App đang chạy</span><span class="v">${appSet.size}</span><span class="s">${loadingApps ? `đã tải ${doneN}/${withSpend.length} account` : 'theo campaign có spend'}</span></button>
-    <div class="progress">${prog}${state.paused ? ' · <span class="r-bad">TikTok giới hạn tốc độ, đang chờ rồi thử lại…</span>' : ''}${errs.length ? ` · <span class="r-bad" title="${esc(errs.map((e) => `${e.name}: ${e.error}`).join('\n'))}">${errs.length} account lỗi</span>` : ''}</div>` : '';
-  renderPanel(withSpend, loadingApps, doneN);
+    : state.phase === 'overview' ? `Tổng quan: đang tải app của account ${st.loaded}/${withSpend.length}${cur ? ' · ' + esc(cur.name) : ''}`
+    : state.phase === 'details' ? `Detail: đang tải theo spend cao → thấp ${detailDone}/${withSpend.length}${cur ? ' · ' + esc(cur.name) : ''}`
+    : ran ? `Xong · ${withSpend.length} account có spend / ${results.length} account` : '';
+  $('#progress').innerHTML = prog + (state.paused ? ' · <span class="r-bad">TikTok giới hạn tốc độ, đang chờ rồi thử lại…</span>' : '') + (errs.length ? ` · <span class="r-bad" title="${esc(errs.map((e) => `${e.name}: ${e.error}`).join('\n'))}">${errs.length} account lỗi</span>` : '');
+
+  if (ran?.overview) {
+    const r = roas(st.rev, st.spend);
+    const loadingApps = st.loaded < withSpend.length;
+    $('#summary').innerHTML = `
+      <div class="card c-spend"><span class="k">Spend</span><span class="v">${money(st.spend)}</span></div>
+      <div class="card ${r == null ? '' : r >= 1 ? 'c-good' : r >= 0.5 ? 'c-mid' : 'c-bad'}"><span class="k">ROAS IAA D0</span><span class="v">${pct(r)}</span></div>
+      <button type="button" class="card c-acc ${state.panel === 'accounts' ? 'on' : ''}" data-panel="accounts"><span class="k">Account có spend</span><span class="v">${withSpend.length}</span><span class="s">/ ${results.length} account</span></button>
+      <button type="button" class="card c-app ${state.panel === 'apps' ? 'on' : ''}" data-panel="apps"><span class="k">App đang chạy</span><span class="v">${st.apps.size}</span><span class="s">${loadingApps ? `đã tải ${st.loaded}/${withSpend.length} account` : 'theo ad có spend'}</span></button>`;
+    renderPanel(st);
+  }
+  if (!ran?.detail) return;
+  const spend = sum(tree, (n) => n.spend);
 
   const sortTh = (k, t) => `<th class="sortable" data-sort="${k}" tabindex="0" aria-sort="${state.sort.key === k ? (state.sort.dir === 'desc' ? 'descending' : 'ascending') : 'none'}">${t} <span class="dir">${state.sort.key === k ? (state.sort.dir === 'desc' ? '▼' : '▲') : ''}</span></th>`;
   const rows = [];
@@ -685,7 +770,7 @@ function render() {
     }
   };
   walk(tree, spend);
-  const emptyMsg = state.phase ? 'Đang tải dữ liệu từ TikTok…' : state.selected.length ? 'Không có spend trong khoảng ngày này.' : 'Chọn BC để bắt đầu.';
+  const emptyMsg = state.phase ? 'Đang tải dữ liệu từ TikTok…' : 'Không có spend trong khoảng ngày này.';
   $('#tbl').innerHTML = `<thead><tr><th class="l">BC → <button type="button" class="lvswap" id="lvswap" title="Đổi thứ tự Account / App">${state.lvl2 === 'account' ? 'Account → App' : 'App → Account'} ⇄</button> → Campaign → Creative</th>${sortTh('spend', 'Spend')}${sortTh('roas', 'ROAS IAA D0')}<th class="l">Top geo (spend · ROAS IAA D0)</th></tr></thead>
     <tbody>${rows.join('') || `<tr><td colspan="4" class="empty">${emptyMsg}</td></tr>`}</tbody>`;
 }
@@ -698,19 +783,25 @@ function mcpMessage(e) {
   switch (e?.code) {
     case 'server_not_connected': return 'Chưa có connector TikTok MCP. Thêm TikTok MCP trong claude.ai → Settings → Connectors rồi tải lại trang.';
     case 'needs_reauth': return 'Connector TikTok MCP cần đăng nhập lại: claude.ai → Settings → Connectors → TikTok MCP → Reconnect.';
-    case 'selection_required': return 'Bạn có nhiều connector tên TikTok MCP. Chọn một connector trong hộp thoại của claude.ai rồi bấm Refresh.';
-    case 'not_in_manifest': case 'consent_required': return 'Trang chưa được phép dùng TikTok MCP. Bấm Refresh và chọn Cho phép khi claude.ai hỏi.';
+    case 'selection_required': return 'Bạn có nhiều connector tên TikTok MCP. Chọn một connector trong hộp thoại của claude.ai rồi bấm Run.';
+    case 'not_in_manifest': case 'consent_required': return 'Trang chưa được phép dùng TikTok MCP. Bấm Run và chọn Cho phép khi claude.ai hỏi.';
     case 'blocked_by_policy': case 'approval_required': return 'Tổ chức của bạn đang chặn tool TikTok này cho trang.';
     case 'tiktok': return e.message;
-    default: return `Không gọi được TikTok (${esc(e?.code || 'lỗi')}): ${esc(e?.message || '')}. Bấm Refresh để thử lại.`;
+    default: return `Không gọi được TikTok (${esc(e?.code || 'lỗi')}): ${esc(e?.message || '')}. Bấm Run để thử lại.`;
   }
 }
 function notice(html, err) { $('#notice').innerHTML = html ? `<div class="notice${err ? ' err' : ''}">${html}</div>` : ''; }
 
 async function load() {
-  if (!mcp || !state.selected.length) { render(); return; }
+  if (!mcp) return;
+  if (!state.selected.length) { notice('Chọn ít nhất 1 BC.'); return; }
+  const opts = { ...state.opts };
+  if (!opts.overview && !opts.detail) { notice('Chọn Tổng quan, Detail hoặc cả hai.'); return; }
+  const key = JSON.stringify([state.selected.slice().sort(), state.preset, state.start, state.end]);
+  state.refresh = key === state.lastKey; // running the same report again = fresh data
+  state.lastKey = key;
   const run = ++state.run;
-  state.accounts = []; state.queue = []; state.phase = 'accounts';
+  state.ran = opts; state.accounts = []; state.queue = []; state.phase = 'accounts'; state.open.clear();
   notice('');
   render();
   const alive = () => run === state.run;
@@ -722,19 +813,34 @@ async function load() {
     state.phase = 'summary'; queueRender();
     await summarize(state.accounts);
     if (!alive()) return;
-    // Details one account at a time, highest spend first.
-    state.queue = state.accounts.filter((a) => a.status === 'pending').sort((a, b) => b.spend - a.spend);
-    state.phase = 'details'; queueRender();
-    while (state.queue.length) {
-      const acc = state.queue.shift();
-      if (acc.d) continue;
-      acc.status = 'loading'; queueRender();
-      try { acc.d = await fetchAccount(acc); acc.status = 'done'; } catch (e) {
-        if (isFatal(e)) throw e;
-        acc.status = 'error'; acc.error = e?.message || String(e);
+    const bySpend = state.accounts.filter((a) => a.status === 'pending').sort((a, b) => b.spend - a.spend);
+    if (opts.overview) {
+      state.phase = 'overview'; queueRender();
+      for (const acc of bySpend) {
+        acc.liteStatus = 'loading'; queueRender();
+        try { acc.lite = await fetchLite(acc); acc.liteStatus = 'done'; } catch (e) {
+          if (isFatal(e)) throw e;
+          acc.liteStatus = 'error'; acc.error = e?.message || String(e);
+        }
+        if (!alive()) return;
+        queueRender();
       }
-      if (!alive()) return;
-      queueRender();
+    }
+    if (opts.detail) {
+      // One account at a time, highest spend first; reuses the overview data already loaded.
+      state.queue = bySpend.slice();
+      state.phase = 'details'; queueRender();
+      while (state.queue.length) {
+        const acc = state.queue.shift();
+        if (acc.d) continue;
+        acc.status = 'loading'; queueRender();
+        try { acc.d = await fetchAccount(acc); acc.status = 'done'; } catch (e) {
+          if (isFatal(e)) throw e;
+          acc.status = 'error'; acc.error = e?.message || String(e);
+        }
+        if (!alive()) return;
+        queueRender();
+      }
     }
   } catch (e) {
     if (alive()) notice(mcpMessage(e), true);
@@ -778,7 +884,7 @@ function initBcPicker() {
   $('#bcNone').addEventListener('click', () => { draft.clear(); renderBcList(); });
   $('#bcApply').addEventListener('click', () => {
     state.selected = [...draft]; LS.set('bcat.selected', state.selected);
-    state.open.clear(); panel.hidden = true; renderBcBtn(); load();
+    panel.hidden = true; renderBcBtn();
   });
 }
 
@@ -794,16 +900,23 @@ function initControls() {
       if (!$('#startDate').value) $('#startDate').value = addDays(t, -6);
       state.start = $('#startDate').value; state.end = $('#endDate').value;
     }
-    load();
   }));
-  ['#startDate', '#endDate'].forEach((s) => $(s).addEventListener('change', () => { state.start = $('#startDate').value; state.end = $('#endDate').value; load(); }));
+  ['#startDate', '#endDate'].forEach((s) => $(s).addEventListener('change', () => { state.start = $('#startDate').value; state.end = $('#endDate').value; }));
+  $('#optOverview').checked = !!state.opts.overview;
+  $('#optDetail').checked = !!state.opts.detail;
+  ['#optOverview', '#optDetail'].forEach((s) => $(s).addEventListener('change', () => {
+    state.opts = { overview: $('#optOverview').checked, detail: $('#optDetail').checked };
+    LS.set('bcat.opts', state.opts);
+    $('#runBtn').disabled = !state.opts.overview && !state.opts.detail;
+  }));
+  $('#runBtn').disabled = !state.opts.overview && !state.opts.detail;
+  $('#runBtn').addEventListener('click', () => load());
   $('#summary').addEventListener('click', (e) => {
     const c = e.target.closest('[data-panel]');
     if (!c) return;
     state.panel = state.panel === c.dataset.panel ? null : c.dataset.panel;
     render();
   });
-  $('#refreshBtn').addEventListener('click', () => { state.refresh = true; load(); });
 
   const tbl = $('#tbl');
   const toggleSort = (k) => { state.sort = { key: k, dir: state.sort.key === k && state.sort.dir === 'desc' ? 'asc' : 'desc' }; LS.set('bcat.sort', state.sort); render(); };
@@ -851,12 +964,6 @@ async function boot() {
   }
   state.selected = state.selected.filter((id) => state.bcs.some((b) => b.bc_id === id));
   renderBcBtn();
-  if (!state.selected.length) {
-    notice('Bấm nút <b>BC</b> ở trên để chọn một hoặc nhiều Business Center.');
-    $('#bcBtn').click();
-    return;
-  }
-  load();
 }
 boot();
 </script>
