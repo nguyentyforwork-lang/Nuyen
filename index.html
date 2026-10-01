@@ -797,7 +797,9 @@ function rebuild(gi) {
   r.apps.sort((a, b) => b.spend - a.spend);
 }
 
-async function loadAll(refresh = false) {
+// silent = tự cập nhật ngầm: giữ số cũ trên màn hình đến khi có số mới, lỗi thì giữ số cũ.
+async function loadAll(refresh = false, silent = false) {
+  if (silent && document.getElementById("refreshBtn").disabled) return;   // đang kéo dở thì thôi
   const gen = ++loadGen;
   if (!mcpReady) { ensureDefaultRange(); renderRangeUi(); render(); return; }
   if (!mcp) {
@@ -808,9 +810,11 @@ async function loadAll(refresh = false) {
   hideBanner();
   const gi = activeTab, g = config.groups[gi];
   if (!g) { render(); return; }
-  results[gi] = { status: "loading", apps: [], errors: [] };
-  render();
+  const prevRes = results[gi];
+  silent = silent && prevRes?.status === "ok";
+  if (!silent) { results[gi] = { status: "loading", apps: [], errors: [] }; render(); }
   document.getElementById("refreshBtn").disabled = true;
+  if (silent) { prevRes.updating = true; render(); }
   try {
     await loadAccInfo(refresh);
     if (gen !== loadGen) return;
@@ -821,10 +825,10 @@ async function loadAll(refresh = false) {
     const accounts = g.accounts || [];
     // Kéo lần lượt từng tài khoản trong nhóm; xong tài khoản nào hiện tài khoản đó
     const res = { status: "ok", apps: [], errors: [], accs: [], storedAt: null, rangeKey: `${win.cur.start}|${win.cur.end}`, progress: `0/${accounts.length}` };
-    results[gi] = res;
+    if (!silent) results[gi] = res;
     for (let i = 0; i < accounts.length; i++) {
       res.progress = `${i + 1}/${accounts.length}`;
-      if (i) { rebuild(gi); render(); }
+      if (i) { rebuild(gi); render(); }   // khi chạy ngầm: thẻ của tài khoản vừa kéo xong đổi số ngay
       try {
         const raw = await fetchAccount(accounts[i], kw, rangeWindows(accounts[i]), refresh);
         if (gen !== loadGen) return;
@@ -832,6 +836,7 @@ async function loadAll(refresh = false) {
         if (raw.storedAt && (!res.storedAt || raw.storedAt < res.storedAt)) res.storedAt = raw.storedAt;
       } catch (e) {
         if (gen !== loadGen) return;
+        if (silent && accRaw.has(`${accounts[i]}|${kw}`)) { res.accs.push(accounts[i]); res.staleAccs = (res.staleAccs || 0) + 1; continue; }
         res.errors.push({ acc: accounts[i], err: e });
         // Lỗi kết nối connector thì các tài khoản sau cũng lỗi y vậy → dừng sớm, khỏi gọi thêm
         if (PAGE_LEVEL.has(e?.code) || e?.code === "tt_rate_limited") {
@@ -841,6 +846,8 @@ async function loadAll(refresh = false) {
       }
     }
     delete res.progress;
+    res.loadedAt = Date.now();
+    if (!res.storedAt) res.storedAt = res.loadedAt;
     // Mọi tài khoản cùng lỗi kết nối (vd. chưa kết nối connector) → báo một lần ở đầu trang
     const errs = res.errors.map(e => e.err);
     if (errs.length && errs.length === accounts.length && errs.every(e => e?.code === errs[0]?.code) && PAGE_LEVEL.has(errs[0]?.code)) {
@@ -850,9 +857,22 @@ async function loadAll(refresh = false) {
     rebuild(gi);
     render();
   } finally {
+    if (prevRes) prevRes.updating = false;
     if (gen === loadGen) document.getElementById("refreshBtn").disabled = false;
   }
 }
+
+// Tự cập nhật khi khoảng ngày có hôm nay (số còn chạy): 3 phút/lần, chỉ khi tab đang mở
+const AUTO_MS = 180000;
+const isLive = () => (range?.end || "") >= ymd(addDays(new Date(), -1));
+function autoRefresh() {
+  if (document.hidden || !isLive()) return;
+  const r = results[activeTab];
+  if (!r || r.status !== "ok" || r.progress || Date.now() - (r.loadedAt || 0) < AUTO_MS - 5000) return;
+  loadAll(true, true);
+}
+setInterval(autoRefresh, 30000);
+document.addEventListener("visibilitychange", autoRefresh);
 
 /* ---------- Top geo ---------- */
 async function loadGeo(a) {
@@ -1038,7 +1058,8 @@ function render() {
     : `${(g.accounts || []).length} tài khoản · chỉ camp ${kw}`;
   const status = r.status === "loading" ? "Đang kéo số…"
     : r.progress ? `Đang kéo tài khoản ${r.progress}…`
-    : r.status === "ok" && r.storedAt ? `Số liệu lúc ${new Date(r.storedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`
+    : r.updating ? "Đang cập nhật…"
+    : r.status === "ok" && r.storedAt ? `Số liệu lúc ${new Date(r.storedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}${isLive() ? " · tự cập nhật 3 phút/lần" : ""}${r.staleAccs ? ` · ${r.staleAccs} tài khoản chưa cập nhật được` : ""}`
     : "";
   let body;
   if (r.status === "loading" || (r.progress && !r.apps.length)) body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
