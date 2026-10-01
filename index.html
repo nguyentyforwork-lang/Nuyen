@@ -755,7 +755,7 @@ function assigner(kw) {
 function aggregate(acc, raw, kw, mode = "app") {
   const kwl = kw.toLowerCase();
   const accKey = `acc:${acc}`;
-  const accTerms = mode === "account" ? ruleTerms(accKey, kw) : null;
+  const accTerms = null;   // gom theo tài khoản: lấy cả tài khoản, không lọc thêm theo mã app
   const assign = mode === "account"
     ? (name => !accTerms || accTerms.every(t => name.toLowerCase().includes(t)) ? accKey : null)
     : assigner(kw);
@@ -822,7 +822,7 @@ function aggregate(acc, raw, kw, mode = "app") {
   const allNames = [...new Set([...raw.cur, ...raw.trend].map(r => r.metrics?.campaign_name)
     .concat(raw.camps.map(c => c.campaign_name)).filter(ok))].map(n => n.toLowerCase());
   const autoHere = new Set(allNames.map(n => appCode(n, kw).toLowerCase()));
-  for (const code of (mode === "account" ? [accKey] : Object.keys(config.apps))) {
+  for (const code of (mode === "account" ? [] : Object.keys(config.apps))) {
     const t = ruleTerms(code, kw); if (!t) continue;
     if (mode === "account") { if (!allNames.some(n => t.every(x => n.includes(x)))) get(code).noMatch = t.join(" + "); continue; }
     if (!apps.has(code) && !autoHere.has(code.toLowerCase())) continue;   // app không thuộc tài khoản này
@@ -1052,10 +1052,10 @@ function card(a) {
         <div class="pct">KPI ${kpi.toFixed(2)}</div>
       </div>
     </div>
-    <div class="filter-row" title="Chỉ tính camp có tên chứa mã app (không phân biệt hoa thường). Để trống = tự gom theo mã tách từ tên camp.">
+    ${byAcc ? "" : `<div class="filter-row" title="Chỉ tính camp có tên chứa mã app (không phân biệt hoa thường). Để trống = tự gom theo mã tách từ tên camp.">
       <input class="chip camp f-code${ov.appCode?.trim() ? " custom" : ""}" data-code="${esc(a.code)}" value="${esc(ov.appCode || "")}" placeholder="${esc(byAcc ? "Lọc theo mã app (không bắt buộc)" : a.code)}" spellcheck="false" aria-label="Mã app" ${readOnly ? "readonly" : ""}>
       <span class="share">${a.names.size} camp${customF ? "" : byAcc ? " · cả tài khoản" : " · tự gom"}</span>
-    </div>
+    </div>`}
     ${a.noMatch ? `<div class="match-err" role="alert">Không có camp ${esc(kwG)} nào chứa "${esc(ov.appCode)}" trong tài khoản này. Kiểm tra lại mã app.</div>` : ""}
 
     ${trendCharts(a, days, kpi)}
@@ -1248,6 +1248,7 @@ function openApp(code, acc) {
   const f = appDlg.querySelector("form"), ov = config.apps[code] || {};
   document.getElementById("appDlgTitle").textContent = ov.name ? `Sửa ${ov.name}` : "Đặt tên app";
   f.name.value = ov.name || ""; f.kpi.value = kpiOf(code).toFixed(2); f.pic.value = ov.pic || ""; f.appcode.value = ov.appCode || "";
+  f.appcode.closest("label").hidden = String(code).startsWith("acc:");   // gom theo tài khoản: không cần mã app
   appDlg.showModal();
 }
 appDlg.addEventListener("close", () => {
