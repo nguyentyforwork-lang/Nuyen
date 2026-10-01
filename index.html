@@ -122,49 +122,157 @@
     .acc { font-size: 14px; }
     .btn { font-size: 16px; }
   }
+
+  /* ---------- Toolbar & editor ---------- */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-bottom: 16px; }
+  .tb {
+    font: inherit; font-size: 14px; font-weight: 500; color: var(--text);
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 7px 12px; cursor: pointer;
+  }
+  .tb:hover { background: var(--chip-bg); }
+  .tb.primary { background: var(--line); border-color: var(--line); color: #fff; }
+  .tb.danger { color: var(--down); }
+  section + section { margin-top: 36px; }
+  .group-head .actions { margin-left: auto; display: flex; gap: 6px; }
+  .icon {
+    font: inherit; font-size: 13px; color: var(--muted); background: transparent;
+    border: 1px solid transparent; border-radius: 8px; padding: 4px 8px; cursor: pointer;
+  }
+  .icon:hover { color: var(--text); border-color: var(--border); background: var(--card); }
+  .name-row { display: flex; align-items: center; gap: 6px; }
+  .name-row .icon { margin-top: -8px; }
+  .empty {
+    border: 1.5px dashed var(--border); border-radius: 18px; min-height: 160px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 16px; cursor: pointer; background: transparent; font-family: inherit;
+  }
+  .empty:hover { color: var(--text); border-color: var(--muted); }
+  .num.na { color: var(--muted); }
+
+  dialog {
+    border: 1px solid var(--border); border-radius: 16px; padding: 0;
+    background: var(--card); color: var(--text); width: min(560px, calc(100vw - 32px));
+  }
+  dialog::backdrop { background: rgba(10, 12, 16, .45); }
+  dialog form { padding: 20px; }
+  dialog h2 { margin: 0 0 16px; font-size: 19px; }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .fields .full { grid-column: 1 / -1; }
+  .fields label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--muted); font-weight: 500; }
+  .fields input, .fields textarea {
+    font: inherit; font-size: 15px; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%;
+  }
+  .fields textarea { min-height: 84px; resize: vertical; font-variant-numeric: tabular-nums; }
+  .fields .hint { font-weight: 400; font-size: 12px; }
+  .dlg-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+  .dlg-actions .spacer { flex: 1; }
+  @media (max-width: 520px) { .fields { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
-<div class="wrap" id="app"></div>
+<div class="wrap">
+  <div class="toolbar">
+    <button class="tb primary" data-act="add-group">+ Thêm nhóm</button>
+    <button class="tb" data-act="export">Xuất JSON</button>
+    <button class="tb" data-act="import">Nhập JSON</button>
+    <button class="tb danger" data-act="clear">Xóa hết</button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+  </div>
+  <div id="app"></div>
+</div>
+
+<dialog id="groupDlg">
+  <form method="dialog">
+    <h2>Nhóm</h2>
+    <div class="fields">
+      <label class="full">Tên nhóm<input name="name" required placeholder="Apero"></label>
+      <label class="full">Ghi chú<input name="note" placeholder="chỉ camp Ecomdy"></label>
+    </div>
+    <div class="dlg-actions">
+      <button class="tb danger" value="delete" formnovalidate>Xóa nhóm</button>
+      <span class="spacer"></span>
+      <button class="tb" value="cancel" formnovalidate>Hủy</button>
+      <button class="tb primary" value="save">Lưu</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="appDlg">
+  <form method="dialog">
+    <h2>App</h2>
+    <div class="fields">
+      <label class="full">Tên app<input name="name" required placeholder="AI Chat"></label>
+      <label>OS<input name="os" placeholder="iOS / Android (trống = OS?)"></label>
+      <label>KPI ROAS<input name="kpi" type="number" step="any" min="0" value="1"></label>
+      <label class="full">Campaign<input name="campaign" placeholder="APB508_Global_ROAS_Ecomdy"></label>
+      <label class="full">ID tài khoản<input name="account" placeholder="7542372674190934023"></label>
+      <label>Spend<input name="spend" type="number" step="any" min="0" placeholder="728"></label>
+      <label>Spend kỳ trước <span class="hint">(để tính Δ)</span><input name="prevSpend" type="number" step="any" min="0"></label>
+      <label class="full">NS/ngày <span class="hint">(trống = hiện SPEND/NGÀY)</span><input name="budget" type="number" step="any" min="0"></label>
+      <label class="full">Số liệu theo ngày <span class="hint">— mỗi dòng 1 ngày, cũ → mới: <code>ROAS</code> hoặc <code>ROAS, spend</code> hoặc <code>ngày, ROAS, spend</code>. Dòng cuối = ROAS hiện tại.</span>
+        <textarea name="daily" placeholder="1.02, 110&#10;0.98, 95&#10;0.906, 102"></textarea></label>
+    </div>
+    <div class="dlg-actions">
+      <button class="tb danger" value="delete" formnovalidate>Xóa app</button>
+      <span class="spacer"></span>
+      <button class="tb" value="cancel" formnovalidate>Hủy</button>
+      <button class="tb primary" value="save">Lưu</button>
+    </div>
+  </form>
+</dialog>
 
 <script>
-/* ---------- Dữ liệu (thay bằng API của bạn) ----------
-   roas:   chuỗi ROAS theo ngày (cũ -> mới), điểm cuối = hiện tại
-   spend:  tổng spend kỳ này; prevSpend: kỳ trước (tính Δ SPEND)
-   budget: ngân sách/ngày (NS/NGÀY). null => hiển thị SPEND/NGÀY
+/* ---------- Mô hình dữ liệu ----------
+   group: { name, note, apps: [app] }
+   app:   { name, os, kpi, campaign, account, spend, prevSpend, budget,
+            daily: [{ date?, roas, spend? }] }   // cũ -> mới, phần tử cuối = hiện tại
+   Lưu trong localStorage của trình duyệt; dùng Xuất/Nhập JSON để sao lưu.
 */
-const GROUPS = [
-  {
-    name: "Apero",
-    note: "chỉ camp Ecomdy",
-    apps: [
-      { name: "AI Chat", os: null, kpi: 1.0, campaign: "APB508_Global_ROAS_Ecomdy",
-        account: "7542372674190934023", spend: 728, prevSpend: 1486, budget: 1500,
-        roas: [1.12, 1.02, 1.03, 0.99, 1.06, 1.02, 1.01, 0.97, 1.00, 1.04, 1.00, 1.00, 0.95, 0.906] },
-      { name: "Elyra", os: null, kpi: 1.0, campaign: "Ecomdy_Elyra",
-        account: "7660741366342991879", spend: 343, prevSpend: 174, budget: null,
-        roas: [0.99, 0.92, 0.97, 0.94, 1.00, 0.96, 0.93, 0.97, 0.95, 0.91, 1.05, 1.03, 0.97, 0.957] },
-      { name: "Photo Editor (APL389)", os: null, kpi: 1.0, campaign: "APL389_Ecomdy",
-        account: "7546063697488691217", spend: 299, prevSpend: 498, budget: 500,
-        roas: [1.00, 0.97, 0.96, 0.75, 1.03, 1.02, 0.92, 0.94, 1.01, 0.91, 0.63, 0.99, 1.01, 0.929] },
-      { name: "TutorMe", os: null, kpi: 1.0, campaign: "Ecomdy_TutorMe",
-        account: "7660741366342991879", spend: 271, prevSpend: 207, budget: null,
-        roas: [0.89, 0.88, 0.89, 0.90, 0.89, 0.89, 0.87, 0.89, 0.93, 0.92, 0.88, 0.84, 0.85, 0.802] },
-      { name: "Cast to TV", os: null, kpi: 1.0, campaign: "AIP805_Global_ROAS_Ecomdy",
-        account: "7542372674190934023", spend: 94.31, prevSpend: 496, budget: 500,
-        roas: [0.70, 0.69, 0.63, 0.66, 0.10, 0.66, 0.62, 0.65, 0.66, 1.15, 0.80, 0.55, 0.53, 0.431] },
-    ],
-  },
-];
-
-/* ---------- Helpers ---------- */
-const fmtUsd = v => "$" + (v >= 1000 || Number.isInteger(v)
-  ? Math.round(v).toLocaleString("en-US")
-  : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const STORE_KEY = "apero-dashboard-v1";
 const GOOD_RATIO = 0.9; // >= 90% KPI -> màu nâu, dưới -> đỏ
 
+const SAMPLE = [{
+  name: "Apero", note: "chỉ camp Ecomdy",
+  apps: [
+    { name: "AI Chat", kpi: 1, campaign: "APB508_Global_ROAS_Ecomdy", account: "7542372674190934023", spend: 728, prevSpend: 1486, budget: 1500,
+      daily: [1.12, 1.02, 1.03, 0.99, 1.06, 1.02, 1.01, 0.97, 1.00, 1.04, 1.00, 1.00, 0.95, 0.906].map(roas => ({ roas })) },
+    { name: "Elyra", kpi: 1, campaign: "Ecomdy_Elyra", account: "7660741366342991879", spend: 343, prevSpend: 174,
+      daily: [0.99, 0.92, 0.97, 0.94, 1.00, 0.96, 0.93, 0.97, 0.95, 0.91, 1.05, 1.03, 0.97, 0.957].map(roas => ({ roas })) },
+    { name: "Photo Editor (APL389)", kpi: 1, campaign: "APL389_Ecomdy", account: "7546063697488691217", spend: 299, prevSpend: 498, budget: 500,
+      daily: [1.00, 0.97, 0.96, 0.75, 1.03, 1.02, 0.92, 0.94, 1.01, 0.91, 0.63, 0.99, 1.01, 0.929].map(roas => ({ roas })) },
+    { name: "TutorMe", kpi: 1, campaign: "Ecomdy_TutorMe", account: "7660741366342991879", spend: 271, prevSpend: 207,
+      daily: [0.89, 0.88, 0.89, 0.90, 0.89, 0.89, 0.87, 0.89, 0.93, 0.92, 0.88, 0.84, 0.85, 0.802].map(roas => ({ roas })) },
+    { name: "Cast to TV", kpi: 1, campaign: "AIP805_Global_ROAS_Ecomdy", account: "7542372674190934023", spend: 94.31, prevSpend: 496, budget: 500,
+      daily: [0.70, 0.69, 0.63, 0.66, 0.10, 0.66, 0.62, 0.65, 0.66, 1.15, 0.80, 0.55, 0.53, 0.431].map(roas => ({ roas })) },
+  ],
+}];
+
+let groups = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return structuredClone(SAMPLE);
+}
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(groups)); } catch (e) {}
+  render();
+}
+
+/* ---------- Helpers ---------- */
+const isNum = v => typeof v === "number" && isFinite(v);
+const fmtUsd = v => !isNum(v) ? "—" : "$" + (v >= 1000 || Number.isInteger(v)
+  ? Math.round(v).toLocaleString("en-US")
+  : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const toNum = s => { const v = parseFloat(String(s).replace(/[$,\s]/g, "")); return isFinite(v) ? v : null; };
+
 function sparkline(series, kpi) {
+  if (series.length < 2) return `<svg class="spark" viewBox="0 0 480 64" aria-hidden="true"></svg>`;
   const W = 480, H = 64, pad = 6;
   const lo = Math.min(...series, kpi), hi = Math.max(...series, kpi);
   const span = hi - lo || 1;
@@ -174,8 +282,7 @@ function sparkline(series, kpi) {
   const ky = y(kpi).toFixed(1);
   const dots = series.slice(-2).map((v, j) => {
     const i = series.length - 2 + j;
-    const c = v >= kpi ? "var(--up)" : "var(--down)";
-    return `<circle cx="${x(i)}" cy="${y(v)}" r="5" fill="${c}"/>`;
+    return `<circle cx="${x(i)}" cy="${y(v)}" r="5" fill="${v >= kpi ? "var(--up)" : "var(--down)"}"/>`;
   }).join("");
   return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
     <line x1="0" x2="${W}" y1="${ky}" y2="${ky}" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="8 6" vector-effect="non-scaling-stroke" opacity=".7"/>
@@ -185,81 +292,208 @@ function sparkline(series, kpi) {
 }
 
 function dailyTable(app) {
-  const days = app.roas.length;
-  const perDay = app.spend / days;
-  const today = new Date();
-  const rows = app.roas.map((r, i) => {
-    const d = new Date(today); d.setDate(today.getDate() - (days - 1 - i));
-    const label = d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
-    const cls = r >= app.kpi ? "up" : "down";
-    return `<tr><td>${label}</td><td>${fmtUsd(perDay)}</td><td class="num ${cls}">${r.toFixed(3)}</td></tr>`;
+  const d = app.daily || [];
+  if (!d.length) return `<div class="acc">Chưa có số liệu theo ngày.</div>`;
+  const hasSpend = d.some(r => isNum(r.spend));
+  const rows = d.map((r, i) => {
+    const label = r.date || `Ngày ${i + 1}`;
+    return `<tr><td>${esc(label)}</td>${hasSpend ? `<td>${fmtUsd(r.spend)}</td>` : ""}<td class="num ${r.roas >= app.kpi ? "up" : "down"}">${r.roas.toFixed(3)}</td></tr>`;
   }).reverse().join("");
-  return `<table><thead><tr><th>Ngày</th><th>Spend</th><th>ROAS</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<table><thead><tr><th>Ngày</th>${hasSpend ? "<th>Spend</th>" : ""}<th>ROAS</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function card(app, idx) {
-  const score = app.roas[app.roas.length - 1];
-  const ratio = score / app.kpi;
+function card(app, gi, ai) {
+  const kpi = isNum(app.kpi) && app.kpi > 0 ? app.kpi : 1;
+  const series = (app.daily || []).map(r => r.roas);
+  const score = series.length ? series[series.length - 1] : null;
+  const ratio = isNum(score) ? score / kpi : 0;
   const color = ratio >= GOOD_RATIO ? "var(--good)" : "var(--bad)";
-  const delta = app.prevSpend ? (app.spend - app.prevSpend) / app.prevSpend : 0;
-  const deltaTxt = (delta >= 0 ? "+" : "-") + Math.abs(Math.round(delta * 100)) + "%";
-  const third = app.budget != null
+  const hasDelta = isNum(app.spend) && isNum(app.prevSpend) && app.prevSpend > 0;
+  const delta = hasDelta ? (app.spend - app.prevSpend) / app.prevSpend : 0;
+  const deltaHtml = hasDelta
+    ? `<div class="num ${delta >= 0 ? "up" : "down"}">${(delta >= 0 ? "+" : "-") + Math.abs(Math.round(delta * 100))}%</div>`
+    : `<div class="num na">—</div>`;
+  const third = isNum(app.budget)
     ? { lbl: "NS/ngày", val: fmtUsd(app.budget) }
     : { lbl: "Spend/ngày", val: fmtUsd(app.spend) };
+  const id = `d${gi}-${ai}`;
 
   return `<article class="card">
     <div class="top">
       <div>
-        <div class="name">${esc(app.name)}</div>
+        <div class="name-row"><div class="name">${esc(app.name)}</div><button class="icon" data-act="edit-app" data-g="${gi}" data-a="${ai}">Sửa</button></div>
         <div class="chips">
           <span class="chip">${app.os ? esc(app.os) : "OS?"}</span>
-          <span class="chip">KPI ${app.kpi.toFixed(2)}</span>
+          <span class="chip">KPI ${kpi.toFixed(2)}</span>
           ${app.campaign ? `<span class="chip camp">${esc(app.campaign)}</span>` : ""}
         </div>
       </div>
       <div class="score">
-        <div class="val" style="color:${color}">${score.toFixed(3)}</div>
-        <div class="pct">${Math.round(ratio * 100)}% KPI</div>
+        <div class="val" style="color:${isNum(score) ? color : "var(--muted)"}">${isNum(score) ? score.toFixed(3) : "—"}</div>
+        <div class="pct">${isNum(score) ? Math.round(ratio * 100) + "% KPI" : "chưa có ROAS"}</div>
       </div>
     </div>
 
     <div class="bar"><span style="width:${Math.min(ratio, 1) * 100}%;background:${color}"></span></div>
-    ${sparkline(app.roas, app.kpi)}
+    ${sparkline(series, kpi)}
 
     <div class="stats">
       <div class="stat"><div class="lbl">Spend</div><div class="num">${fmtUsd(app.spend)}</div></div>
-      <div class="stat"><div class="lbl">Δ Spend</div><div class="num ${delta >= 0 ? "up" : "down"}">${deltaTxt}</div></div>
+      <div class="stat"><div class="lbl">Δ Spend</div>${deltaHtml}</div>
       <div class="stat"><div class="lbl">${third.lbl}</div><div class="num">${third.val}</div></div>
     </div>
 
     <div class="foot">
       <span class="acc">${esc(app.account)}</span>
-      <button class="btn" aria-expanded="false" aria-controls="d${idx}">Theo ngày</button>
+      <button class="btn" data-act="toggle" aria-expanded="false" aria-controls="${id}">Theo ngày</button>
     </div>
-    <div class="daily" id="d${idx}">${dailyTable(app)}</div>
+    <div class="daily" id="${id}">${dailyTable(app)}</div>
   </article>`;
 }
 
 function render() {
-  let idx = 0;
-  document.getElementById("app").innerHTML = GROUPS.map(g => {
-    const total = g.apps.reduce((s, a) => s + a.spend, 0);
+  const el = document.getElementById("app");
+  if (!groups.length) {
+    el.innerHTML = `<button class="empty" style="width:100%" data-act="add-group">Chưa có dữ liệu — bấm để thêm nhóm đầu tiên</button>`;
+    return;
+  }
+  el.innerHTML = groups.map((g, gi) => {
+    const total = g.apps.reduce((s, a) => s + (isNum(a.spend) ? a.spend : 0), 0);
     return `<section>
       <div class="group-head">
         <h1>${esc(g.name)}</h1>
         <span class="sub">${g.apps.length} app · ${fmtUsd(Math.round(total))}${g.note ? " · " + esc(g.note) : ""}</span>
+        <span class="actions">
+          <button class="icon" data-act="edit-group" data-g="${gi}">Sửa nhóm</button>
+          <button class="icon" data-act="add-app" data-g="${gi}">+ App</button>
+        </span>
       </div>
-      <div class="grid">${g.apps.map(a => card(a, idx++)).join("")}</div>
+      <div class="grid">
+        ${g.apps.map((a, ai) => card(a, gi, ai)).join("")}
+        <button class="empty" data-act="add-app" data-g="${gi}">+ Thêm app</button>
+      </div>
     </section>`;
   }).join("");
 }
 
+/* ---------- Editor ---------- */
+const groupDlg = document.getElementById("groupDlg");
+const appDlg = document.getElementById("appDlg");
+let editing = null; // { gi, ai }
+
+function openGroup(gi) {
+  editing = { gi };
+  const f = groupDlg.querySelector("form");
+  const g = gi != null ? groups[gi] : { name: "", note: "" };
+  f.name.value = g.name; f.note.value = g.note || "";
+  f.querySelector('[value="delete"]').hidden = gi == null;
+  groupDlg.showModal();
+}
+
+function dailyToText(daily) {
+  return (daily || []).map(r => [r.date, r.roas, r.spend].filter(v => v != null && v !== "").join(", ")).join("\n");
+}
+function parseDaily(text) {
+  return text.split(/\n/).map(l => l.trim()).filter(Boolean).map(line => {
+    const parts = line.split(/[,;\t]+/).map(s => s.trim()).filter(Boolean);
+    let date = null;
+    if (parts.length >= 3 || (parts.length === 2 && toNum(parts[0]) === null)) date = parts.shift();
+    const roas = toNum(parts[0]);
+    const spend = parts.length > 1 ? toNum(parts[1]) : null;
+    if (roas === null) return null;
+    const r = { roas };
+    if (date) r.date = date;
+    if (spend !== null) r.spend = spend;
+    return r;
+  }).filter(Boolean);
+}
+
+function openApp(gi, ai) {
+  editing = { gi, ai };
+  const f = appDlg.querySelector("form");
+  const a = ai != null ? groups[gi].apps[ai] : { kpi: 1 };
+  for (const k of ["name", "os", "campaign", "account"]) f[k].value = a[k] ?? "";
+  for (const k of ["kpi", "spend", "prevSpend", "budget"]) f[k].value = isNum(a[k]) ? a[k] : "";
+  f.daily.value = dailyToText(a.daily);
+  f.querySelector('[value="delete"]').hidden = ai == null;
+  appDlg.showModal();
+}
+
+groupDlg.addEventListener("close", () => {
+  const f = groupDlg.querySelector("form"), { gi } = editing;
+  if (groupDlg.returnValue === "save") {
+    const data = { name: f.name.value.trim(), note: f.note.value.trim() };
+    if (gi == null) groups.push({ ...data, apps: [] });
+    else Object.assign(groups[gi], data);
+    save();
+  } else if (groupDlg.returnValue === "delete" && confirm(`Xóa nhóm "${groups[gi].name}" và toàn bộ app trong đó?`)) {
+    groups.splice(gi, 1); save();
+  }
+});
+
+appDlg.addEventListener("close", () => {
+  const f = appDlg.querySelector("form"), { gi, ai } = editing;
+  if (appDlg.returnValue === "save") {
+    const app = {
+      name: f.name.value.trim(),
+      os: f.os.value.trim() || null,
+      kpi: toNum(f.kpi.value) ?? 1,
+      campaign: f.campaign.value.trim(),
+      account: f.account.value.trim(),
+      spend: toNum(f.spend.value),
+      prevSpend: toNum(f.prevSpend.value),
+      budget: toNum(f.budget.value),
+      daily: parseDaily(f.daily.value),
+    };
+    if (ai == null) groups[gi].apps.push(app); else groups[gi].apps[ai] = app;
+    save();
+  } else if (appDlg.returnValue === "delete" && confirm(`Xóa app "${groups[gi].apps[ai].name}"?`)) {
+    groups[gi].apps.splice(ai, 1); save();
+  }
+});
+
+/* ---------- Import / export ---------- */
+function exportJson() {
+  const blob = new Blob([JSON.stringify(groups, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `dashboard-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+document.getElementById("importFile").addEventListener("change", async e => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (!Array.isArray(data)) throw new Error("File phải là mảng các nhóm");
+    groups = data; save();
+  } catch (err) { alert("Không đọc được file: " + err.message); }
+});
+
+/* ---------- Events ---------- */
 document.addEventListener("click", e => {
-  const btn = e.target.closest(".btn[aria-controls]");
-  if (!btn) return;
-  const open = btn.getAttribute("aria-expanded") !== "true";
-  btn.setAttribute("aria-expanded", open);
-  document.getElementById(btn.getAttribute("aria-controls")).classList.toggle("open", open);
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const gi = el.dataset.g != null ? +el.dataset.g : null;
+  const ai = el.dataset.a != null ? +el.dataset.a : null;
+  switch (el.dataset.act) {
+    case "toggle": {
+      const open = el.getAttribute("aria-expanded") !== "true";
+      el.setAttribute("aria-expanded", open);
+      document.getElementById(el.getAttribute("aria-controls")).classList.toggle("open", open);
+      break;
+    }
+    case "add-group": openGroup(null); break;
+    case "edit-group": openGroup(gi); break;
+    case "add-app": openApp(gi, null); break;
+    case "edit-app": openApp(gi, ai); break;
+    case "export": exportJson(); break;
+    case "import": document.getElementById("importFile").click(); break;
+    case "clear":
+      if (confirm("Xóa toàn bộ dữ liệu? (Nên Xuất JSON trước để sao lưu)")) { groups = []; save(); }
+      break;
+  }
 });
 
 render();
