@@ -18,6 +18,12 @@
   --good: #0f7d3c;
   --bad: #c43838;
   --warn: #a86a00;
+  --k-spend: #1f5fd6; --k-spend-bg: #e8f0fd;
+  --k-good: #0f7d3c; --k-good-bg: #e4f4ea;
+  --k-mid: #9a6200; --k-mid-bg: #fcf1dc;
+  --k-bad: #c43838; --k-bad-bg: #fbe8e8;
+  --k-acc: #6a3ec7; --k-acc-bg: #f0eafc;
+  --k-app: #0b7a82; --k-app-bg: #e1f3f4;
   --font-ui: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-num: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -25,13 +31,13 @@
   :root:not([data-theme="light"]) {
     --bg: #0f1217; --surface: #161a21; --row-1: #1d232d; --row-2: #191e26; --line: #2a313c;
     --fg: #eef1f6; --fg-2: #b6becc; --muted: #828b9b; --accent: #5b8ff0; --accent-ink: #0b1220;
-    --hover: #1f2a3c; --good: #4cc27a; --bad: #ef7272; --warn: #e2a43a; color-scheme: dark;
+    --hover: #1f2a3c; --good: #4cc27a; --bad: #ef7272; --warn: #e2a43a; --k-spend: #7fa9f6; --k-spend-bg: #16233a; --k-good: #55c983; --k-good-bg: #12281b; --k-mid: #e6aa45; --k-mid-bg: #2c2312; --k-bad: #f07a7a; --k-bad-bg: #321a1b; --k-acc: #ad91f2; --k-acc-bg: #221a37; --k-app: #4cc8d0; --k-app-bg: #0f2a2c; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f1217; --surface: #161a21; --row-1: #1d232d; --row-2: #191e26; --line: #2a313c;
   --fg: #eef1f6; --fg-2: #b6becc; --muted: #828b9b; --accent: #5b8ff0; --accent-ink: #0b1220;
-  --hover: #1f2a3c; --good: #4cc27a; --bad: #ef7272; --warn: #e2a43a; color-scheme: dark;
+  --hover: #1f2a3c; --good: #4cc27a; --bad: #ef7272; --warn: #e2a43a; --k-spend: #7fa9f6; --k-spend-bg: #16233a; --k-good: #55c983; --k-good-bg: #12281b; --k-mid: #e6aa45; --k-mid-bg: #2c2312; --k-bad: #f07a7a; --k-bad-bg: #321a1b; --k-acc: #ad91f2; --k-acc-bg: #221a37; --k-app: #4cc8d0; --k-app-bg: #0f2a2c; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--font-ui); font-variant-numeric: tabular-nums; }
@@ -78,7 +84,18 @@ button.card { cursor: pointer; }
 button.card:hover { border-color: var(--accent); }
 button.card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .card .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-.card .v { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+.card .v { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; color: var(--kc, var(--fg)); }
+.card { --kc: var(--fg); background: var(--kbg, var(--surface)); border-color: color-mix(in srgb, var(--kc) 28%, transparent); }
+.card .k { color: var(--kc); opacity: 0.85; font-weight: 600; }
+.card.c-spend { --kc: var(--k-spend); --kbg: var(--k-spend-bg); }
+.card.c-good { --kc: var(--k-good); --kbg: var(--k-good-bg); }
+.card.c-mid { --kc: var(--k-mid); --kbg: var(--k-mid-bg); }
+.card.c-bad { --kc: var(--k-bad); --kbg: var(--k-bad-bg); }
+.card.c-acc { --kc: var(--k-acc); --kbg: var(--k-acc-bg); }
+.card.c-app { --kc: var(--k-app); --kbg: var(--k-app-bg); }
+button.card:hover, button.card.on { border-color: var(--kc); }
+button.card.on { box-shadow: 0 0 0 1px var(--kc) inset; }
+button.card .k::after { color: var(--kc); }
 .card .s { font-size: 12px; color: var(--muted); }
 button.card .k::after { content: " ▾"; color: var(--accent); }
 button.card.on .k::after { content: " ▴"; }
@@ -640,10 +657,10 @@ function render() {
     : `${withSpend.length} account có spend / ${results.length} account`;
   const loadingApps = withSpend.length > doneN;
   $('#summary').innerHTML = results.length || state.phase ? `
-    <div class="card"><span class="k">Spend</span><span class="v">${money(spend)}</span></div>
-    <div class="card"><span class="k">ROAS IAA D0</span><span class="v ${rcls(roas(rev, spend))}">${pct(roas(rev, spend))}</span></div>
-    <button type="button" class="card ${state.panel === 'accounts' ? 'on' : ''}" data-panel="accounts"><span class="k">Account có spend</span><span class="v">${accs.size}</span><span class="s">/ ${results.length} account</span></button>
-    <button type="button" class="card ${state.panel === 'apps' ? 'on' : ''}" data-panel="apps"><span class="k">App đang chạy</span><span class="v">${appSet.size}</span><span class="s">${loadingApps ? `đã tải ${doneN}/${withSpend.length} account` : 'theo campaign có spend'}</span></button>
+    <div class="card c-spend"><span class="k">Spend</span><span class="v">${money(spend)}</span></div>
+    <div class="card ${(() => { const r = roas(rev, spend); return r == null ? '' : r >= 1 ? 'c-good' : r >= 0.5 ? 'c-mid' : 'c-bad'; })()}"><span class="k">ROAS IAA D0</span><span class="v">${pct(roas(rev, spend))}</span></div>
+    <button type="button" class="card c-acc ${state.panel === 'accounts' ? 'on' : ''}" data-panel="accounts"><span class="k">Account có spend</span><span class="v">${accs.size}</span><span class="s">/ ${results.length} account</span></button>
+    <button type="button" class="card c-app ${state.panel === 'apps' ? 'on' : ''}" data-panel="apps"><span class="k">App đang chạy</span><span class="v">${appSet.size}</span><span class="s">${loadingApps ? `đã tải ${doneN}/${withSpend.length} account` : 'theo campaign có spend'}</span></button>
     <div class="progress">${prog}${state.paused ? ' · <span class="r-bad">TikTok giới hạn tốc độ, đang chờ rồi thử lại…</span>' : ''}${errs.length ? ` · <span class="r-bad" title="${esc(errs.map((e) => `${e.name}: ${e.error}`).join('\n'))}">${errs.length} account lỗi</span>` : ''}</div>` : '';
   renderPanel(withSpend, loadingApps, doneN);
 
