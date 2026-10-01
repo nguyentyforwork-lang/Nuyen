@@ -168,7 +168,7 @@ a.applink:hover .nm { text-decoration: underline; }
   <div id="panel"></div>
 
   <div class="tablebox"><table id="tbl"></table></div>
-  <p class="foot">Level: BC → Account (hoặc App, bấm nút ⇄ trên tiêu đề bảng để đổi) → Campaign → Creative. Bấm dòng để xổ ra. BC xếp A–Z; bấm tiêu đề Spend hoặc ROAS IAA D0 để sort các level bên dưới. Chỉ hiện dòng có spend &gt; 0. Ngày tính theo múi giờ của từng ad account. Dữ liệu tải lần lượt từng account, spend cao trước; bấm account đang chờ để tải nó trước. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
+  <p class="foot">Level: BC → Account (hoặc App, bấm nút ⇄ trên tiêu đề bảng để đổi) → Campaign → Creative. Bấm dòng để xổ ra. BC xếp A–Z; bấm tiêu đề Spend hoặc ROAS IAA D0 để sort các level bên dưới. Chỉ hiện dòng có spend &gt; 0. Dữ liệu tải lần lượt từng account, spend cao trước; bấm account đang chờ để tải nó trước. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
 </div>
 
 <script>
@@ -537,7 +537,7 @@ function label(n) {
     const a = model.accounts.get(n.id) || {};
     const appIds = [...new Set(n.rows.map((r) => r.app))].filter((x) => x !== NONE_APP && x !== PENDING_APP);
     const st = a.status === 'loading' ? '<span class="meta loading">đang tải…</span>' : a.status === 'pending' ? '<span class="meta">chờ tải · bấm để tải trước</span>' : a.status === 'error' ? `<span class="meta r-bad" title="${esc(a.error || '')}">lỗi tải</span>` : '';
-    return `<span class="nm">${esc(a.name || n.id)}</span>${st}<span class="meta">${esc(n.id)} · ${esc(a.tz || '')}${a.cur && a.cur !== 'USD' ? ' · ' + esc(a.cur) : ''}</span>${appIds.slice(0, 3).map(appPill).join('')}${appIds.length > 3 ? `<span class="pill">+${appIds.length - 3}</span>` : ''}`;
+    return `<span class="nm">${esc(a.name || n.id)}</span>${st}<span class="meta">${esc(n.id)}${a.cur && a.cur !== 'USD' ? ' · ' + esc(a.cur) : ''}</span>${appIds.slice(0, 3).map(appPill).join('')}${appIds.length > 3 ? `<span class="pill">+${appIds.length - 3}</span>` : ''}`;
   }
   if (n.dim === 'app' && n.id === PENDING_APP) return `<span class="nm meta loading">Đang tải chi tiết…</span><span class="meta">${new Set(n.rows.map((r) => r.account)).size} account</span>`;
   if (n.dim === 'app') {
