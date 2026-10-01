@@ -6,7 +6,7 @@ Web dashboard theo dõi **khách đang chạy app nào** dựa trên **BC ID**, 
 
 | Tab | Nội dung |
 |---|---|
-| **Theo level** | Bảng phân cấp **BC → Ad account ⇄ App → Campaign → Creative**. Account/App đổi chỗ được (kéo thả chip hoặc bấm ⇄). Mỗi level đều có **Spend, ROAS IAA D0, Top geo** (3 nước spend cao nhất, rê chuột xem ROAS từng nước) và trạng thái (đang chạy / link Event Manager chưa spend / chạm max budget). **Sort mọi level** từ trên xuống theo Spend hoặc ROAS IAA D0 (cao→thấp hoặc ngược lại). Có ẩn dòng spend nhỏ, mở tới level, tìm kiếm, 🎯 lọc toàn dashboard. |
+| **Theo level** | Bảng phân cấp **BC (chọn) → Account → Campaign → Geo → Creative**. Level 2 đổi được Account ⇄ App. Creative dưới mỗi geo = creative chạy ở nước đó trong campaign đó. Mỗi level đều có **Spend, ROAS IAA D0**; level BC/Account/Campaign có thêm cột **Top geo** (3 nước spend cao nhất, rê chuột xem ROAS từng nước) và trạng thái (đang chạy / link Event Manager chưa spend / chạm max budget). **Sort mọi level** từ trên xuống theo Spend hoặc ROAS IAA D0. Có ẩn dòng spend nhỏ, mở tới level, tìm kiếm (cả tên creative), 🎯 lọc toàn dashboard. |
 | **Tổng quan** | KPI (Spend, IAA revenue D0, ROAS IAA D0, số app đang chạy, số lần chạm budget) · Spend theo ngày · ROAS IAA D0 theo ngày · Top geo · Top campaign · Bảng chạm max budget |
 | **Campaign & Budget** | Danh sách campaign với budget ngày (CBO hoặc tổng budget ad group), max % budget/ngày, số ngày chạm max · bảng chi tiết campaign/ad group-ngày có spend ≥ 95% budget |
 | **Creative** | Gom theo video (tên file `.mp4`) hoặc theo ad name: spend, ROAS IAA D0, top geo + scatter Spend vs ROAS |

@@ -18,16 +18,19 @@ const state = {
   data: null,
   model: null,
   focus: { bc: null, account: null, app: null }, // dashboard-wide filter
-  midOrder: LS.get('midOrder', ['account', 'app']),
+  lvl2: LS.get('lvl2', 'account'), // level 2: account | app
   lvSort: LS.get('lvSort', { key: 'spend', dir: 'desc' }),
-  expandTo: 1,
+  expandTo: 2,
   openOverrides: new Map(), // path -> bool (manual expand/collapse)
   sorts: LS.get('sorts', {}),
   colOrder: LS.get('colOrder', {}),
   charts: {},
 };
 
-const DIMS = { bc: 'BC', account: 'Account', app: 'App', campaign: 'Campaign', creative: 'Creative' };
+const DIMS = { bc: 'BC', account: 'Account', app: 'App', campaign: 'Campaign', geo: 'Geo', creative: 'Creative' };
+let regionNames = null;
+try { regionNames = new Intl.DisplayNames(['vi'], { type: 'region' }); } catch { /* old browser */ }
+const countryName = (c) => { try { return regionNames?.of(c) || c; } catch { return c; } };
 const NONE_APP = '__none__';
 
 // ---------- utils ----------
@@ -291,8 +294,8 @@ function renderSubbar() {
 
 function filteredCampaigns() { return state.model.campaigns.filter((f) => inFocus(f.bc, f.account, f.app)); }
 
-// ---------- LEVELS: BC -> Account <-> App -> Campaign -> Creative ----------
-function levelDims() { return ['bc', ...state.midOrder, 'campaign', 'creative']; }
+// ---------- LEVELS: BC -> Account (or App) -> Campaign -> Geo -> Creative ----------
+function levelDims() { return ['bc', state.lvl2, 'campaign', 'geo', 'creative']; }
 
 function levelFacts() {
   const q = $('#pivotSearch').value.trim().toLowerCase();
@@ -312,27 +315,48 @@ function levelFacts() {
   });
 }
 
-function creativeNodes(f, parentPath, depth) {
+// Creatives of one campaign; with `geo` set, only their spend/revenue in that country.
+function creativeNodes(f, parentPath, depth, geo) {
   const mode = $('#creativeGroupLv').value;
   const ads = state.model.campAds.get(f.key) || [];
   const groups = new Map();
   for (const ad of ads) {
     const k = creativeKey(ad.ad_name, mode) || ad.ad_id;
     if (f.creativeQuery && !k.toLowerCase().includes(f.creativeQuery)) continue;
-    const g = groups.get(k) || { name: k, spend: 0, rev: 0, ads: 0, geo: new Map() };
-    g.spend += ad.spend; g.rev += ad.rev; g.ads++;
-    addGeo(g.geo, state.model.adGeo.get(`${f.account}|${ad.ad_id}`));
+    let spend = ad.spend, rev = ad.rev;
+    if (geo) {
+      const e = state.model.adGeo.get(`${f.account}|${ad.ad_id}`)?.get(geo.country);
+      if (!e) continue;
+      spend = e.spend; rev = e.rev;
+    }
+    const g = groups.get(k) || { name: k, spend: 0, rev: 0, ads: 0 };
+    g.spend += spend; g.rev += rev; g.ads++;
     groups.set(k, g);
   }
-  const nodes = [...groups.values()].map((g) => ({
+  const nodes = [...groups.values()].filter((g) => g.spend > 0).map((g) => ({
     path: `${parentPath}/creative:${g.name}`, dim: 'creative', id: g.name, depth, label: g.name,
-    spend: g.spend, rev: g.rev, roas: roas(g.rev, g.spend), geo: g.geo, ads: g.ads, children: [], rows: [],
+    spend: g.spend, rev: g.rev, roas: roas(g.rev, g.spend), ads: g.ads, children: [], rows: [],
   }));
-  // Spend of deleted ads (not returned at ad level) so the children add up to the campaign.
-  const rest = f.spend - sum(nodes, (n) => n.spend);
-  if (!f.creativeQuery && rest > Math.max(1, f.spend * 0.01)) {
-    const rrev = Math.max(0, f.rev - sum(nodes, (n) => n.rev));
-    nodes.push({ path: `${parentPath}/creative:__rest`, dim: 'creative', id: '__rest', depth, label: '(Ad đã xoá / không có dữ liệu ad)', spend: rest, rev: rrev, roas: roas(rrev, rest), geo: null, children: [], rows: [], muted: true });
+  // Spend of deleted ads (not returned at ad level) so the children add up to the parent.
+  const total = geo || f;
+  const rest = total.spend - sum(nodes, (n) => n.spend);
+  if (!f.creativeQuery && rest > Math.max(1, total.spend * 0.01)) {
+    const rrev = Math.max(0, total.rev - sum(nodes, (n) => n.rev));
+    nodes.push({ path: `${parentPath}/creative:__rest`, dim: 'creative', id: '__rest', depth, label: '(Ad đã xoá / không có dữ liệu ad)', spend: rest, rev: rrev, roas: roas(rrev, rest), children: [], rows: [], muted: true });
+  }
+  return nodes;
+}
+
+function geoNodes(f, parentPath, depth) {
+  const geo = state.model.campGeo.get(f.key);
+  if (!geo) return [];
+  const nodes = [];
+  for (const [country, e] of geo) {
+    if (!(e.spend > 0)) continue;
+    const path = `${parentPath}/geo:${country}`;
+    const children = creativeNodes(f, path, depth + 1, { country, spend: e.spend, rev: e.rev });
+    if (f.creativeQuery && !children.length) continue;
+    nodes.push({ path, dim: 'geo', id: country, depth, spend: e.spend, rev: e.rev, roas: roas(e.rev, e.spend), share: f.spend > 0 ? e.spend / f.spend : 0, children, rows: [] });
   }
   return nodes;
 }
@@ -359,7 +383,7 @@ function buildLevelTree(facts, dims, depth = 0, prefix = '') {
     };
     if (dim === 'campaign') {
       node.fact = rows[0];
-      node.children = rows[0].campaign ? creativeNodes(rows[0], path, depth + 1) : [];
+      node.children = rows[0].campaign ? geoNodes(rows[0], path, depth + 1) : [];
     } else {
       node.children = buildLevelTree(rows, dims, depth + 1, path);
     }
@@ -374,6 +398,7 @@ function levelName(n) {
     case 'account': return accName(n.id);
     case 'app': return appName(n.id);
     case 'campaign': return n.fact?.campaign_name || n.id;
+    case 'geo': return `${n.id} ${countryName(n.id)}`;
     default: return n.label;
   }
 }
@@ -383,10 +408,17 @@ function levelLabel(n) {
     case 'bc': return `${esc(bcName(n.id))} <span class="count">BC ${esc(n.id)}</span>`;
     case 'account': {
       const a = state.model.accounts.get(n.id) || {};
-      return `${esc(a.name || n.id)} <span class="count">${esc(n.id)} · ${esc(a.timezone || '')}${a.currency && a.currency !== 'USD' ? ' · ' + esc(a.currency) : ''}</span>`;
+      const apps = [...new Set(n.rows.map((r) => r.app).filter((x) => x !== NONE_APP))].map(appName);
+      const appTag = apps.length ? ` <span class="tag" title="${esc(apps.join('\n'))}">${apps.length === 1 ? esc(apps[0]) : apps.length + ' app'}</span>` : '';
+      return `${esc(a.name || n.id)}${appTag} <span class="count">${esc(n.id)} · ${esc(a.timezone || '')}${a.currency && a.currency !== 'USD' ? ' · ' + esc(a.currency) : ''}</span>`;
     }
     case 'app': return `${appLabel(n.id)} <span class="count">${n.id === NONE_APP ? '' : esc(n.id)}</span>`;
-    case 'campaign': return `<span class="name" title="${esc(levelName(n))} (${esc(n.fact?.campaign || '')})">${esc(levelName(n))}</span>`;
+    case 'campaign': {
+      const f = n.fact;
+      const other = state.lvl2 === 'account' ? (f.app !== NONE_APP ? appName(f.app) : '') : accName(f.account);
+      return `<span class="name" title="${esc(levelName(n))} (${esc(f.campaign || '')})">${esc(levelName(n))}</span>${other ? ` <span class="tag">${esc(other)}</span>` : ''}`;
+    }
+    case 'geo': return `<b>${esc(n.id)}</b> <span class="count">${esc(countryName(n.id))} · ${pct(n.share, 0)} spend camp</span>`;
     default: return `<span class="name ${n.muted ? 'muted' : ''}" title="${esc(n.label)}">${esc(n.label)}</span>${n.ads > 1 ? ` <span class="count">${n.ads} ads</span>` : ''}`;
   }
 }
@@ -398,7 +430,7 @@ function subLabel(n) {
 
 function statusCell(n) {
   const thr = state.config.budgetHitThreshold;
-  if (n.dim === 'creative') return '';
+  if (n.dim === 'creative' || n.dim === 'geo') return '';
   if (n.dim === 'campaign') {
     const f = n.fact;
     if (!f.campaign) return '<span class="tag">Event Manager</span>';
@@ -417,8 +449,7 @@ function isOpen(n, searching) {
 }
 
 function renderLevels() {
-  // chips
-  $('#midLevels').innerHTML = state.midOrder.map((d) => `<span class="chip" data-dim="${d}">${DIMS[d]}</span>`).join('<span class="arrow">→</span>');
+  $$('#lvl2Seg button').forEach((b) => b.classList.toggle('active', b.dataset.lvl2 === state.lvl2));
   $$('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.lvSort.key));
   $('#sortDir').textContent = state.lvSort.dir === 'desc' ? '↓ Cao → thấp' : '↑ Thấp → cao';
 
@@ -440,11 +471,11 @@ function renderLevels() {
       const tog = n.children.length ? `<span class="toggle">${open ? '▾' : '▸'}</span>` : '<span class="toggle"></span>';
       const share = parentSpend > 0 ? n.spend / parentSpend : 0;
       out.push(`<tr class="lvl${n.depth} dim-${n.dim}" data-path="${esc(n.path)}">
-        <td class="l"><span class="indent" style="width:${n.depth * 22}px"></span>${tog}<span class="lvtag">${DIMS[n.dim]}</span>${levelLabel(n)}${n.dim !== 'creative' ? `<button class="focusbtn" title="Lọc dashboard theo dòng này">🎯</button>` : ''}</td>
+        <td class="l"><span class="indent" style="width:${n.depth * 22}px"></span>${tog}<span class="lvtag">${DIMS[n.dim]}</span>${levelLabel(n)}${n.dim !== 'creative' && n.dim !== 'geo' ? `<button class="focusbtn" title="Lọc dashboard theo dòng này">🎯</button>` : ''}</td>
         <td class="muted">${subLabel(n)}</td>
         <td><span class="bar" style="width:${Math.max(2, share * 60)}px" title="${pct(share, 0)} spend của level trên"></span>${money(n.spend)}</td>
         <td>${roasCell(n.roas)}</td>
-        <td class="l">${topGeoCell(n.geo, n.spend)}</td>
+        <td class="l">${n.dim === 'geo' || n.dim === 'creative' ? '' : topGeoCell(n.geo, n.spend)}</td>
         <td class="l">${statusCell(n)}</td>
       </tr>`);
       if (open) walk(n.children, n.spend);
@@ -494,25 +525,17 @@ function applyFocusFromNode(n) {
 }
 
 function initLevels() {
-  Sortable.create($('#midLevels'), {
-    animation: 150,
-    draggable: '.chip',
-    onEnd: () => {
-      const order = [...$('#midLevels').querySelectorAll('.chip')].map((c) => c.dataset.dim);
-      setMidOrder(order);
-    },
-  });
-  $('#swapLevels').addEventListener('click', () => setMidOrder([...state.midOrder].reverse()));
+  $$('#lvl2Seg button').forEach((b) => b.addEventListener('click', () => setLvl2(b.dataset.lvl2)));
   $$('#sortSeg button').forEach((b) => b.addEventListener('click', () => setLvSort(b.dataset.sort, state.lvSort.dir)));
   $('#sortDir').addEventListener('click', () => setLvSort(state.lvSort.key, state.lvSort.dir === 'desc' ? 'asc' : 'desc'));
   $('#expandTo').addEventListener('change', (e) => { state.expandTo = Number(e.target.value); state.openOverrides.clear(); renderLevels(); });
   ['#pivotSearch', '#minSpendLv', '#creativeGroupLv', '#showLinkedOnly'].forEach((s) => $(s).addEventListener('input', () => state.model && renderLevels()));
 }
 
-function setMidOrder(order) {
-  state.midOrder = order;
+function setLvl2(dim) {
+  state.lvl2 = dim;
   state.openOverrides.clear();
-  LS.set('midOrder', order);
+  LS.set('lvl2', dim);
   renderLevels();
 }
 

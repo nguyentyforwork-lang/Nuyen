@@ -71,6 +71,8 @@ function mockOverview(bcIds, rangeReq, config) {
           campaignDaily.push({ campaign_id: cid, campaign_name: cname, date, spend, rev });
           adgroupDaily.push({ adgroup_id: agid, adgroup_name: adgroups[agid].name, campaign_id: cid, date, spend });
         }
+        const g = GEOS.slice().sort(() => r() - 0.5).slice(0, 4);
+        const gw = [0.5, 0.25, 0.15, 0.1];
         const nAds = 3 + Math.floor(r() * 4);
         let w = Array.from({ length: nAds }, () => r() ** 2);
         const ws = w.reduce((a, b) => a + b, 0);
@@ -85,11 +87,8 @@ function mockOverview(bcIds, rangeReq, config) {
             ad_id: adId, ad_name: name, adgroup_id: agid, adgroup_name: adgroups[agid].name,
             campaign_id: cid, campaign_name: cname, app_id: app.app_id, spend, rev,
           });
-          const ag = GEOS.slice().sort(() => r() - 0.5).slice(0, 3);
-          [0.6, 0.3, 0.1].forEach((x, j) => adGeo.push({ ad_id: adId, country: ag[j], spend: spend * x, rev: rev * x * (0.6 + r() * 0.8) }));
+          g.forEach((country, j) => adGeo.push({ ad_id: adId, country, spend: spend * gw[j], rev: rev * gw[j] * (0.6 + r() * 0.8) }));
         });
-        const g = GEOS.slice().sort(() => r() - 0.5).slice(0, 4);
-        const gw = [0.5, 0.25, 0.15, 0.1];
         g.forEach((country, k) => geo.push({ campaign_id: cid, country, spend: cSpend * gw[k], rev: cRev * gw[k] * (0.6 + r() * 0.8) }));
       }
     }

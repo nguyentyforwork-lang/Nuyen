@@ -62,10 +62,14 @@
           <span class="muted">Level:</span>
           <span class="chip fixed">BC</span>
           <span class="arrow">→</span>
-          <div class="chipzone" id="midLevels" title="Kéo thả hoặc bấm ⇄ để đổi Account / App"></div>
-          <button class="btn sm" id="swapLevels" title="Đổi Account ⇄ App">⇄</button>
+          <span class="seg sm" id="lvl2Seg" title="Level 2">
+            <button data-lvl2="account" class="active">Account</button>
+            <button data-lvl2="app">App</button>
+          </span>
           <span class="arrow">→</span>
           <span class="chip fixed">Campaign</span>
+          <span class="arrow">→</span>
+          <span class="chip fixed">Geo</span>
           <span class="arrow">→</span>
           <span class="chip fixed">Creative</span>
         </div>
@@ -87,9 +91,9 @@
           <label>Mở tới
             <select id="expandTo">
               <option value="0">BC</option>
-              <option value="1" selected>Level 2</option>
-              <option value="2">Level 3</option>
-              <option value="3">Campaign</option>
+              <option value="1">Account / App</option>
+              <option value="2" selected>Campaign</option>
+              <option value="3">Geo</option>
               <option value="4">Creative</option>
             </select>
           </label>
@@ -97,7 +101,7 @@
           <label class="chk"><input type="checkbox" id="showLinkedOnly" checked /> Hiện app link Event Manager chưa spend</label>
         </div>
         <div class="tablewrap levelwrap"><table id="pivotTable" class="tbl pivot"></table></div>
-        <p class="muted small">Bấm dòng để xổ ra/thu lại · 🎯 lọc toàn bộ dashboard theo dòng đó · Top geo = 3 nước spend cao nhất (% spend), rê chuột để xem ROAS từng nước.</p>
+        <p class="muted small">Bấm dòng để xổ ra/thu lại · 🎯 lọc toàn bộ dashboard theo dòng đó · Cột Top geo = 3 nước spend cao nhất (% spend), rê chuột xem ROAS từng nước · Creative dưới mỗi geo = creative chạy ở nước đó trong campaign đó.</p>
       </div>
     </section>
 
