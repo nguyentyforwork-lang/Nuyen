@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>App Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="vendor/chart.umd.js"></script>
+  <script src="vendor/Sortable.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">App Tracker <span id="demoBadge" class="badge" hidden>DEMO</span></div>
+    <div class="filters">
+      <label>BC
+        <select id="bcSelect"></select>
+      </label>
+      <div class="seg" id="presetSeg" role="group" aria-label="Khoảng ngày">
+        <button data-preset="today" class="active">Today</button>
+        <button data-preset="yesterday">Yesterday</button>
+        <button data-preset="last3">Last 3 days</button>
+        <button data-preset="last7">Last 7 days</button>
+        <button data-preset="custom">Custom</button>
+      </div>
+      <span id="customRange" hidden>
+        <input type="date" id="startDate" /> → <input type="date" id="endDate" />
+      </span>
+      <label class="chk" title="Last N days có tính cả hôm nay không">
+        <input type="checkbox" id="includeToday" /> gồm hôm nay
+      </label>
+      <button id="refreshBtn" class="btn">↻ Refresh</button>
+    </div>
+  </header>
+
+  <div class="subbar">
+    <div id="tzInfo" class="muted"></div>
+    <div id="focusChips"></div>
+    <div id="status" class="muted"></div>
+  </div>
+
+  <nav class="tabs">
+    <button data-tab="overview" class="active">Tổng quan</button>
+    <button data-tab="mapping">Account ↔ App</button>
+    <button data-tab="campaigns">Campaign &amp; Budget</button>
+    <button data-tab="creatives">Creative</button>
+  </nav>
+
+  <main>
+    <!-- OVERVIEW -->
+    <section id="tab-overview" class="tab active">
+      <div class="kpis" id="kpis"></div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Spend theo ngày</h3>
+          <div class="chart"><canvas id="spendChart"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>ROAS IAA D0 theo ngày</h3>
+          <div class="chart"><canvas id="roasChart"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>Top geo (spend)</h3>
+          <div class="chart tall"><canvas id="geoChart"></canvas></div>
+        </div>
+        <div class="card">
+          <h3>Top campaign</h3>
+          <div class="tablewrap"><table id="topCampTable" class="tbl"></table></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>⚠ Campaign / Ad group chạm max budget <span class="muted small" id="hitNote"></span></h3>
+        <div class="tablewrap"><table id="hitTableMini" class="tbl"></table></div>
+      </div>
+    </section>
+
+    <!-- MAPPING -->
+    <section id="tab-mapping" class="tab">
+      <div class="card">
+        <div class="pivotbar">
+          <span class="muted">Kéo thả để đổi cách nhóm:</span>
+          <div class="chipzone" id="pivotLevels" title="Thứ tự nhóm (trái → phải)"></div>
+          <span class="muted">Kéo vào/ra:</span>
+          <div class="chipzone pool" id="pivotPool"></div>
+          <div class="presets">
+            <button class="btn sm" data-pivot="account,app">Account → App</button>
+            <button class="btn sm" data-pivot="app,account">App → Account</button>
+            <button class="btn sm" data-pivot="app,account,campaign">App → Account → Campaign</button>
+          </div>
+        </div>
+        <div class="pivottools">
+          <input id="pivotSearch" type="search" placeholder="Tìm account / app / campaign…" />
+          <label class="chk"><input type="checkbox" id="showLinkedOnly" checked /> Hiện cả app chỉ link trong Event Manager (chưa spend)</label>
+          <button class="btn sm" id="expandAll">Mở hết</button>
+          <button class="btn sm" id="collapseAll">Đóng hết</button>
+          <span class="muted small">Kéo tiêu đề cột để đổi thứ tự cột · bấm tiêu đề để sort · bấm 🎯 để lọc toàn bộ dashboard theo dòng đó</span>
+        </div>
+        <div class="tablewrap"><table id="pivotTable" class="tbl pivot"></table></div>
+      </div>
+    </section>
+
+    <!-- CAMPAIGNS -->
+    <section id="tab-campaigns" class="tab">
+      <div class="card">
+        <h3>Campaign</h3>
+        <div class="tablewrap"><table id="campTable" class="tbl"></table></div>
+      </div>
+      <div class="card">
+        <h3>Chạm max budget (spend ≥ <span id="thr"></span> budget ngày)</h3>
+        <p class="muted small">Budget là budget <b>hiện tại</b> của campaign (CBO) hoặc ad group (budget ngày). Ngày tính theo múi giờ ad account.</p>
+        <div class="tablewrap"><table id="hitTable" class="tbl"></table></div>
+      </div>
+    </section>
+
+    <!-- CREATIVES -->
+    <section id="tab-creatives" class="tab">
+      <div class="card">
+        <div class="pivottools">
+          <label>Nhóm theo
+            <select id="creativeGroup">
+              <option value="video">Video (tên file)</option>
+              <option value="ad">Ad name</option>
+            </select>
+          </label>
+          <label>Spend tối thiểu $ <input id="minSpend" type="number" value="0" min="0" step="10" style="width:90px" /></label>
+          <input id="creativeSearch" type="search" placeholder="Tìm creative…" />
+        </div>
+        <div class="grid2">
+          <div>
+            <h3>Spend vs ROAS IAA D0</h3>
+            <div class="chart tall"><canvas id="creativeChart"></canvas></div>
+          </div>
+          <div class="tablewrap tallwrap"><table id="creativeTable" class="tbl"></table></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="tooltip" class="tooltip" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

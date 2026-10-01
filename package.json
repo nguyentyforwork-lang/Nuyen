@@ -1,0 +1,21 @@
+{
+  "name": "nuyen-app-tracker",
+  "version": "1.0.0",
+  "description": "TikTok BC app tracking dashboard: account <-> app mapping, ROAS IAA D0, spend, geo, campaigns, creatives",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.4",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "sortablejs": "^1.15.3"
+  }
+}
