@@ -280,6 +280,9 @@
   .tabs button:hover { color: var(--text); }
   .tabs .tab-add { font-weight: 500; font-size: 14px; color: var(--camp-text); }
   .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+  .save-state { font-size: 13px; color: var(--muted); }
+  .save-state.saved { color: var(--up); }
+  .save-state.error { color: var(--down); font-weight: 600; }
   .match-err { margin-top: 8px; font-size: 13px; color: var(--down); background: color-mix(in srgb, var(--down) 8%, transparent); border-radius: 8px; padding: 6px 10px; }
   .f-code, .f-kw { font: inherit; font-size: 15px; font-weight: 500; min-width: 0; border: 1px dashed transparent; outline: none; }
   .f-code { flex: 1 1 120px; } .f-kw { flex: 1 1 100px; }
@@ -307,6 +310,8 @@
     </div>
     <span class="range-label" id="rangeLabel"></span>
     <span class="spacer"></span>
+    <span class="save-state" id="saveState" role="status"></span>
+    <button class="tb edit-only" data-act="save" id="saveBtn">Lưu</button>
     <button class="tb" data-act="refresh" id="refreshBtn">Làm mới</button>
   </div>
   <div id="banner" class="banner" hidden></div>
@@ -487,19 +492,38 @@ function loadLocal() {
 function normalize(c) {
   return { groups: Array.isArray(c?.groups) ? c.groups : [], apps: c?.apps && typeof c.apps === "object" ? c.apps : {} };
 }
-function saveConfig() {
+// Trạng thái lưu: mọi thay đổi tự lưu ngay; nút Lưu để lưu lại thủ công và xác nhận.
+let saveStatus = { state: "idle", at: null }, pendingSaves = 0;
+function showSaveState() {
+  const el = document.getElementById("saveState"); if (!el) return;
+  const t = saveStatus.at ? new Date(saveStatus.at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
+  el.className = "save-state " + saveStatus.state;
+  el.textContent = saveStatus.state === "saving" ? "Đang lưu…"
+    : saveStatus.state === "error" ? "Chưa lưu được, bấm Lưu để thử lại"
+    : saveStatus.state === "saved" ? `Đã lưu lúc ${t}` : (dbRef ? "Tự lưu lên server" : "Lưu trong trình duyệt này");
+}
+function saveConfig(manual = false) {
   const snap = structuredClone(config);
   if (!dbRef) {
-    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(snap)); }
-    catch (e) { toast("Trình duyệt không cho lưu cấu hình."); }
-    return;
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(snap)); saveStatus = { state: "saved", at: Date.now() }; if (manual) toast("Đã lưu."); }
+    catch (e) { saveStatus = { state: "error", at: null }; toast("Trình duyệt không cho lưu cấu hình."); }
+    showSaveState();
+    return Promise.resolve();
   }
+  pendingSaves++; saveStatus = { ...saveStatus, state: "saving" }; showSaveState();
   writing = writing.then(() => dbRef.set({ ...snap, updatedAt: new Date().toISOString() }))
+    .then(() => { if (!--pendingSaves) { saveStatus = { state: "saved", at: Date.now() }; showSaveState(); if (manual) toast("Đã lưu lên server."); } })
     .catch(err => {
+      pendingSaves = Math.max(0, pendingSaves - 1);
+      saveStatus = { state: "error", at: null }; showSaveState();
       if (err?.code === "invalid_argument") { readOnly = true; render(); toast("Bạn chỉ có quyền xem, thay đổi không được lưu."); }
-      else toast("Chưa lưu được thay đổi. Kiểm tra kết nối rồi thử lại.");
+      else toast("Chưa lưu được thay đổi. Kiểm tra kết nối rồi bấm Lưu.");
     });
+  return writing;
 }
+window.addEventListener("beforeunload", e => {
+  if (pendingSaves > 0 || saveStatus.state === "error") { e.preventDefault(); e.returnValue = ""; }
+});
 
 /* ---------- Gọi TikTok qua connector ---------- */
 const ERR_TEXT = {
@@ -1195,18 +1219,19 @@ document.addEventListener("click", e => {
     case "edit-group": openGroup(+el.dataset.g); break;
     case "edit-app": openApp(el.dataset.code); break;
     case "refresh": loadAll(true); break;
+    case "save": document.activeElement?.blur?.(); saveConfig(true); break;
   }
 });
 
 /* ---------- Khởi động ---------- */
 async function boot() {
   config = loadLocal();
-  ensureDefaultRange(); renderRangeUi(); render();
+  ensureDefaultRange(); renderRangeUi(); render(); showSaveState();
   const use = n => (window.claude?.use ? window.claude.use(n) : Promise.resolve(null));
   const [db, m] = await Promise.all([use("db"), use("mcp")]);
   mcp = m; mcpReady = true;
   if (db) {
-    dbRef = db.doc(CONFIG_DOC);
+    dbRef = db.doc(CONFIG_DOC); showSaveState();
     let first = true;
     dbRef.onSnapshot(snap => {
       if (snap.metadata.hasPendingWrites) return;
