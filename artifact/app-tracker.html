@@ -168,7 +168,7 @@ a.applink:hover .nm { text-decoration: underline; }
   <div id="panel"></div>
 
   <div class="tablebox"><table id="tbl"></table></div>
-  <p class="foot">Level: BC → Account (hoặc App, bấm nút ⇄ trên tiêu đề bảng để đổi) → Campaign → Creative. Bấm dòng để xổ ra. Bấm tiêu đề Spend hoặc ROAS IAA D0 để sort mọi level. Chỉ hiện dòng có spend &gt; 0. Ngày tính theo múi giờ của từng ad account. Dữ liệu tải lần lượt từng account, spend cao trước; bấm account đang chờ để tải nó trước. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
+  <p class="foot">Level: BC → Account (hoặc App, bấm nút ⇄ trên tiêu đề bảng để đổi) → Campaign → Creative. Bấm dòng để xổ ra. BC xếp A–Z; bấm tiêu đề Spend hoặc ROAS IAA D0 để sort các level bên dưới. Chỉ hiện dòng có spend &gt; 0. Ngày tính theo múi giờ của từng ad account. Dữ liệu tải lần lượt từng account, spend cao trước; bấm account đang chờ để tải nó trước. Tiền quy về USD. ROAS IAA D0 = ad_impression_ad_revenue_day0 / spend.</p>
 </div>
 
 <script>
@@ -300,7 +300,8 @@ async function pool(items, limit, fn) {
 
 async function listBCs() {
   const list = await getAll('bc_get', {}, 50);
-  return list.map((x) => ({ bc_id: String(x.bc_info.bc_id), name: x.bc_info.name, status: x.bc_info.status }));
+  return list.map((x) => ({ bc_id: String(x.bc_info.bc_id), name: x.bc_info.name || '', status: x.bc_info.status }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'vi', { sensitivity: 'base', numeric: true }));
 }
 async function listAdvertisers(bcId) {
   const assets = await getAll('bc_asset_get', { bc_id: bcId, asset_type: 'ADVERTISER' }, 50);
@@ -630,7 +631,9 @@ function render() {
   const sortTh = (k, t) => `<th class="sortable" data-sort="${k}" tabindex="0" aria-sort="${state.sort.key === k ? (state.sort.dir === 'desc' ? 'descending' : 'ascending') : 'none'}">${t} <span class="dir">${state.sort.key === k ? (state.sort.dir === 'desc' ? '▼' : '▲') : ''}</span></th>`;
   const rows = [];
   const walk = (nodes, parentSpend) => {
-    for (const n of nodes.sort(cmp)) {
+    // BC rows A–Z; every level below follows the Spend / ROAS sort.
+    const sorted = nodes[0]?.dim === 'bc' ? nodes.sort((a, b) => bcName(a.id).localeCompare(bcName(b.id), 'vi', { sensitivity: 'base', numeric: true })) : nodes.sort(cmp);
+    for (const n of sorted) {
       const kids = n.kids ? n.kids() : [];
       const open = kids.length && isOpen(n);
       const share = parentSpend > 0 ? n.spend / parentSpend : 0;
@@ -640,15 +643,14 @@ function render() {
         <td class="num"><span class="bar-s" style="width:${Math.max(2, Math.round(share * 56))}px"></span>${money(n.spend)}</td>
         <td class="num ${rcls(n.roas)}">${pct(n.roas)}</td>
         <td class="l">${geoCell(n)}</td>
-        <td class="l">${budgetCell(n)}</td>
       </tr>`);
       if (open) walk(kids, n.spend);
     }
   };
   walk(tree, spend);
   const emptyMsg = state.phase ? 'Đang tải dữ liệu từ TikTok…' : state.selected.length ? 'Không có spend trong khoảng ngày này.' : 'Chọn BC để bắt đầu.';
-  $('#tbl').innerHTML = `<thead><tr><th class="l">BC → <button type="button" class="lvswap" id="lvswap" title="Đổi level 2 giữa Account và App">${state.lvl2 === 'account' ? 'Account' : 'App'} ⇄ ${state.lvl2 === 'account' ? 'App' : 'Account'}</button> → Campaign → Creative</th>${sortTh('spend', 'Spend')}${sortTh('roas', 'ROAS IAA D0')}<th class="l">Top geo (spend · ROAS IAA D0)</th><th class="l">Budget</th></tr></thead>
-    <tbody>${rows.join('') || `<tr><td colspan="5" class="empty">${emptyMsg}</td></tr>`}</tbody>`;
+  $('#tbl').innerHTML = `<thead><tr><th class="l">BC → <button type="button" class="lvswap" id="lvswap" title="Đổi level 2 giữa Account và App">${state.lvl2 === 'account' ? 'Account' : 'App'} ⇄ ${state.lvl2 === 'account' ? 'App' : 'Account'}</button> → Campaign → Creative</th>${sortTh('spend', 'Spend')}${sortTh('roas', 'ROAS IAA D0')}<th class="l">Top geo (spend · ROAS IAA D0)</th></tr></thead>
+    <tbody>${rows.join('') || `<tr><td colspan="4" class="empty">${emptyMsg}</td></tr>`}</tbody>`;
 }
 
 let renderQueued = false;
