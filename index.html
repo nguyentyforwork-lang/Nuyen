@@ -289,10 +289,12 @@
   .save-state.error { color: var(--down); font-weight: 600; }
   .acc-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .acc-date { font-size: 13px; color: var(--muted); }
-  .new-row { display: flex; justify-content: flex-end; margin-top: 12px; }
-  .new-badge { font: inherit; cursor: pointer; border: 1px solid var(--new-bd); background: var(--new-bg); color: var(--new-fg); border-radius: 12px; padding: 8px 16px; display: flex; flex-direction: column; align-items: center; min-width: 110px; line-height: 1.1; }
-  .new-badge b { font-size: 32px; font-weight: 700; }
-  .new-badge span { font-size: 13px; font-weight: 500; margin-top: 4px; white-space: nowrap; }
+  /* Chân thẻ: trái = ID tài khoản + nút; phải = ô New camp cao bằng cả cụm */
+  .foot2 { display: flex; gap: 14px; align-items: stretch; margin-top: 18px; }
+  .foot-left { display: flex; flex-direction: column; gap: 12px; min-width: 0; flex: 1; justify-content: space-between; }
+  .new-badge { font: inherit; cursor: pointer; border: 1px solid var(--new-bd); background: var(--new-bg); color: var(--new-fg); border-radius: 14px; padding: 8px 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 120px; line-height: 1; flex-shrink: 0; }
+  .new-badge b { font-size: 46px; font-weight: 700; letter-spacing: -.02em; }
+  .new-badge span { font-size: 14px; font-weight: 600; margin-top: 6px; white-space: nowrap; }
   .new-badge.zero { background: transparent; border-color: var(--border); color: var(--muted); }
   .groupby { border: 0; padding: 0; margin: 0; min-width: 0; }
   .groupby legend { font-size: 13px; color: var(--muted); font-weight: 500; padding: 0; margin-bottom: 5px; }
@@ -1069,17 +1071,19 @@ function card(a) {
         <div class="vs">/ ${a.ids.size} camp có spend</div></div>
     </div>
 
-    <div class="foot">
+    <div class="foot2">
+      <div class="foot-left">
       <span class="acc-wrap"><button class="acc-link" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" title="${esc(accName || "Xem camp")}">${esc(a.acc)}</button>
         <span class="acc-date">${spanText(win.cur.start, win.cur.end)}${accInfo.get(a.acc)?.tz ? " · " + tzOffset(accInfo.get(a.acc).tz) : ""}</span></span>
       <span class="foot-btns">
         <button class="btn" data-act="panel" data-kind="geo" data-id="${esc(id)}" aria-expanded="${panel === "geo"}">Top geo</button>
         <button class="btn" data-act="panel" data-kind="daily" data-id="${esc(id)}" aria-expanded="${panel === "daily"}">Theo ngày</button>
       </span>
-    </div>
-    <div class="new-row"><button class="new-badge${a.newCamps ? "" : " zero"}" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" data-new="1"
+      </div>
+      <button class="new-badge${a.newCamps ? "" : " zero"}" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" data-new="1"
       title="Camp ${esc(config.groups[activeTab]?.keyword || "Ecomdy")} được tạo trong khoảng ngày đang xem (theo giờ tài khoản). Bấm để xem.">
-      <b>${a.newCamps}</b><span>New camp</span></button></div>
+      <b>${a.newCamps}</b><span>New camp</span></button>
+    </div>
     ${panel === "daily" ? `<div class="panel">${dailyPanel(a, kpi, days)}</div>` : ""}
     ${panel === "geo" ? `<div class="panel">${geoPanel(a, kpi)}</div>` : ""}
   </article>`;
