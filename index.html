@@ -332,10 +332,10 @@
     <h2 id="appDlgTitle">App</h2>
     <div class="fields">
       <label class="full">Tên app<input name="name" id="a-name" placeholder="AI Chat"></label>
-      <label class="full">Mã app <span class="hint">(không bắt buộc, để trống thì không hiện)</span><input name="appcode" id="a-appcode" placeholder="APB508"></label>
+      <label class="full">Mã app <span class="hint">(không bắt buộc; dùng để lọc camp và hiện dưới tên app)</span><input name="appcode" id="a-appcode" placeholder="APB508"></label>
       <label class="full">UA PIC<input name="pic" id="a-pic" placeholder="Tên người phụ trách"></label>
       <label class="full">KPI ROAS IAA D0<input name="kpi" id="a-kpi" type="number" step="0.01" min="0" placeholder="1.00"></label>
-      <label class="full">Lọc camp có chứa <span class="hint">(trống = tự gom theo mã app)</span><input name="filter" id="a-filter" placeholder="AIP805_Global_ROAS"></label>
+      <label class="full">Lọc tên camp <span class="hint">(nhiều chữ cách nhau bằng dấu phẩy; tự ghép thêm mã app; camp phải chứa tất cả)</span><input name="filter" id="a-filter" placeholder="Ecomdy, Global_ROAS"></label>
     </div>
     <div class="dlg-actions">
       <button class="tb" value="cancel" formnovalidate>Hủy</button>
@@ -630,26 +630,31 @@ async function fetchAccount(acc, kw, win, refresh) {
   };
 }
 
-// Bộ lọc camp người dùng tự đặt cho từng app (config.apps[code].filter).
-// Camp chứa đoạn lọc → thuộc app đó (đoạn dài nhất thắng). App đã có bộ lọc thì camp cùng mã
-// nhưng không khớp đoạn lọc bị loại khỏi app.
-// Bộ lọc chỉ có từ khóa nhóm (vd. "Ecomdy", "Ecomdy_") khớp mọi camp → coi như không có bộ lọc
-function validFilter(f, kw) {
-  const v = (f || "").trim();
-  if (!v) return false;
-  const rest = v.toLowerCase().split(kw.toLowerCase()).join("").replace(/[_\s-]/g, "");
-  return rest.length > 0;
+// Bộ lọc camp của từng app = các chữ người dùng gõ (cách nhau bằng dấu phẩy) + mã app.
+// Camp phải chứa TẤT CẢ các điều kiện mới thuộc app (không phân biệt hoa thường).
+// Vd. lọc "Ecomdy" + mã app "APB508" → camp có cả "Ecomdy" và "APB508".
+// Nhiều app cùng khớp → app có điều kiện cụ thể hơn (dài hơn) thắng.
+const splitTerms = f => (f || "").split(/[,;+]/).map(t => t.trim().toLowerCase()).filter(Boolean);
+const onlyKeyword = (t, kw) => !t.split(kw.toLowerCase()).join("").replace(/[_\s-]/g, "");
+function ruleTerms(code, kw) {
+  const ov = config.apps[code] || {};
+  const terms = splitTerms(ov.filter);
+  if (!terms.length && !ov.appCode?.trim()) return null;      // chưa đặt lọc riêng → tự gom
+  const c = (ov.appCode?.trim() || code).toLowerCase();
+  if (!terms.includes(c)) terms.push(c);
+  return terms.some(t => !onlyKeyword(t, kw)) ? terms : null;  // chỉ có "Ecomdy" thì khớp mọi camp → bỏ
 }
 function assigner(kw) {
-  const filters = Object.entries(config.apps)
-    .filter(([, v]) => validFilter(v?.filter, kw))
-    .map(([code, v]) => ({ code, f: v.filter.trim().toLowerCase() }))
-    .sort((a, b) => b.f.length - a.f.length);
+  const rules = Object.keys(config.apps)
+    .map(code => ({ code, terms: ruleTerms(code, kw) }))
+    .filter(x => x.terms)
+    .sort((a, b) => b.terms.join("").length - a.terms.join("").length);
+  const ruled = new Set(rules.map(x => x.code));
   return name => {
     const n = name.toLowerCase();
-    for (const x of filters) if (n.includes(x.f)) return x.code;
+    for (const x of rules) if (x.terms.every(t => n.includes(t))) return x.code;
     const code = appCode(name, kw);
-    return validFilter(config.apps[code]?.filter, kw) ? null : code;
+    return ruled.has(code) ? null : code;
   };
 }
 
@@ -899,8 +904,10 @@ function card(a, days, win) {
   const panel = openPanels.get(id);
   const accName = accInfo.get(a.acc)?.name;
   const kwG = (config.groups[activeTab]?.keyword || "Ecomdy").trim();
-  const customF = validFilter(ov.filter, kwG);
-  const filterVal = customF ? ov.filter.trim() : a.prefix;
+  const terms = ruleTerms(a.code, kwG);
+  const customF = !!terms;
+  const filterVal = (ov.filter || "").trim();
+  const codeTerm = (ov.appCode?.trim() || a.code);
 
   return `<article class="card">
     <div class="top">
@@ -914,9 +921,9 @@ function card(a, days, win) {
         <div class="pct">KPI ${kpi.toFixed(2)}</div>
       </div>
     </div>
-    <label class="filter-row" title="Chỉ tính camp có tên chứa đoạn này. Xóa trống để tự gom theo mã app.">
-          <input class="chip camp filter-input${customF ? " custom" : ""}" data-code="${esc(a.code)}" data-auto="${esc(a.prefix)}" value="${esc(filterVal)}" spellcheck="false" aria-label="Lọc camp của ${esc(ov.name || a.code)}" ${readOnly ? "readonly" : ""}>
-          <span class="share">${a.names.size} camp${customF ? " · lọc riêng" : ""}</span>
+    <label class="filter-row" title="Gõ các chữ cần có trong tên camp, cách nhau bằng dấu phẩy. Trang tự ghép thêm mã app; camp phải chứa tất cả. Để trống = tự gom theo mã app.">
+          <input class="chip camp filter-input${customF ? " custom" : ""}" data-code="${esc(a.code)}" value="${esc(filterVal)}" placeholder="${esc(a.prefix)}" spellcheck="false" aria-label="Lọc camp của ${esc(ov.name || a.code)}" ${readOnly ? "readonly" : ""}>
+          <span class="share">+ mã <b>${esc(codeTerm)}</b> · ${a.names.size} camp${customF ? "" : " · tự gom"}</span>
         </label>
 
     ${trendCharts(a, days, kpi)}
@@ -1103,9 +1110,7 @@ appDlg.addEventListener("close", () => {
   if (appDlg.returnValue !== "save") return;
   const f = appDlg.querySelector("form");
   const kpi = parseFloat(f.kpi.value);
-  const kw = (config.groups[activeTab]?.keyword || "Ecomdy").trim();
-  let filter = f.filter.value.trim();
-  if (filter && !validFilter(filter, kw)) { toast(`Bỏ qua bộ lọc "${filter}" vì khớp mọi camp ${kw}.`); filter = ""; }
+  const filter = f.filter.value.trim();
   config.apps[editing.code] = { ...config.apps[editing.code], name: f.name.value.trim(), kpi: isFinite(kpi) && kpi > 0 ? kpi : 1, filter, pic: f.pic.value.trim(), appCode: f.appcode.value.trim() };
   saveConfig(); rebuild(activeTab); render();
 });
@@ -1147,15 +1152,11 @@ document.addEventListener("change", e => {
 });
 document.addEventListener("change", e => {
   const inp = e.target.closest(".filter-input"); if (!inp || readOnly) return;
-  const code = inp.dataset.code, v = inp.value.trim(), auto = inp.dataset.auto || "";
-  const kw = (config.groups[activeTab]?.keyword || "Ecomdy").trim();
-  if (v && v !== auto && !validFilter(v, kw)) {
-    toast(`"${v}" khớp mọi camp ${kw}. Hãy gõ thêm mã app, vd. ${auto || "APB508_Global"}.`);
-    inp.value = config.apps[code]?.filter || auto; return;
-  }
-  config.apps[code] = { ...config.apps[code], filter: v && v !== auto ? v : "" };
+  const code = inp.dataset.code, v = inp.value.trim();
+  config.apps[code] = { ...config.apps[code], filter: v };
   saveConfig(); rebuild(activeTab); render();
-  toast(config.apps[code].filter ? `Đã lọc camp chứa "${v}"` : "Đã trả về tự gom theo mã app");
+  const c = config.apps[code].appCode?.trim() || code;
+  toast(v ? `Lọc camp chứa: ${[...splitTerms(v), c.toLowerCase()].filter((t, i, a) => a.indexOf(t) === i).join(" + ")}` : "Đã trả về tự gom theo mã app");
 });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.closest(".kpi-input, .filter-input")) e.target.blur(); });
 
