@@ -251,6 +251,9 @@
   .camp-table th:first-child, .camp-table td:first-child { text-align: left; white-space: normal; overflow-wrap: anywhere; min-width: 260px; }
   .camp-table tfoot td { font-weight: 600; border-top: 2px solid var(--border); }
   .pill { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--chip-bg); color: var(--chip-text); }
+  .pill.max { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+  .stat-link { font: inherit; font-size: 23px; font-weight: 600; margin-top: 8px; color: var(--text); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 5px; }
+  .stat-link.na { color: var(--muted); }
   .pill.on { background: color-mix(in srgb, var(--up) 15%, transparent); color: var(--up); }
   .foot { flex-wrap: wrap; }
   .tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
@@ -331,6 +334,7 @@
     <div class="camp-tools">
       <label><input type="checkbox" id="campOnlyApp" checked> <span id="campOnlyAppLabel">Chỉ app này</span></label>
       <label><input type="checkbox" id="campHideZero" checked> Ẩn camp không có spend</label>
+      <label><input type="checkbox" id="campOnlyMaxed"> Chỉ camp max budget</label>
       <input type="search" id="campSearch" placeholder="Tìm tên camp…" aria-label="Tìm tên camp">
     </div>
     <div class="camp-table" id="campTable"></div>
@@ -369,6 +373,7 @@ const SERVER = "TikTok MCP";
 const CONFIG_DOC = "dashboard/config";
 const LOCAL_KEY = "ecomdy-kpi-config-v2";
 const M_IAA = "ad_impression_ad_revenue_roas_day0";
+const MAX_RATIO = 0.98;   // spend ≥ 98% budget ngày → tính là max budget
 
 let config = { groups: [], apps: {} };
 let results = [];                 // theo chỉ số nhóm: { status, apps, errors }
@@ -581,7 +586,7 @@ async function fetchAccount(acc, kw, win, refresh) {
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end }, refresh),
     curInTrend ? none : allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end }, refresh),
     prevInTrend ? none : allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end }, refresh),
-    allPages("campaign_get", { advertiser_id: acc, filtering: { campaign_name: kw }, fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status"] }, refresh)
+    allPages("campaign_get", { advertiser_id: acc, filtering: { campaign_name: kw }, fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status", "roas_bid"] }, refresh)
       .catch(() => ({ rows: [] })), // ngân sách là phụ: lỗi thì hiện spend TB/ngày
   ]);
   // Cộng các dòng theo ngày thành tổng theo camp cho một khoảng ngày (cùng dạng dòng report)
@@ -600,7 +605,7 @@ async function fetchAccount(acc, kw, win, refresh) {
   return {
     cur: cur ? cur.rows : sumRange(win.cur.start, win.cur.end),
     prev: prev ? prev.rows : sumRange(win.prev.start, win.prev.end),
-    trend: trend.rows, camps: camps.rows, storedAt: trend.storedAt,
+    trend: trend.rows, camps: camps.rows, storedAt: trend.storedAt, curRange: { ...win.cur },
   };
 }
 
@@ -626,7 +631,7 @@ function aggregate(acc, raw, kw) {
   const apps = new Map();
   const campaigns = new Map();  // id → { id, name, code, spend, rev, status, budget, budgetMode }
   const get = code => {
-    if (!apps.has(code)) apps.set(code, { acc, code, names: new Set(), ids: new Set(), spend: 0, rev: 0, prevSpend: 0, budget: 0, days: new Map() });
+    if (!apps.has(code)) apps.set(code, { acc, code, names: new Set(), ids: new Set(), spend: 0, rev: 0, prevSpend: 0, maxed: 0, days: new Map() });
     return apps.get(code);
   };
   const ok = name => typeof name === "string" && name.toLowerCase().includes(kwl);
@@ -648,9 +653,16 @@ function aggregate(acc, raw, kw) {
     const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
     const code = assign(m.campaign_name); if (code) get(code).prevSpend += num(m.spend);
   }
+  const campDays = new Map();   // id → Map(ngày → spend), chỉ các ngày trong kỳ đang xem
+  const cr = raw.curRange || {};
   for (const r of raw.trend) {
     const m = r.metrics || {}; if (!ok(m.campaign_name)) continue;
     const day = String(r.dimensions?.stat_time_day || "").slice(0, 10); if (!day) continue;
+    if (day >= cr.start && day <= cr.end) {
+      const id = String(r.dimensions?.campaign_id || "");
+      if (!campDays.has(id)) campDays.set(id, new Map());
+      const cd = campDays.get(id); cd.set(day, (cd.get(day) || 0) + num(m.spend));
+    }
     const code = assign(m.campaign_name); if (!code) continue;
     const a = get(code); const sp = num(m.spend);
     const d = a.days.get(day) || { spend: 0, rev: 0 };
@@ -661,11 +673,17 @@ function aggregate(acc, raw, kw) {
     if (!ok(c.campaign_name)) continue;
     const row = camp(String(c.campaign_id), c.campaign_name);
     row.status = c.operation_status; row.budget = num(c.budget); row.budgetMode = c.budget_mode;
-    if (!row.code || c.operation_status !== "ENABLE" || !/DAY|DAILY/.test(c.budget_mode || "")) continue;
-    const a = apps.get(row.code); if (a) a.budget += num(c.budget);
+    row.roasBid = num(c.roas_bid) || null;
+    // Max budget: có ngày spend ≥ 98% budget ngày (so với budget đang đặt hiện tại)
+    const daily = /DAY|DAILY/.test(c.budget_mode || "") && row.budget > 0;
+    const cd = campDays.get(row.id);
+    row.daysSpent = cd ? [...cd.values()].filter(v => v > 0).length : 0;
+    row.maxDays = daily && cd ? [...cd.values()].filter(v => v >= row.budget * MAX_RATIO).length : 0;
+    if (!row.code || !row.maxDays) continue;
+    const a = apps.get(row.code); if (a) a.maxed++;
   }
   accData.set(acc, { campaigns: [...campaigns.values()], kw });
-  const list = [...apps.values()].filter(a => a.spend > 0 || a.budget > 0);
+  const list = [...apps.values()].filter(a => a.spend > 0);
   for (const a of list) a.prefix = commonPrefix([...a.names], kw) || a.code;
   return list;
 }
@@ -849,9 +867,6 @@ function card(a, days, win) {
   const color = isNum(score) && score >= kpi ? "var(--up)" : "var(--down)";
   const hasDelta = a.prevSpend > 0;
   const delta = hasDelta ? (a.spend - a.prevSpend) / a.prevSpend : 0;
-  const third = a.budget > 0
-    ? { lbl: "Budget/ngày", tip: "Tổng ngân sách ngày đang đặt của các camp đang bật", val: fmtUsd(a.budget) }
-    : { lbl: "Spend TB/ngày", tip: "Spend chia số ngày đang xem (camp không đặt ngân sách cấp camp)", val: fmtUsd(a.spend / win.len) };
   const id = `${a.acc}-${a.code}`;
   const panel = openPanels.get(id);
   const accName = accInfo.get(a.acc)?.name;
@@ -884,7 +899,10 @@ function card(a, days, win) {
       <div class="stat"><div class="lbl">Δ Spend</div>${hasDelta
         ? `<div class="num ${delta >= 0 ? "up" : "down"}">${(delta >= 0 ? "+" : "-") + Math.abs(Math.round(delta * 100))}%</div>`
         : `<div class="num na">—</div>`}<div class="vs">so với ${spanText(win.prev.start, win.prev.end)} (${fmtUsd(a.prevSpend)})</div></div>
-      <div class="stat" title="${third.tip}"><div class="lbl">${third.lbl}</div><div class="num">${third.val}</div></div>
+      <div class="stat" title="Số camp có ít nhất 1 ngày spend ≥ 98% budget ngày (budget đang đặt) trong khoảng đang xem. Bấm để xem danh sách.">
+        <div class="lbl">Max budget</div>
+        <button class="num stat-link${a.maxed ? "" : " na"}" data-act="camps" data-acc="${esc(a.acc)}" data-code="${esc(a.code)}" data-maxed="1">${a.maxed} camp</button>
+        <div class="vs">/ ${a.ids.size} camp có spend</div></div>
     </div>
 
     <div class="foot">
@@ -952,8 +970,9 @@ function campRows() {
   const q = document.getElementById("campSearch").value.trim().toLowerCase();
   const onlyApp = document.getElementById("campOnlyApp").checked;
   const hideZero = document.getElementById("campHideZero").checked;
+  const onlyMaxed = document.getElementById("campOnlyMaxed").checked;
   return d.campaigns
-    .filter(c => (!onlyApp || c.code === campView.code) && (!hideZero || c.spend > 0) && (!q || c.name.toLowerCase().includes(q)))
+    .filter(c => (!onlyApp || c.code === campView.code) && (!hideZero || c.spend > 0) && (!onlyMaxed || c.maxDays > 0) && (!q || c.name.toLowerCase().includes(q)))
     .sort((x, y) => y.spend - x.spend || x.name.localeCompare(y.name));
 }
 function renderCamps() {
@@ -962,13 +981,19 @@ function renderCamps() {
   if (!rows.length) { box.innerHTML = `<div class="panel"><div class="note" style="padding:12px">Không có camp nào khớp bộ lọc.</div></div>`; return; }
   const sp = rows.reduce((s, c) => s + c.spend, 0), rv = rows.reduce((s, c) => s + c.rev, 0);
   const status = s => s === "ENABLE" ? `<span class="pill on">Đang chạy</span>` : s ? `<span class="pill">Tắt</span>` : `<span class="pill">—</span>`;
-  box.innerHTML = `<table><thead><tr><th>Camp</th><th>App</th><th>Trạng thái</th><th>NS/ngày</th><th>Spend</th><th>ROAS IAA D0</th><th>KPI</th></tr></thead><tbody>${
-    rows.map(c => { const k = kpiOf(c.code), r = c.spend > 0 ? c.rev / c.spend : null;
-      return `<tr><td>${esc(c.name)}<div class="share">${esc(c.id)}</div></td><td>${c.code ? esc(config.apps[c.code]?.name || c.code) : '<span class="share">ngoài bộ lọc</span>'}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, k)}">${r == null ? "—" : r.toFixed(3)}</td><td>${k.toFixed(2)}</td></tr>`; }).join("")
-  }</tbody><tfoot><tr><td>${rows.length} camp</td><td></td><td></td><td></td><td>${fmtUsd(sp)}</td><td>${sp > 0 ? (rv / sp).toFixed(3) : "—"}</td><td></td></tr></tfoot></table>`;
+  const { len } = rangeWindows();
+  const maxCell = c => !c.budget || !/DAY|DAILY/.test(c.budgetMode || "") ? `<span class="share">—</span>`
+    : c.maxDays ? `<span class="pill max">${len === 1 ? "Max" : `${c.maxDays}/${c.daysSpent || len} ngày`}</span>` : `<span class="share">chưa</span>`;
+  const maxed = rows.filter(c => c.maxDays > 0).length;
+  box.innerHTML = `<table><thead><tr><th>Camp</th><th>App</th><th>Trạng thái</th><th>Budget/ngày</th><th>Max budget</th><th>Spend</th><th>ROAS IAA D0</th><th>Target ROAS</th></tr></thead><tbody>${
+    rows.map(c => { const r = c.spend > 0 ? c.rev / c.spend : null, t = c.roasBid || kpiOf(c.code);
+      return `<tr><td>${esc(c.name)}<div class="share">${esc(c.id)}</div></td><td>${c.code ? esc(config.apps[c.code]?.name || c.code) : '<span class="share">ngoài bộ lọc</span>'}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${maxCell(c)}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, t)}">${r == null ? "—" : r.toFixed(3)}</td><td>${c.roasBid ? c.roasBid.toFixed(2) : '<span class="share">—</span>'}</td></tr>`; }).join("")
+  }</tbody><tfoot><tr><td>${rows.length} camp</td><td></td><td></td><td></td><td>${maxed} max</td><td>${fmtUsd(sp)}</td><td>${sp > 0 ? (rv / sp).toFixed(3) : "—"}</td><td></td></tr></tfoot></table>`;
 }
-function openCamps(acc, code) {
+function openCamps(acc, code, onlyMaxed = false) {
   campView = { acc, code };
+  document.getElementById("campOnlyMaxed").checked = onlyMaxed;
+  if (onlyMaxed) document.getElementById("campOnlyApp").checked = true;
   const info = accInfo.get(acc); const { cur } = rangeWindows();
   document.getElementById("campTitle").textContent = info?.name || `Tài khoản ${acc}`;
   document.getElementById("campMeta").textContent = `${acc} · ${spanText(cur.start, cur.end)}${info?.tz ? " · " + tzOffset(info.tz) : ""}`;
@@ -977,7 +1002,7 @@ function openCamps(acc, code) {
   renderCamps();
   campDlg.showModal();
 }
-["campOnlyApp", "campHideZero"].forEach(id => document.getElementById(id).addEventListener("change", renderCamps));
+["campOnlyApp", "campHideZero", "campOnlyMaxed"].forEach(id => document.getElementById(id).addEventListener("change", renderCamps));
 document.getElementById("campSearch").addEventListener("input", renderCamps);
 
 /* ---------- Xuất CSV ---------- */
@@ -1006,8 +1031,8 @@ function exportCamps() {
   if (!campView) return;
   const { cur } = rangeWindows();
   saveFile(`campaigns_${campView.acc}_${cur.start}_${cur.end}.csv`,
-    csv([["campaign_id", "campaign_name", "app", "status", "daily_budget", "spend", "roas_iaa_d0", "kpi"],
-      ...campRows().map(c => [c.id, c.name, c.code, c.status || "", c.budget || "", c.spend.toFixed(2), c.spend > 0 ? (c.rev / c.spend).toFixed(3) : "", kpiOf(c.code)])]));
+    csv([["campaign_id", "campaign_name", "app", "status", "daily_budget", "max_budget_days", "spend", "roas_iaa_d0", "target_roas"],
+      ...campRows().map(c => [c.id, c.name, c.code || "", c.status || "", c.budget || "", c.maxDays || 0, c.spend.toFixed(2), c.spend > 0 ? (c.rev / c.spend).toFixed(3) : "", c.roasBid || ""])]));
 }
 
 /* ---------- Dialogs ---------- */
@@ -1117,7 +1142,7 @@ document.addEventListener("click", e => {
       if (results[i]?.status === "ok" && results[i].rangeKey === key) render(); else loadAll();
       break;
     }
-    case "camps": openCamps(el.dataset.acc, el.dataset.code); break;
+    case "camps": openCamps(el.dataset.acc, el.dataset.code, el.dataset.maxed === "1"); break;
     case "geo-csv": exportGeo(el.dataset.acc, el.dataset.code); break;
     case "camp-csv": exportCamps(); break;
     case "add-group": openGroup(null); break;
