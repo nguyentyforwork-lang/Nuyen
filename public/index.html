@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nuyen – TikTok Ads Monitor</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="logo">N</span> Nuyen <small>TikTok Ads Monitor</small></div>
+    <div class="header-actions">
+      <span id="runState" class="pill"></span>
+      <button id="btnFullScan" class="primary">Quét toàn bộ</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <section class="stats">
+    <div class="stat"><div class="label">Tổng account</div><div class="value" id="cAccounts">–</div></div>
+    <div class="stat danger"><div class="label">Đang bị suspend</div><div class="value" id="cSuspended">–</div></div>
+    <div class="stat warn"><div class="label">Creative bị từ chối</div><div class="value" id="cRejected">–</div></div>
+    <div class="stat"><div class="label">Chờ auto appeal</div><div class="value" id="cPending">–</div></div>
+  </section>
+
+  <nav class="tabs">
+    <button data-tab="accounts" class="active">Account bị suspend</button>
+    <button data-tab="creatives">Creative vi phạm</button>
+    <button data-tab="log">Lịch sử appeal</button>
+    <button data-tab="settings">Cài đặt</button>
+  </nav>
+
+  <main>
+    <!-- ACCOUNTS -->
+    <section id="tab-accounts" class="tab active">
+      <div class="toolbar">
+        <label>Từ ngày <input type="date" id="accFrom"></label>
+        <label>Đến ngày <input type="date" id="accTo"></label>
+        <div class="quick">
+          <button data-acc-range="0">Hôm nay</button>
+          <button data-acc-range="1">Hôm qua</button>
+          <button data-acc-range="7">7 ngày</button>
+          <button data-acc-range="30">30 ngày</button>
+          <button data-acc-range="">Tất cả</button>
+        </div>
+        <select id="accView">
+          <option value="suspended">Bị suspend (theo ngày)</option>
+          <option value="current">Đang bị suspend</option>
+          <option value="all">Tất cả account</option>
+        </select>
+        <input type="search" id="accQ" placeholder="Tìm ID / tên / công ty">
+        <span class="spacer"></span>
+        <button id="btnScanAcc">Quét account</button>
+        <button id="btnExportAcc">Xuất CSV</button>
+      </div>
+      <p class="hint">Ngày suspend = lần quét đầu tiên phát hiện account chuyển sang trạng thái bị khoá. Dấu <b>≈</b> nghĩa là account đã bị khoá trước lần quét đầu tiên nên ngày chỉ là ước lượng. Appeal account phải làm trong TikTok Ads Manager (API không hỗ trợ).</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Advertiser ID</th><th>Tên / Công ty</th><th>Trạng thái</th><th>Lý do</th><th>Ngày suspend</th><th>Số dư</th><th></th></tr></thead>
+        <tbody id="accRows"></tbody>
+      </table></div>
+    </section>
+
+    <!-- CREATIVES -->
+    <section id="tab-creatives" class="tab">
+      <div class="toolbar">
+        <label>Từ ngày <input type="date" id="crFrom"></label>
+        <label>Đến ngày <input type="date" id="crTo"></label>
+        <div class="quick">
+          <button data-cr-range="0">Hôm nay</button>
+          <button data-cr-range="7">7 ngày</button>
+          <button data-cr-range="">Tất cả</button>
+        </div>
+        <select id="crState">
+          <option value="rejected">Đang bị từ chối</option>
+          <option value="resolved">Đã được duyệt lại / xoá</option>
+          <option value="all">Tất cả</option>
+        </select>
+        <select id="crAppeal">
+          <option value="">Mọi trạng thái appeal</option>
+          <option value="none">Chưa appeal</option>
+          <option value="done">Đã appeal</option>
+        </select>
+        <input type="search" id="crQ" placeholder="Tìm ad / account / lý do">
+        <span class="spacer"></span>
+        <button id="btnScanCr">Quét creative</button>
+        <button id="btnExportCr">Xuất CSV</button>
+      </div>
+      <div class="toolbar appeal-bar">
+        <input type="text" id="appealReason" placeholder="Lý do appeal (để trống = dùng mẫu trong Cài đặt)">
+        <button id="btnAppeal" class="primary" disabled>Appeal đã chọn (0)</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th><input type="checkbox" id="crAll"></th><th>Ad</th><th>Account</th><th>Campaign / Adgroup</th><th>Lý do vi phạm</th><th>Phát hiện</th><th>Appeal</th></tr></thead>
+        <tbody id="crRows"></tbody>
+      </table></div>
+    </section>
+
+    <!-- LOG -->
+    <section id="tab-log" class="tab">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Thời gian</th><th>Ad</th><th>Account</th><th>Loại</th><th>Kết quả</th></tr></thead>
+        <tbody id="logRows"></tbody>
+      </table></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="tab-settings" class="tab">
+      <form id="settingsForm" class="settings">
+        <label class="switch"><input type="checkbox" name="autoScan"> Tự động quét định kỳ</label>
+        <label>Chu kỳ quét (phút) <input type="number" name="scanIntervalMinutes" min="5"></label>
+        <label class="switch"><input type="checkbox" name="autoAppeal"> <b>Auto appeal</b> creative bị từ chối sau mỗi lần quét</label>
+        <label>Tối đa số appeal mỗi lần chạy <input type="number" name="maxAppealsPerRun" min="1"></label>
+        <label>Tối đa số lần appeal cho mỗi ad <input type="number" name="maxAppealsPerAd" min="1"></label>
+        <label>Mẫu lý do appeal <textarea name="appealReason" rows="4"></textarea></label>
+        <p class="hint">Khuyến nghị: chỉ appeal 1 lần cho mỗi ad. Appeal hàng loạt những ad thật sự vi phạm có thể khiến TikTok đánh giá account xấu hơn.</p>
+        <div><button class="primary" type="submit">Lưu cài đặt</button></div>
+      </form>
+      <h3>Lần quét gần đây</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Thời gian</th><th>Loại</th><th>Kết quả</th></tr></thead>
+        <tbody id="scanRows"></tbody>
+      </table></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
