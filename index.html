@@ -220,6 +220,9 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     </div>
     <p class="hint">Spend quý này lấy từ kết quả cashback ở trên, chỉ cộng các khu vực được tick. Mặc định bỏ France &amp; Hungary. Nhập spend đủ điều kiện booster của quý trước để tính tăng trưởng QoQ (R), chọn Game hay App, nhập Smart+ Penetration (P) nếu có.</p>
     <div class="controls">
+      <label class="field"><span>Chính sách booster</span>
+        <select id="bQuarter"><option value="q2">Quý 2</option><option value="q3">Quý 3</option></select>
+      </label>
       <label class="field"><span>Tính booster theo</span>
         <select id="bLevel">
           <option value="customer">Khách hàng (cả file)</option>
@@ -231,9 +234,18 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       </label>
       <div class="field"><span>Spend tính booster gồm</span><div class="btns" id="bGroups"></div></div>
     </div>
-    <details>
-      <summary class="sub">Điều kiện booster (sửa được)</summary>
+    <details open>
+      <summary class="sub">Điều kiện booster của quý đang chọn (sửa được)</summary>
       <div class="tw"><table id="bRules"></table></div>
+      <div class="controls" style="margin-top:10px">
+        <label class="field" id="bT3wrap"><span>Bonus Tier 3 "+1% × gap (R − 100%)" tính theo</span>
+          <select id="bT3">
+            <option value="rate">Cộng vào tỷ lệ: rate = 2% + 1% × (R − 100%), nhân spend quý này</option>
+            <option value="spend">1% × phần spend vượt mức tăng 100% (spend − 2 × quý trước)</option>
+          </select>
+        </label>
+        <div class="field"><span>&nbsp;</span><button id="bResetRules" type="button">Khôi phục điều kiện gốc</button></div>
+      </div>
     </details>
     <div class="tw"><table id="boosterTable"></table></div>
   </section>
@@ -748,14 +760,28 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
   });
 
   // ---------- Booster ----------
-  const BOOSTER_DEFAULT = {
-    game: [{ tier: 'T2', r: 90, p: 70, rate: 2 }, { tier: 'T1', r: 50, p: 70, rate: 1 }],
-    app:  [{ tier: 'T2', r: 30, p: 70, rate: 2 }, { tier: 'T1', r: 20, p: 70, rate: 1 }],
+  // Rules per quarter. strict: R must be > r (else >=). bonus: extra % per 100% of growth above r (Tier 3 of Q2).
+  const BOOSTER_SETS = {
+    q2: {
+      label: 'Quý 2',
+      game: [{ tier: 'T3', r: 100, strict: true, p: 65, rate: 2, bonus: 1 }, { tier: 'T2', r: 30, strict: true, p: 65, rate: 2 }, { tier: 'T1', r: 15, strict: true, p: 65, rate: 1 }],
+      app:  [{ tier: 'T3', r: 100, strict: true, p: 70, rate: 2, bonus: 1 }, { tier: 'T2', r: 30, strict: true, p: 70, rate: 2 }, { tier: 'T1', r: 15, strict: true, p: 70, rate: 1 }],
+    },
+    q3: {
+      label: 'Quý 3',
+      game: [{ tier: 'T2', r: 90, p: 70, rate: 2 }, { tier: 'T1', r: 50, p: 70, rate: 1 }],
+      app:  [{ tier: 'T2', r: 30, p: 70, rate: 2 }, { tier: 'T1', r: 20, p: 70, rate: 1 }],
+    },
   };
-  const BKEY = 'cashback-booster-v1';
-  let booster = { level: 'customer', excluded: null, rules: clone(BOOSTER_DEFAULT), inputs: {} };
-  try { const s = localStorage.getItem(BKEY); if (s) booster = Object.assign(booster, JSON.parse(s)); } catch (e) {}
+  const BKEY = 'cashback-booster-v2';
+  let booster = { level: 'customer', quarter: 'q3', t3mode: 'rate', excluded: null, sets: clone(BOOSTER_SETS), inputs: {} };
+  try {
+    const s = localStorage.getItem(BKEY) || localStorage.getItem('cashback-booster-v1');
+    if (s) { const o = JSON.parse(s); delete o.rules; booster = Object.assign(booster, o); }
+  } catch (e) {}
+  Object.keys(BOOSTER_SETS).forEach(q => { if (!booster.sets[q]) booster.sets[q] = clone(BOOSTER_SETS[q]); });
   const saveBooster = () => { try { localStorage.setItem(BKEY, JSON.stringify(booster)); } catch (e) {} };
+  const curSet = () => booster.sets[booster.quarter];
   const excludedSet = () => new Set(booster.excluded ?? policy.groups.filter(g => /france|hungary/i.test(g.name)).map(g => g.id));
   let bUnits = [];
 
@@ -775,33 +801,52 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
   function evalUnit(u) {
     const inp = booster.inputs[u.key] || {};
     const type = inp.type || 'game';
-    const rules = booster.rules[type];
+    const rules = curSet()[type];
     const prev = parseNum(inp.prev), P = blank(inp.p) ? null : parseNum(inp.p);
     const R = !blank(inp.prev) && prev > 0 ? (u.spend - prev) / prev : null;
-    let hit = null, reason = '';
+    let hit = null, reason = '', rate = 0, amount = 0;
+    const passR = t => t.strict ? R * 100 > t.r + 1e-9 : R * 100 >= t.r - 1e-9;
     if (blank(inp.prev)) reason = 'Nhập spend quý trước';
     else if (prev <= 0) reason = 'Quý trước = 0, không tính được R';
     else {
-      hit = rules.find(t => R * 100 >= t.r && (P == null || P >= t.p)) || null;
-      if (!hit) {
-        const minR = Math.min(...rules.map(t => t.r));
-        reason = R * 100 < minR ? `R chưa đạt ${minR}%` : `Smart+ dưới ${Math.min(...rules.map(t => t.p))}%`;
+      hit = rules.find(t => passR(t) && (P == null || P >= t.p)) || null;
+      if (hit) {
+        amount = u.spend * hit.rate / 100;
+        if (hit.bonus) {
+          const gap = R - hit.r / 100;   // growth above the Tier 3 threshold, as a fraction
+          amount += booster.t3mode === 'spend'
+            ? hit.bonus / 100 * (u.spend - prev * (1 + hit.r / 100))
+            : u.spend * hit.bonus / 100 * gap;
+        }
+        rate = u.spend ? amount / u.spend * 100 : hit.rate;
+      } else {
+        const lowest = rules[rules.length - 1];
+        reason = !passR(lowest) ? `R chưa vượt ${lowest.strict ? '>' : '≥'} ${lowest.r}%` : `Smart+ dưới ${Math.min(...rules.map(t => t.p))}%`;
       }
     }
-    return { type, prev, R, P, hit, reason, amount: hit ? u.spend * hit.rate / 100 : 0 };
+    return { type, prev, R, P, hit, reason, rate, amount };
   }
   const boosterByCustomer = name => bUnits.filter(u => u.customer === name).reduce((s, u) => s + evalUnit(u).amount, 0);
 
   function renderBoosterRules() {
+    $('bQuarter').value = booster.quarter;
+    $('bT3').value = booster.t3mode;
+    $('bT3wrap').hidden = !['game', 'app'].some(t => curSet()[t].some(r => r.bonus));
+    const set = curSet();
+    const inp = (type, i, f, v) => `<input type="number" step="any" id="br-${type}-${i}-${f}" data-bt="${type}" data-bi="${i}" data-bf="${f}" value="${v ?? 0}"><span class="pct">%</span>`;
     const row = (type, i, t) => `<tr><td>${type === 'game' ? 'Gaming' : 'Apps'}</td><td>${t.tier}</td>` +
-      ['r', 'p', 'rate'].map(f => `<td><input type="number" step="any" id="br-${type}-${i}-${f}" data-bt="${type}" data-bi="${i}" data-bf="${f}" value="${t[f]}"><span class="pct">%</span></td>`).join('') + '</tr>';
-    $('bRules').innerHTML = '<thead><tr><th>Loại</th><th>Tier</th><th>QoQ Growth R ≥</th><th>Smart+ P ≥</th><th>Rebate</th></tr></thead><tbody>' +
-      ['game', 'app'].map(type => booster.rules[type].map((t, i) => row(type, i, t)).join('')).join('') + '</tbody>';
+      `<td>${t.strict ? '&gt;' : '≥'} ${inp(type, i, 'r', t.r)}</td><td>≥ ${inp(type, i, 'p', t.p)}</td><td>${inp(type, i, 'rate', t.rate)}</td>` +
+      `<td>${t.bonus != null ? '+ ' + inp(type, i, 'bonus', t.bonus) + ' <span class="sub">× (R − ' + t.r + '%)</span>' : '<span class="sub">–</span>'}</td></tr>`;
+    $('bRules').innerHTML = `<thead><tr><th>Loại</th><th>Tier</th><th>QoQ Growth R</th><th>Smart+ P</th><th>Rebate</th><th>Bonus Tier 3</th></tr></thead><tbody>` +
+      ['game', 'app'].map(type => set[type].map((t, i) => row(type, i, t)).join('')).join('') + '</tbody>';
   }
   $('bRules').addEventListener('input', e => {
     const d = e.target.dataset; if (!d.bt) return;
-    booster.rules[d.bt][+d.bi][d.bf] = parseFloat(e.target.value) || 0; saveBooster(); refreshBooster();
+    curSet()[d.bt][+d.bi][d.bf] = parseFloat(e.target.value) || 0; saveBooster(); refreshBooster();
   });
+  $('bQuarter').addEventListener('change', e => { booster.quarter = e.target.value; saveBooster(); renderBoosterRules(); refreshBooster(); });
+  $('bT3').addEventListener('change', e => { booster.t3mode = e.target.value; saveBooster(); refreshBooster(); });
+  $('bResetRules').addEventListener('click', () => { booster.sets[booster.quarter] = clone(BOOSTER_SETS[booster.quarter]); saveBooster(); renderBoosterRules(); refreshBooster(); toast('Đã khôi phục điều kiện ' + curSet().label); });
 
   function renderBooster() {
     $('bLevel').value = booster.level;
@@ -833,7 +878,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       $('bR-' + i).innerHTML = ev.R == null ? '<span class="sub">–</span>' : fmtPct(ev.R);
       const tName = ev.type === 'game' ? 'Game' : 'App';
       $('bS-' + i).innerHTML = ev.hit
-        ? `<span class="chip">${tName} ${ev.hit.tier} · ${ev.hit.rate}%</span>${ev.P == null ? ' <span class="sub">chưa nhập P, giả định đạt</span>' : ''}`
+        ? `<span class="chip">${tName} ${ev.hit.tier} · ${fmtPct(ev.rate / 100)}</span>${ev.P == null ? ' <span class="sub">chưa nhập P, giả định đạt</span>' : ''}`
         : `<span class="chip ${blank((booster.inputs[u.key] || {}).prev) ? 'plain' : 'warn'}">${esc(ev.reason)}</span>`;
       $('bA-' + i).textContent = fmt(ev.amount);
     });
@@ -862,7 +907,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       const ev = evalUnit(u);
       out.push([u.customer, booster.level === 'account' ? (u.name + (u.id ? ' ' + u.id : '')) : '', Math.round(u.spend * 100) / 100, ev.prev || '',
         ev.R == null ? '' : fmtPct(ev.R), ev.type === 'game' ? 'Game' : 'App', ev.P == null ? '' : ev.P + '%',
-        ev.hit ? ev.hit.tier : ev.reason, ev.hit ? ev.hit.rate + '%' : '', Math.round(ev.amount * 100) / 100]);
+        ev.hit ? ev.hit.tier : ev.reason, ev.hit ? fmtPct(ev.rate / 100) : '', Math.round(ev.amount * 100) / 100]);
     });
     return out;
   }
@@ -876,8 +921,8 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     const evs = us.map(evalUnit); const amt = evs.reduce((s, e) => s + e.amount, 0);
     if (!evs.some(e => e.hit)) return '';
     const spend = us.reduce((s, u) => s + u.spend, 0);
-    const hits = [...new Set(evs.filter(e => e.hit).map(e => `${e.type === 'game' ? 'Gaming' : 'Apps'} Booster ${e.hit.tier}`))].join(', ');
-    const rate = us.length === 1 ? fmtPct(evs[0].hit.rate / 100) : (spend ? fmtPct(amt / spend) : '');
+    const hits = [...new Set(evs.filter(e => e.hit).map(e => `${e.type === 'game' ? 'Gaming' : 'Apps'} Booster ${curSet().label} ${e.hit.tier}`))].join(', ');
+    const rate = spend ? fmtPct(amt / spend) : '';
     return `<tr><td></td><td>${esc(hits)}</td><td class="num">${rate}</td><td class="num">$${fmt(spend)}</td><td class="num">$${fmt(amt)}</td></tr>` +
       `<tr class="total"><td></td><td colspan="3" class="num">Total rebate (Cashback + Booster)</td><td class="num amt">$${fmt(c.cb + amt)}</td></tr>`;
   }
