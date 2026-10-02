@@ -176,7 +176,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     <div id="sampleNote" class="banner" hidden><b>Đang dùng dữ liệu mẫu.</b> Khách hàng và entity trong mẫu là tên giả để minh họa. Tải file của bạn lên để thay thế.</div>
     <div>
       <h3>Ghép cột</h3>
-      <p class="hint">Tự nhận theo tên cột. Kiểm tra lại nếu file có nhiều cột chi phí (Cash, Credit…).</p>
+      <p class="hint">Tự nhận theo tên cột. Kiểm tra lại nếu file có nhiều cột chi phí (Cash, Credit…). File không có cột tên khách thì cả file được tính là 1 khách, đặt tên theo tên file — nên đặt tên file là tên khách, ví dụ <b>Bazooka.xlsx</b>.</p>
     </div>
     <div class="map" id="mapping"></div>
   </section>
@@ -401,7 +401,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       : '<span class="chip plain">Chưa có file</span>';
     const hs = allHeaders();
     $('mapping').innerHTML = FIELDS.map(f => {
-      const none = f.key === 'customer' ? '— không có (dùng Account name) —' : '— không có —';
+      const none = f.key === 'customer' ? '— không có: mỗi file là 1 khách (tên file) —' : '— không có —';
       return `<label class="field"><span>${f.label}${f.optional ? '' : ' *'}</span><select id="map-${f.key}" data-map="${f.key}">` +
         `<option value="">${none}</option>` + hs.map(h => `<option${mapping[f.key] === h ? ' selected' : ''}>${esc(h)}</option>`).join('') +
         '</select></label>';
@@ -486,15 +486,15 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     policy.groups.forEach(g => { if (!g.isDefault) g.countries.forEach(c => lookup.set(normCountry(c), g.id)); });
 
     const rows = [];
-    files.forEach(f => f.rows.forEach(r => {
+    files.forEach(f => { const fileName = f.name.replace(/\.[^.]+$/, ''); f.rows.forEach(r => {
       const accName = m.accountName ? String(r[m.accountName] ?? '').trim() : '';
       const accId = m.accountId ? String(r[m.accountId] ?? '').trim() : '';
-      const customer = (m.customer ? String(r[m.customer] ?? '').trim() : '') || accName || accId || '(không tên)';
+      const customer = (m.customer ? String(r[m.customer] ?? '').trim() : '') || fileName || '(không tên)';
       const entity = (m.entity ? String(r[m.entity] ?? '').trim() : '') || '—';
       const country = String(r[m.country] ?? '').trim() || 'Unknown';
       const gid = lookup.get(normCountry(country)) || def.id;
       rows.push({ customer, entity, accId, accName, country, gid, cost: parseNum(r[m.cost]) });
-    }));
+    }); });
 
     const keyOf = r => policy.basis === 'customer' ? r.customer
       : policy.basis === 'entity' ? r.customer + '\u0001' + r.entity
