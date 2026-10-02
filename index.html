@@ -219,7 +219,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     groups: [
       { id: 'g1', name: 'France & Hungary', countries: ['France', 'Hungary'] },
       { id: 'g2', name: 'NA, AUNZ, SEA', countries: ['Canada', 'United States', 'New Zealand', 'Australia',
-        'Singapore', 'Malaysia', 'Thailand', 'Vietnam', 'Indonesia', 'Philippines', 'Cambodia', 'Laos', 'Myanmar', 'Brunei', 'Timor-Leste'] },
+        'Singapore', 'Malaysia', 'Thailand', 'Vietnam', 'Indonesia', 'Philippines', 'Cambodia'] },
       { id: 'g0', name: 'All Other Regions', countries: [], isDefault: true },
     ],
     tiers: [
@@ -230,7 +230,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       { max: null,    rates: { g1: 0, g2: 4,   g0: 7 } },
     ],
   };
-  const STORE_KEY = 'cashback-policy-v1';
+  const STORE_KEY = 'cashback-policy-v2';
   const clone = o => JSON.parse(JSON.stringify(o));
   let policy = clone(DEFAULT_POLICY);
   try { const s = localStorage.getItem(STORE_KEY); if (s) policy = JSON.parse(s); } catch (e) {}
@@ -619,6 +619,15 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     const rate = g => c.by[g.id] ? (c.cbBy[g.id] || 0) / c.by[g.id] : (c.tiers.size === 1 ? (policy.tiers[[...c.tiers][0]].rates[g.id] || 0) / 100 : 0);
     return gs.map(g => ({ name: g.name, rate: rate(g), spend: c.by[g.id] || 0, cb: c.cbBy[g.id] || 0 }));
   }
+  function countryRows(customer) {
+    const gname = Object.fromEntries(policy.groups.map(g => [g.id, g.name]));
+    const m = new Map();
+    result.rows.forEach(r => {
+      if (r.customer !== customer) return;
+      const o = m.get(r.country) || { country: r.country, cost: 0, region: gname[r.gid] }; o.cost += r.cost; m.set(r.country, o);
+    });
+    return [...m.values()].sort((a, b) => a.country.localeCompare(b.country));
+  }
   function renderReport() {
     const el = $('report');
     if (!result) { el.innerHTML = ''; return; }
@@ -630,7 +639,11 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
         rows.map((r, i) => `<tr>${i === 0 ? `<td class="label" rowspan="${rows.length + 1}">Final Rebate:</td>` : ''}<td>${esc(r.name)}</td>` +
           `<td class="num">${fmtPct(r.rate)}</td><td class="num">$${fmt(r.spend)}</td><td class="num">$${fmt(r.cb)}</td></tr>`).join('') +
         `<tr class="total"><td colspan="2" class="num">Total amount</td><td class="num">$${fmt(c.cost)}</td><td class="num amt">$${fmt(c.cb)}</td></tr>` +
-        '</tbody></table></div></div>';
+        '</tbody></table></div>' +
+        `<details><summary class="sub">Chi tiết ${countryRows(c.name).length} quốc gia</summary><div class="tw"><table>` +
+        '<thead><tr><th>Target Country</th><th class="num">Sales Performance (USD)</th><th>Region</th></tr></thead><tbody>' +
+        countryRows(c.name).map(r => `<tr><td>${esc(r.country)}</td><td class="num">$${fmt(r.cost)}</td><td>${esc(r.region)}</td></tr>`).join('') +
+        `</tbody><tfoot><tr><td>Tổng</td><td class="num">$${fmt(c.cost)}</td><td></td></tr></tfoot></table></div></details></div>`;
     }).join('');
   }
   $('report').addEventListener('click', async e => {
@@ -688,6 +701,9 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       rep.push(['', '', 'Total amount', r2(c.cost), r2(c.cb)], []);
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rep), 'Report');
+    const ctry = [['Khách hàng', 'Target Country', 'Sales Performance - USD', 'Regions']];
+    sorted(result.root.children).forEach(c => countryRows(c.name).forEach(r => ctry.push([c.name, r.country, r2(r.cost), r.region])));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ctry), 'Theo quoc gia');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows()), 'Theo entity');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(acc), 'Theo account');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), 'Chi tiet dong');
