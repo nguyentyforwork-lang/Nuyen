@@ -238,10 +238,11 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       <summary class="sub">Điều kiện booster của quý đang chọn (sửa được)</summary>
       <div class="tw"><table id="bRules"></table></div>
       <div class="controls" style="margin-top:10px">
-        <label class="field" id="bT3wrap"><span>Bonus Tier 3 "+1% × gap (R − 100%)" tính theo</span>
+        <label class="field" id="bT3wrap"><span>Công thức Tier 3</span>
           <select id="bT3">
-            <option value="rate">Cộng vào tỷ lệ: rate = 2% + 1% × (R − 100%), nhân spend quý này</option>
-            <option value="spend">1% × phần spend vượt mức tăng 100% (spend − 2 × quý trước)</option>
+            <option value="growth">2% × quý này + 1% × (quý này − quý trước)</option>
+            <option value="rate">2% × quý này + 1% × (R − 100%) × quý này</option>
+            <option value="spend">2% × quý này + 1% × (quý này − 2 × quý trước)</option>
           </select>
         </label>
         <div class="field"><span>&nbsp;</span><button id="bResetRules" type="button">Khôi phục điều kiện gốc</button></div>
@@ -775,11 +776,11 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       app:  [{ tier: 'T2', r: 30, p: 70, rate: 2 }, { tier: 'T1', r: 20, p: 70, rate: 1 }],
     },
   };
-  const BKEY = 'cashback-booster-v2';
-  let booster = { level: 'customer', quarter: 'q3', t3mode: 'rate', excluded: null, sets: clone(BOOSTER_SETS), inputs: {} };
+  const BKEY = 'cashback-booster-v3';
+  let booster = { level: 'customer', quarter: 'q3', t3mode: 'growth', excluded: null, sets: clone(BOOSTER_SETS), inputs: {} };
   try {
-    const s = localStorage.getItem(BKEY) || localStorage.getItem('cashback-booster-v1');
-    if (s) { const o = JSON.parse(s); delete o.rules; booster = Object.assign(booster, o); }
+    const s = localStorage.getItem(BKEY) || localStorage.getItem('cashback-booster-v2') || localStorage.getItem('cashback-booster-v1');
+    if (s) { const o = JSON.parse(s); delete o.rules; delete o.t3mode; booster = Object.assign(booster, o); }
   } catch (e) {}
   Object.keys(BOOSTER_SETS).forEach(q => { if (!booster.sets[q]) booster.sets[q] = clone(BOOSTER_SETS[q]); });
   const saveBooster = () => { try { localStorage.setItem(BKEY, JSON.stringify(booster)); } catch (e) {} };
@@ -819,9 +820,9 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
         amount = u.spend * hit.rate / 100;
         if (hit.bonus) {
           const gap = R - hit.r / 100;   // growth above the Tier 3 threshold, as a fraction
-          amount += booster.t3mode === 'spend'
-            ? hit.bonus / 100 * (u.spend - prev * (1 + hit.r / 100))
-            : u.spend * hit.bonus / 100 * gap;
+          amount += booster.t3mode === 'spend' ? hit.bonus / 100 * (u.spend - prev * (1 + hit.r / 100))
+            : booster.t3mode === 'rate' ? u.spend * hit.bonus / 100 * gap
+            : hit.bonus / 100 * (u.spend - prev);   // default: 2% × this quarter + 1% × (this quarter − last quarter)
         }
         rate = u.spend ? amount / u.spend * 100 : hit.rate;
       } else {
