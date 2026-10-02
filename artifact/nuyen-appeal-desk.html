@@ -314,7 +314,7 @@ const S = {
   names: {}, live: {}, accounts: {}, creatives: {}, meta: {}, templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })),
   tplDirty: false, tab: 'sus', sel: { sus: new Set(), act: new Set(), pick: new Set() }, expanded: new Set(),
   job: null, connector: 'pending', profiles: {},
-  bcs: [], selBc: new Set(), acctBc: {}, bcScanned: {}, card: 'total', activeOpen: false, pendingCheck: new Set(),
+  bcs: [], selBc: new Set(), acctBc: {}, bcScanned: {}, card: 'total', activeOpen: false, pendingCheck: new Set(), authorized: null,
 };
 
 // ---------- utils ----------
@@ -504,6 +504,7 @@ function renderJob() {
   $('#jobFill').style.width = (j.total ? Math.min(100, (j.done / j.total) * 100) : 0) + '%';
   $('#jobCancel').hidden = j.finished || !j.cancellable;
   $('#jobClose').hidden = !j.finished;
+  if (!j.finished && j.done % 3 === 0) renderStats();
   $('#jobErr').textContent = j.errors.slice(0, 3).join(' · ') + (j.errors.length > 3 ? ` (+${j.errors.length - 3} lỗi khác)` : '');
 }
 $('#jobCancel').onclick = () => { if (S.job) { S.job.cancelled = true; $('#jobText').textContent = 'Đang dừng sau bước hiện tại…'; } };
@@ -564,13 +565,26 @@ async function refreshStatuses(ids) {
       await writeDoc('meta/bcs', { scanned: S.bcScanned });
     }
     endJob(`${ids.length} account · ${newly} mới bị suspend · ${lifted} được lifted${job.fail ? ` · ${job.fail} nhóm lỗi` : ''}`);
+    if (all) setTimeout(() => scanActive(false), 600);
   } catch (e) { job.errors.push(errMsg(e)); endJob('Lỗi: ' + errMsg(e)); }
 }
 
 // ---------- creative check ----------
 const REJECTED_RE = /AUDIT_DENY|REJECT|NOT_APPROVED|PARTIAL_AUDIT/;
 const clip = (s, n) => (String(s || '').length > n ? String(s).slice(0, n - 1) + '…' : String(s || ''));
+// Account mà connector TikTok được cấp quyền đọc ads (account chỉ nằm trong BC mà chưa cấp quyền => lỗi 40001)
+async function loadAuthorized() {
+  if (S.authorized) return S.authorized;
+  const d = await tt('auth_advertiser_get', {});
+  S.authorized = new Set((d.list || []).map((a) => String(a.advertiser_id)));
+  return S.authorized;
+}
 async function checkOne(id) {
+  try { await loadAuthorized(); } catch { /* vẫn thử đọc */ }
+  if (S.authorized && !S.authorized.has(id)) {
+    const doc = { advertiser_id: id, checked_at: nowIso(), ads: [], errors: [], no_access: true };
+    S.creatives[id] = doc; await writeDoc('creatives/' + id, doc); return doc;
+  }
   const prev = S.creatives[id];
   const prevAds = Object.fromEntries(((prev && prev.ads) || []).map((a) => [a.id, a]));
   const ads = [], errors = [];
@@ -583,7 +597,15 @@ async function checkOne(id) {
       if (page >= ((d.page_info && d.page_info.total_page) || 1)) break;
     }
     const byId = Object.fromEntries(list.map((a) => [String(a.smart_plus_ad_id), a]));
-    for (const part of chunk(Object.keys(byId), 5)) {
+    // Lượt 1 (nhẹ): chỉ lấy trạng thái duyệt; lượt 2: lấy lý do cho ad không được duyệt hoàn toàn
+    const flagged = [];
+    for (const part of chunk(Object.keys(byId), 20)) {
+      const d = await tt('smart_plus_ad_review_info_get', { advertiser_id: id, smart_plus_ad_ids: part });
+      const badAds = new Set((d.smart_plus_ad_review_infos || []).filter((r) => r.review_status !== 'ALL_AVAILABLE').map((r) => String(r.smart_plus_ad_id)));
+      (d.material_review_infos || []).forEach((m) => { if (m.review_status !== 'ALL_AVAILABLE') badAds.add(String(m.smart_plus_ad_id)); });
+      flagged.push(...badAds);
+    }
+    for (const part of chunk(uniq(flagged), 5)) {
       const d = await tt('smart_plus_ad_review_info_get', { advertiser_id: id, smart_plus_ad_ids: part, extra_info_setting: { include_reject_info: true } });
       const mats = {};
       for (const m of d.material_review_infos || []) (mats[m.smart_plus_ad_id] = mats[m.smart_plus_ad_id] || []).push(m);
@@ -605,6 +627,7 @@ async function checkOne(id) {
       }
     }
   } catch (e) { errors.push('Smart+: ' + errMsg(e)); }
+  let manualFailed = false;
   try {
     const list = [];
     for (let page = 1; page <= 10; page++) {
@@ -629,14 +652,24 @@ async function checkOne(id) {
           locations: [], bad_materials: 0, total_materials: 0, videos: [], appeals: (p && p.appeals) || [] });
       }
     }
-  } catch (e) { if (!/does not support|Upgraded Smart/i.test(errMsg(e))) errors.push('Ad thường: ' + errMsg(e)); }
-  const doc = { advertiser_id: id, checked_at: nowIso(), ads: ads.slice(0, 120), errors: errors.slice(0, 3) };
+  } catch (e) { manualFailed = true; if (!/does not support|Upgraded Smart/i.test(errMsg(e))) errors.push('Ad thường: ' + errMsg(e)); }
+  const failed = errors.some((x) => x.startsWith('Smart+')) && manualFailed;
+  const noAccess = errors.some((x) => /40001|doesn.t exist|has been deleted/i.test(x));
+  const doc = { advertiser_id: id, checked_at: nowIso(), ads: ads.slice(0, 120), errors: errors.slice(0, 3), failed, no_access: failed && noAccess };
   S.creatives[id] = doc;
   await writeDoc('creatives/' + id, doc);
   return doc;
 }
-async function checkAccounts(ids, { quietEnd } = {}) {
-  const job = startJob(`Kiểm tra creative ${ids.length} account`, ids.length);
+// Quét creative các account đang chạy trong BC đã chọn (bỏ qua account vừa quét trong 6 giờ, trừ khi force)
+async function scanActive(force) {
+  try { await loadAuthorized(); } catch { /* bỏ qua */ }
+  const fresh = (id) => S.creatives[id] && Date.now() - Date.parse(S.creatives[id].checked_at) < 6 * 3600e3;
+  const ids = Object.keys(S.names).filter((id) => inScope(id) && !isSuspended(id) && (!S.authorized || S.authorized.has(id)) && (force || !fresh(id)));
+  if (!ids.length) { if (force) toast('Không có account đang chạy nào cần quét'); return; }
+  await checkAccounts(ids, { title: `Quét creative ${ids.length} account đang chạy` });
+}
+async function checkAccounts(ids, { title } = {}) {
+  const job = startJob(title || `Kiểm tra creative ${ids.length} account`, ids.length);
   if (!job) return false;
   let found = 0;
   await pool(ids, 3, async (id) => {
@@ -645,7 +678,8 @@ async function checkAccounts(ids, { quietEnd } = {}) {
     job.done++; renderJob();
     if (job.done % 5 === 0) renderAll();
   });
-  endJob(`${job.done}/${ids.length} account · ${found} creative vi phạm${job.cancelled ? ' · đã dừng' : ''}`);
+  const viol = ids.filter((id) => S.creatives[id] && S.creatives[id].ads.length).length;
+  endJob(`${job.done}/${ids.length} account · ${viol} account có vi phạm · ${found} creative vi phạm${job.cancelled ? ' · đã dừng' : ''}`);
   return !job.cancelled;
 }
 
@@ -739,7 +773,8 @@ function renderStats() {
   $('#sRangeLabel').textContent = !from && !to ? 'Tất cả các ngày' : from === to ? `Ngày ${from.split('-').reverse().join('/')}` : `${from || '…'} → ${to || '…'}`;
   const act = activeViolRows().length;
   $('#sAct').textContent = act;
-  $('#sActHint').textContent = S.activeOpen ? '▴ Bấm để thu gọn' : '▾ Bấm để xem';
+  const scanning = S.job && !S.job.finished && /đang chạy/.test(S.job.title);
+  $('#sActHint').textContent = scanning ? `Đang quét ${S.job.done}/${S.job.total}…` : S.activeOpen ? '▴ Bấm để thu gọn' : '▾ Bấm để xem';
   $('#tcSus').textContent = suspendedRows(true).length;
   $$('.stat[data-card]').forEach((b) => b.classList.toggle('on', b.dataset.card === S.card || (b.dataset.card === 'active' && S.activeOpen)));
   $('.stat[data-card="active"]').setAttribute('aria-expanded', String(S.activeOpen));
@@ -748,6 +783,8 @@ function creativeChips(id) {
   const s = summary(id);
   if (!s) return '<span class="sub">Chưa kiểm tra</span>';
   const c = S.creatives[id];
+  if (c.no_access) return `<span class="chip bad">Connector chưa có quyền đọc ads của account này</span><div class="sub">Cấp quyền account cho TikTok MCP rồi “Kiểm tra lại”</div>`;
+  if (c.failed) return `<span class="chip bad">Không đọc được ads</span><div class="sub" title="${esc((c.errors || []).join('\n'))}">${esc(clip((c.errors || [])[0], 90))}</div>`;
   const warn = c.errors && c.errors.length ? `<div class="sub" title="${esc(c.errors.join('\n'))}">⚠ ${esc(clip(c.errors[0], 70))}</div>` : '';
   if (!s.total) return `<span class="chip ok">Không có creative vi phạm</span><div class="sub">Kiểm tra ${fmt(c.checked_at)}</div>${warn}`;
   return `<div class="chips"><span class="chip">${s.total} vi phạm</span>${s.none ? `<span class="chip warn">${s.none} chưa appeal</span>` : ''}${s.sent + s.pending ? `<span class="chip">${s.sent + s.pending} đã gửi / đang xét</span>` : ''}${s.won ? `<span class="chip ok">${s.won} thành công</span>` : ''}${s.failed + s.error ? `<span class="chip bad">${s.failed + s.error} bị từ chối / lỗi</span>` : ''}</div><div class="sub">Kiểm tra ${fmt(c.checked_at)}</div>${warn}`;
@@ -829,7 +866,7 @@ function renderPicker() {
   $('#pkCount').textContent = Object.keys(S.names).length ? `${rows.length} account đang chạy khớp bộ lọc` : 'Bấm “Cập nhật trạng thái BC đã chọn” để tải danh sách account';
   $('#pkCheckAll').textContent = `Kiểm tra tất cả ${rows.length} account đang lọc`;
   $('#pkCheckAll').disabled = !rows.length;
-  $('#pkList').innerHTML = rows.slice(0, 100).map((id) => `<label><input type="checkbox" data-sel="pick" value="${esc(id)}" ${S.sel.pick.has(id) ? 'checked' : ''}> <span>${esc(S.names[id])}</span> <span class="sub mono">${esc(id)}</span><span class="spacer"></span>${S.creatives[id] ? `<span class="sub">đã kiểm tra ${fmt(S.creatives[id].checked_at)}</span>` : ''}</label>`).join('')
+  $('#pkList').innerHTML = rows.slice(0, 100).map((id) => `<label><input type="checkbox" data-sel="pick" value="${esc(id)}" ${S.sel.pick.has(id) ? 'checked' : ''}> <span>${esc(S.names[id])}</span> <span class="sub mono">${esc(id)}</span><span class="spacer"></span>${S.authorized && !S.authorized.has(id) ? '<span class="chip bad">Connector chưa có quyền</span>' : S.creatives[id] ? `<span class="sub">đã kiểm tra ${fmt(S.creatives[id].checked_at)}</span>` : ''}</label>`).join('')
     + (rows.length > 100 ? `<label class="sub">… và ${rows.length - 100} account khác — gõ để lọc thêm</label>` : '');
   $('#pkCheckSel').textContent = `Kiểm tra đã chọn (${S.sel.pick.size})`;
   $('#pkCheckSel').disabled = !S.sel.pick.size;
@@ -1067,7 +1104,7 @@ $('#susAcc').onclick = () => openAccAppeal([...S.sel.sus].filter((id) => isSuspe
 $('#actCheck').onclick = () => checkAccounts([...S.sel.act]);
 $('#actBulk').onclick = () => openAppeal([...S.sel.act]);
 $('#pkCheckSel').onclick = async () => { const ids = [...S.sel.pick]; S.sel.pick.clear(); await checkAccounts(ids); };
-$('#pkCheckAll').onclick = () => checkAccounts(pickerRows());
+$('#pkCheckAll').onclick = () => checkAccounts(pickerRows(), { title: `Quét creative ${pickerRows().length} account đang chạy` });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#mAppeal').hidden = true; $('#mAcc').hidden = true; } });
 
 // ---------- boot ----------
