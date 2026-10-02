@@ -160,6 +160,16 @@ a.applink:hover .nm { text-decoration: underline; }
 .run:disabled { opacity: 0.5; cursor: not-allowed; }
 .rp-note { font-size: 12px; color: var(--muted); }
 .progress-line { font-size: 12px; color: var(--fg-2); text-align: right; min-height: 18px; padding-top: 8px; }
+.genrebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 0; }
+.genrebar .lb { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-right: 4px; }
+.gchip { display: inline-flex; gap: 6px; align-items: baseline; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+.gchip:hover { border-color: var(--accent); }
+.gchip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.gchip.on .gm, .gchip.on .r-good, .gchip.on .r-bad { color: inherit; }
+.gchip .gm { color: var(--muted); font-size: 12px; }
+.gsel { font-size: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 2px 4px; max-width: 170px; }
+.gsel.manual { border-color: var(--accent); }
+.gnew { font-size: 12px; border: 1px solid var(--accent); border-radius: 6px; padding: 2px 6px; width: 140px; background: var(--bg); }
 .placeholder { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 36px 16px; text-align: center; color: var(--muted); margin-top: 12px; }
 .section-h { font-size: 13px; font-weight: 700; color: var(--fg-2); margin: 14px 0 6px; }
 .empty { padding: 28px 14px; color: var(--muted); text-align: center; white-space: normal; }
@@ -216,6 +226,7 @@ a.applink:hover .nm { text-decoration: underline; }
 
   <div class="progress-line" id="progress"></div>
   <div id="notice"></div>
+  <div id="genrebar" class="genrebar" hidden></div>
   <div id="placeholder" class="placeholder">Chọn BC, khoảng ngày và loại report rồi bấm <b>Run</b>.</div>
   <div id="overviewBox" hidden>
     <div class="sum" id="summary"></div>
@@ -248,7 +259,7 @@ const state = {
   preset: 'today', start: '', end: '',
   lvl2: LS.get('bcat.lvl2', 'account'),
   sort: LS.get('bcat.sort', { key: 'spend', dir: 'desc' }),
-  panel: null, opts: LS.get('bcat.opts', { overview: true, detail: false }), ran: null, lastKey: '',
+  panel: null, genre: null, genres: LS.get('bcat.genres', {}), opts: LS.get('bcat.opts', { overview: true, detail: false }), ran: null, lastKey: '',
   open: new Map(), accounts: [], queue: [], phase: null, paused: false, refresh: false, run: 0,
 };
 let mcp = null;
@@ -408,6 +419,58 @@ async function summarize(accounts) {
   }
 }
 
+// ---------- genres ----------
+// Auto genre from the app name (checked in order), overridable per app; overrides are shared via db.
+const GENRE_RULES = [
+  ['Short Drama', (n) => /drama|reels\b|short/i.test(n)],
+  ['Utilities / Caller ID', (n) => /caller\s*id|blocker|call/i.test(n)],
+  ['AI Photo', (n) => /photo|camera/i.test(n)],
+  ['Video Player / TV', (n) => /\bTV|TV\b/.test(n) || /iptv|player/i.test(n)], // "TV" upper-case only
+  ['Game Tools', (n) => /skin|rbx|fps|booster/i.test(n)],
+];
+const GENRE_OTHER = 'Khác';
+const GENRE_NONE = 'Không gắn app';
+const autoGenre = (name) => (GENRE_RULES.find(([, test]) => test(name || '')) || [GENRE_OTHER])[0];
+function genreOf(appId) {
+  if (!appId || appId === NONE_APP) return GENRE_NONE;
+  if (appId === PENDING_APP) return null;
+  return state.genres[appId] || autoGenre(model?.apps.get(appId)?.name);
+}
+function genreList() {
+  const set = new Set([...GENRE_RULES.map(([g]) => g), ...Object.values(state.genres), GENRE_OTHER]);
+  return [...set];
+}
+function genreSelect(appId) {
+  const cur = genreOf(appId);
+  const manual = !!state.genres[appId];
+  const opts = genreList().map((g) => `<option value="${esc(g)}" ${g === cur ? 'selected' : ''}>${esc(g)}</option>`).join('');
+  return `<select class="gsel ${manual ? 'manual' : ''}" data-app="${esc(appId)}" title="${manual ? 'Genre đã chọn tay' : 'Genre tự gán theo tên app'}" aria-label="Genre">${opts}<option value="__new">+ Genre mới…</option>${manual ? '<option value="__auto">↺ Tự động</option>' : ''}</select>`;
+}
+let db = null;
+async function setGenre(appId, genre) {
+  const name = model?.apps.get(appId)?.name || '';
+  if (genre === '__auto') delete state.genres[appId]; else state.genres[appId] = genre;
+  LS.set('bcat.genres', state.genres);
+  render();
+  if (!db) return;
+  try {
+    const ref = db.collection('appGenres').doc(appId);
+    if (genre === '__auto') await ref.delete(); else await ref.set({ genre, name, at: Date.now() });
+  } catch (e) {
+    notice(e?.code === 'invalid_argument' ? 'Bạn chỉ có quyền xem nên genre vừa chọn chỉ lưu trên máy bạn.' : 'Chưa lưu được genre lên trang, thử lại sau.', true);
+  }
+}
+function watchGenres() {
+  if (!db) return;
+  db.collection('appGenres').limit(1000).onSnapshot((snap) => {
+    const map = {};
+    for (const d of snap.docs) { const g = d.data()?.genre; if (g) map[d.id] = String(g); }
+    state.genres = map;
+    LS.set('bcat.genres', map);
+    queueRender();
+  }, () => { /* keep local copy */ });
+}
+
 const appIdOf = (v) => (v && v !== '-' && String(v) !== '0' ? String(v) : null);
 // Overview needs only: Event Manager apps + ad-level spend with the app each ad promotes.
 async function fetchLite(adv) {
@@ -563,7 +626,8 @@ function buildTree(model) {
       return { path, dim: 'campaign', id: f.cid, depth, fact: f, rows: [f], spend: f.spend, rev: f.rev, roas: roas(f.rev, f.spend), geo: model.campGeo.get(f.key) || new Map(), kids: () => creativeNodes(model, f, path, depth + 1) };
     });
   };
-  return make(model.facts.filter((f) => f.spend > 0), 0, '');
+  const g = state.genre;
+  return make(model.facts.filter((f) => f.spend > 0 && (!g || (!f.placeholder && genreOf(f.app) === g))), 0, '');
 }
 // account -> apps it runs, app -> accounts running it (campaigns with spend)
 function links(model) {
@@ -634,7 +698,7 @@ function label(n) {
     const a = model.apps.get(n.id) || {};
     const accs = [...(links(model).appAccs.get(n.id) || [])].map((x) => model.accounts.get(x)?.name || x);
     const accPills = accs.map((nm) => `<span class="pill" title="Account đang chạy app này">${esc(nm)}</span>`);
-    return `${appLink(n.id, true)}<span class="meta">${esc(a.platform || '')}${n.id !== NONE_APP ? ' · ' + esc(n.id) : ''}</span>${pills(accPills)}`;
+    return `${appLink(n.id, true)}<span class="meta">${esc(a.platform || '')}${n.id !== NONE_APP ? ' · ' + esc(n.id) : ''}</span>${n.id !== NONE_APP ? genreSelect(n.id) : ''}${pills(accPills)}`;
   }
   if (n.dim === 'campaign') {
     const f = n.fact;
@@ -663,28 +727,39 @@ function budgetCell(n) {
 }
 // Account -> app spend from ad-level rows (overview or detail data).
 function overviewStats() {
-  const accs = state.accounts.filter((a) => a.spend > 0);
+  const g = state.genre;
+  const all = state.accounts.filter((a) => a.spend > 0);
   const apps = new Map(); // app id -> {spend, rev, accs:Set}
   const accApps = new Map();
+  const genres = new Map(); // genre -> {spend, rev, apps:Set} over every loaded account
+  const accG = new Map(); // account -> {spend, rev} inside the selected genre
   let loaded = 0;
-  for (const a of accs) {
+  for (const a of all) {
     const ads = a.d?.ads || a.lite?.ads;
     if (!ads) continue;
     loaded++;
     const per = new Map();
     for (const ad of ads) {
-      if (!ad.app || !(ad.spend > 0)) continue;
+      if (!(ad.spend > 0)) continue;
+      const ge = genreOf(ad.app);
+      const t = genres.get(ge) || { spend: 0, rev: 0, apps: new Set() };
+      t.spend += ad.spend; t.rev += ad.rev; if (ad.app) t.apps.add(ad.app); genres.set(ge, t);
+      if (g && ge !== g) continue;
+      if (g) { const e = accG.get(a.id) || { spend: 0, rev: 0 }; e.spend += ad.spend; e.rev += ad.rev; accG.set(a.id, e); }
+      if (!ad.app) continue;
       const e = apps.get(ad.app) || { spend: 0, rev: 0, accs: new Set() };
       e.spend += ad.spend; e.rev += ad.rev; e.accs.add(a.id); apps.set(ad.app, e);
       per.set(ad.app, (per.get(ad.app) || 0) + ad.spend);
     }
     accApps.set(a.id, [...per].sort((x, y) => y[1] - x[1]).map(([id]) => id));
   }
-  return { accs, apps, accApps, loaded, spend: sum(accs, (a) => a.spend), rev: sum(accs, (a) => a.rev) };
+  // With a genre picked, accounts and totals come from that genre's ad spend only.
+  const accs = g ? all.filter((a) => accG.get(a.id)?.spend > 0).map((a) => ({ ...a, spend: accG.get(a.id).spend, rev: accG.get(a.id).rev })) : all;
+  return { accs, apps, accApps, genres, loaded, allCount: all.length, spend: sum(accs, (a) => a.spend), rev: sum(accs, (a) => a.rev) };
 }
 
 function renderPanel(st) {
-  const withSpend = st.accs, loadingApps = st.loaded < withSpend.length, doneN = st.loaded;
+  const withSpend = st.accs, loadingApps = st.loaded < st.allCount, doneN = st.loaded;
   const el = $('#panel');
   if (!state.panel) { el.innerHTML = ''; return; }
   const row = (cells) => `<tr>${cells.join('')}</tr>`;
@@ -702,15 +777,24 @@ function renderPanel(st) {
   } else {
     const byApp = st.apps;
     const list = [...byApp].sort((a, b) => b[1].spend - a[1].spend);
-    html = `<h4>App đang chạy (${list.length})</h4>${loadingApps ? `<div class="note">Đã tải ${doneN}/${withSpend.length} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}<table><thead><tr><th class="l">App</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
+    html = `<h4>App đang chạy (${list.length})</h4>${loadingApps ? `<div class="note">Đã tải ${doneN}/${st.allCount} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}<table><thead><tr><th class="l">App</th><th class="l">Genre</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
       (list.map(([id, e]) => {
         const a = model.apps.get(id) || {};
         const names = [...e.accs].map((x) => model.accounts.get(x)?.name || x);
         const r = roas(e.rev, e.spend);
-        return row([`<td class="l"><div class="namecell">${appLink(id, true)}<span class="meta">${esc(a.platform || '')}</span></div></td>`, `<td class="l" title="${esc(names.join('\n'))}">${e.accs.size} account <span class="meta">${esc(names.slice(0, 2).join(', '))}${names.length > 2 ? '…' : ''}</span></td>`, `<td class="num">${money(e.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
-      }).join('') || '<tr><td colspan="4" class="empty">Chưa có app nào.</td></tr>') + '</tbody></table>';
+        return row([`<td class="l"><div class="namecell">${appLink(id, true)}<span class="meta">${esc(a.platform || '')}</span></div></td>`, `<td class="l">${genreSelect(id)}</td>`, `<td class="l" title="${esc(names.join('\n'))}">${e.accs.size} account <span class="meta">${esc(names.slice(0, 2).join(', '))}${names.length > 2 ? '…' : ''}</span></td>`, `<td class="num">${money(e.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
+      }).join('') || '<tr><td colspan="5" class="empty">Chưa có app nào.</td></tr>') + '</tbody></table>';
   }
   el.innerHTML = `<div class="panel">${html}</div>`;
+}
+function renderGenreBar(st) {
+  const el = $('#genrebar');
+  if (!state.ran || !st.genres.size) { el.hidden = true; el.innerHTML = ''; return; }
+  const list = [...st.genres].sort((a, b) => b[1].spend - a[1].spend);
+  const tot = sum(list, ([, e]) => e.spend), trev = sum(list, ([, e]) => e.rev);
+  const chip = (key, label, e) => { const r = roas(e.rev, e.spend); return `<button type="button" class="gchip ${state.genre === key ? 'on' : ''}" data-genre="${esc(key ?? '')}">${esc(label)} <span class="gm">${kmoney(e.spend)} · <span class="${rcls(r)}">${pct(r, 0)}</span>${e.apps ? ` · ${e.apps.size} app` : ''}</span></button>`; };
+  el.hidden = false;
+  el.innerHTML = `<span class="lb">Genre</span>${chip(null, 'Tất cả', { spend: tot, rev: trev })}${list.map(([g, e]) => chip(g, g, e)).join('')}`;
 }
 function isOpen(n) { return state.open.has(n.path) ? state.open.get(n.path) : n.depth === 0; }
 
@@ -720,11 +804,13 @@ function render() {
   const tree = buildTree(model);
   const ran = state.ran;
   $('#placeholder').hidden = !!ran;
+  const stG = overviewStats();
+  renderGenreBar(stG);
   $('#overviewBox').hidden = !ran?.overview;
   $('#detailBox').hidden = !ran?.detail;
   $('#runBtn').textContent = state.phase ? 'Run lại' : 'Run';
 
-  const st = overviewStats();
+  const st = stG;
   const errs = results.filter((a) => a.status === 'error' || a.liteStatus === 'error');
   const withSpend = st.accs;
   const detailDone = withSpend.filter((a) => a.d || a.status === 'error').length;
@@ -742,8 +828,8 @@ function render() {
     $('#summary').innerHTML = `
       <div class="card c-spend"><span class="k">Spend</span><span class="v">${money(st.spend)}</span></div>
       <div class="card ${r == null ? '' : r >= 1 ? 'c-good' : r >= 0.5 ? 'c-mid' : 'c-bad'}"><span class="k">ROAS IAA D0</span><span class="v">${pct(r)}</span></div>
-      <button type="button" class="card c-acc ${state.panel === 'accounts' ? 'on' : ''}" data-panel="accounts"><span class="k">Account có spend</span><span class="v">${withSpend.length}</span><span class="s">/ ${results.length} account</span></button>
-      <button type="button" class="card c-app ${state.panel === 'apps' ? 'on' : ''}" data-panel="apps"><span class="k">App đang chạy</span><span class="v">${st.apps.size}</span><span class="s">${loadingApps ? `đã tải ${st.loaded}/${withSpend.length} account` : 'theo ad có spend'}</span></button>`;
+      <button type="button" class="card c-acc ${state.panel === 'accounts' ? 'on' : ''}" data-panel="accounts"><span class="k">Account có spend</span><span class="v">${withSpend.length}</span><span class="s">/ ${results.length} account${state.genre ? ' · ' + esc(state.genre) : ''}</span></button>
+      <button type="button" class="card c-app ${state.panel === 'apps' ? 'on' : ''}" data-panel="apps"><span class="k">App đang chạy</span><span class="v">${st.apps.size}</span><span class="s">${st.loaded < st.allCount ? `đã tải ${st.loaded}/${st.allCount} account` : state.genre ? esc(state.genre) : 'theo ad có spend'}</span></button>`;
     renderPanel(st);
   }
   if (!ran?.detail) return;
@@ -800,7 +886,7 @@ async function load() {
   state.refresh = key === state.lastKey; // running the same report again = fresh data
   state.lastKey = key;
   const run = ++state.run;
-  state.ran = opts; state.accounts = []; state.queue = []; state.phase = 'accounts'; state.open.clear();
+  state.ran = opts; state.genre = null; state.accounts = []; state.queue = []; state.phase = 'accounts'; state.open.clear();
   notice('');
   render();
   const alive = () => run === state.run;
@@ -910,6 +996,34 @@ function initControls() {
   }));
   $('#runBtn').disabled = !state.opts.overview && !state.opts.detail;
   $('#runBtn').addEventListener('click', () => load());
+  $('#genrebar').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-genre]');
+    if (!c) return;
+    state.genre = c.dataset.genre || null;
+    state.open.clear();
+    render();
+  });
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest('select.gsel');
+    if (!sel) return;
+    if (sel.value === '__new') {
+      const inp = document.createElement('input');
+      inp.className = 'gnew'; inp.placeholder = 'Tên genre rồi Enter'; inp.dataset.app = sel.dataset.app;
+      sel.replaceWith(inp); inp.focus();
+      return;
+    }
+    setGenre(sel.dataset.app, sel.value);
+  });
+  document.addEventListener('keydown', (e) => {
+    const inp = e.target.closest?.('input.gnew');
+    if (!inp) return;
+    if (e.key === 'Enter' && inp.value.trim()) setGenre(inp.dataset.app, inp.value.trim().slice(0, 40));
+    if (e.key === 'Escape') render();
+  });
+  document.addEventListener('focusout', (e) => {
+    const inp = e.target.closest?.('input.gnew');
+    if (inp && !inp.value.trim()) setTimeout(render, 0);
+  });
   $('#summary').addEventListener('click', (e) => {
     const c = e.target.closest('[data-panel]');
     if (!c) return;
@@ -926,7 +1040,7 @@ function initControls() {
     state.open.set(p, !cur); render();
   };
   tbl.addEventListener('click', (e) => {
-    if (e.target.closest('a')) return; // store links open normally
+    if (e.target.closest('a, select, input')) return; // store links and genre pickers act on their own
     if (e.target.closest('#lvswap')) { state.lvl2 = state.lvl2 === 'account' ? 'app' : 'account'; LS.set('bcat.lvl2', state.lvl2); state.open.clear(); render(); return; }
     const th = e.target.closest('th[data-sort]');
     if (th) return toggleSort(th.dataset.sort);
@@ -948,6 +1062,7 @@ async function boot() {
   initControls();
   initBcPicker();
   render();
+  window.claude?.use?.('db').then((d) => { db = d; watchGenres(); }).catch(() => {});
   mcp = window.claude?.use ? await window.claude.use('mcp') : null;
   if (!mcp) {
     $('#bcBtn').textContent = 'BC: không khả dụng';
