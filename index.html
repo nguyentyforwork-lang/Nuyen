@@ -269,6 +269,8 @@
   .sort { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 9px; padding: 2px 2px 2px 8px; }
   .sort button { font: inherit; font-size: 13px; font-weight: 500; color: var(--chip-text); background: none; border: 0; border-radius: 7px; padding: 4px 8px; cursor: pointer; }
   .sort button[aria-pressed="true"] { background: var(--line); color: var(--on-line); }
+  .pic-filter select { font: inherit; font-size: 13px; font-weight: 500; color: var(--text); background: transparent; border: 0; border-radius: 7px; padding: 4px 6px; cursor: pointer; max-width: 180px; }
+  .pic-filter select:focus-visible { outline: 2px solid var(--line); }
   .th-sort { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
   .th-sort[aria-pressed="true"] { color: var(--text); font-weight: 600; }
   .pill.new { background: var(--new-bg); color: var(--new-fg); }
@@ -470,6 +472,10 @@ let rangeTouched = false;
 const TAB_KEY = "ecomdy-kpi-tab";
 let activeTab = (() => { try { return +localStorage.getItem(TAB_KEY) || 0; } catch (e) { return 0; } })();
 const SORT_KEY = "ecomdy-kpi-sort";
+// Lọc thẻ theo UA PIC (nhớ trên trình duyệt này): "" = tất cả, "__none" = chưa có PIC
+const PIC_KEY = "ecomdy-kpi-pic";
+let picFilter = (() => { try { return localStorage.getItem(PIC_KEY) || ""; } catch (e) { return ""; } })();
+const picOf = a => (config.apps[a.code]?.pic || "").trim();
 let appSort = (() => { try { return localStorage.getItem(SORT_KEY) === "roas" ? "roas" : "spend"; } catch (e) { return "spend"; } })();
 let campSort = "spend";
 const roasOf = x => x.spend > 0 ? x.rev / x.spend : -1;
@@ -1114,7 +1120,12 @@ function render() {
   const gi = activeTab, g = config.groups[gi];
   const r0 = results[gi] || { status: "idle", apps: [], errors: [] };
   const hiddenN = r0.apps.filter(a => isHidden(gi, a)).length;
-  const r = { ...r0, apps: r0.apps.filter(a => !isHidden(gi, a)) };
+  const visible = r0.apps.filter(a => !isHidden(gi, a));
+  const pics = [...new Set(visible.map(picOf).filter(Boolean))].sort((x, y) => x.localeCompare(y, "vi"));
+  const noPicN = visible.filter(a => !picOf(a)).length;
+  if (picFilter && picFilter !== "__none" && !pics.includes(picFilter) && r0.status === "ok" && !r0.progress) picFilter = "";
+  const byPic = a => !picFilter || (picFilter === "__none" ? !picOf(a) : picOf(a) === picFilter);
+  const r = { ...r0, apps: visible.filter(byPic) };
   const total = r.apps.reduce((s, a) => s + a.spend, 0);
   const allN = (g.allCamps || []).filter(a => (g.accounts || []).includes(a)).length;
   const kw = esc(g.keyword || "Ecomdy") + (allN ? ` · ${allN} tài khoản lấy mọi camp` : "");
@@ -1129,6 +1140,7 @@ function render() {
   let body;
   if (r.status === "loading" || (r.progress && !r.apps.length)) body = `<div class="card loading">Đang kéo số từ TikTok…</div>`;
   else if (r.pageError || r.status !== "ok") body = `<div class="empty">Chưa có số liệu.</div>`;
+  else if (!r.apps.length && visible.length) body = `<div class="empty">Không có app nào ${picFilter === "__none" ? "chưa có UA PIC" : `của UA PIC "${esc(picFilter)}"`} trong nhóm này.</div>`;
   else if (!r.apps.length && !r.errors.length) body = `<div class="empty">${hiddenN ? "Đã xóa hết app khỏi dashboard. Bấm \"Hiện lại\" ở trên để lấy lại." : `Không có camp ${kw} nào có spend trong khoảng ngày này.`}</div>`;
   else body = [...r.apps].sort(bySort(appSort)).map(a => card(a)).join("") + (r.progress ? `<div class="card loading">Đang kéo tài khoản ${r.progress}…</div>` : "");
   const errs = r.errors.length ? `<div class="acc-errors">${r.errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
@@ -1140,6 +1152,12 @@ function render() {
         <h1>${esc(g.name)}</h1>
         <span class="sub">${sub}</span>
         <span class="actions"><span class="status">${status}</span>
+          <label class="sort pic-filter">UA PIC
+            <select id="picFilter" aria-label="Lọc theo UA PIC">
+              <option value="">Tất cả</option>
+              ${pics.map(pn => `<option value="${esc(pn)}" ${pn === picFilter ? "selected" : ""}>${esc(pn)} (${visible.filter(a => picOf(a) === pn).length})</option>`).join("")}
+              ${noPicN ? `<option value="__none" ${picFilter === "__none" ? "selected" : ""}>Chưa có PIC (${noPicN})</option>` : ""}
+            </select></label>
           <span class="sort" role="group" aria-label="Sắp xếp app">Sắp xếp
             <button data-act="sort" data-key="spend" aria-pressed="${appSort === "spend"}">Spend ↓</button>
             <button data-act="sort" data-key="roas" aria-pressed="${appSort === "roas"}">ROAS ↓</button></span>
@@ -1319,6 +1337,12 @@ function showBanner(msg) { const b = document.getElementById("banner"); b.textCo
 function hideBanner() { document.getElementById("banner").hidden = true; }
 
 /* ---------- Events ---------- */
+document.addEventListener("change", e => {
+  if (e.target.id !== "picFilter") return;
+  picFilter = e.target.value;
+  try { localStorage.setItem(PIC_KEY, picFilter); } catch (err) {}
+  render();
+});
 document.getElementById("presetSeg").addEventListener("click", e => {
   const b = e.target.closest("button[data-preset]"); if (!b) return;
   range = presetRange(b.dataset.preset); rangeTouched = true;
