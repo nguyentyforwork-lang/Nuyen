@@ -52,7 +52,21 @@ header.top .in { max-width: 1440px; margin: 0 auto; padding: 10px 16px; display:
 .bar { height: 6px; background: var(--sunk); border-radius: 999px; overflow: hidden; }
 .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
 
-.datebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; margin-top: 14px; }
+.bcbox { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); margin-top: 14px; }
+.bcbox > summary { list-style: none; cursor: pointer; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bcbox > summary::-webkit-details-marker { display: none; }
+.bcbox > summary b { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.bcbox .inner { border-top: 1px solid var(--line); padding: 10px 14px; display: grid; gap: 8px; }
+.bclist { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 12px; max-height: 280px; overflow: auto; }
+.bclist label { display: flex; gap: 8px; align-items: center; padding: 4px 2px; min-width: 0; }
+.bclist label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daily td, .daily th { text-align: right; font-variant-numeric: tabular-nums; }
+.daily td:first-child, .daily th:first-child { text-align: left; }
+.daily tbody tr { cursor: pointer; }
+.daily tbody tr:hover td { background: var(--sunk); }
+.daily tbody tr.on td { background: var(--accent-soft); }
+.n-bad { color: var(--bad); font-weight: 600; } .n-ok { color: var(--ok); font-weight: 600; } .n-warn { color: var(--warn); font-weight: 600; }
+.datebar { margin-top: 0; } .datebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; }
 .datebar b { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 4px; }
 .datebar label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 .quick { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -130,10 +144,19 @@ tr.detail table { background: var(--surface); border-radius: 8px; }
   <span class="spacer"></span>
   <span id="conn" class="pill">Đang kết nối TikTok…</span>
   <span id="lastScan" class="sub"></span>
-  <button id="btnRefreshAll" class="primary">↻ Cập nhật trạng thái tất cả</button>
+  <button id="btnRefreshAll" class="primary">↻ Cập nhật trạng thái BC đã chọn</button>
 </div></header>
 
 <div class="wrap">
+  <details class="bcbox" id="bcBox">
+    <summary><b>Business Center</b><span id="bcSummary" class="sub">Đang tải danh sách BC…</span><span class="spacer"></span><span class="sub">▾ chọn BC</span></summary>
+    <div class="inner">
+      <div class="toolbar"><input type="search" id="bcQ" placeholder="Tìm tên / ID BC"><button class="sm" id="bcNone">Bỏ chọn hết</button><span class="spacer"></span><span class="sub">Chỉ account trong các BC đã chọn được kéo về và hiển thị.</span></div>
+      <div class="bclist" id="bcList"></div>
+      <div class="toolbar"><span class="spacer"></span><button class="primary" id="bcPull">↻ Kéo trạng thái account của BC đã chọn</button></div>
+    </div>
+  </details>
+
   <section class="datebar" aria-label="Lọc theo ngày suspend">
     <b>Ngày suspend</b>
     <label>từ <input type="date" id="dFrom"></label>
@@ -158,6 +181,13 @@ tr.detail table { background: var(--surface); border-radius: 8px; }
     <div class="stat ok"><span class="k">Đã lifted</span><span class="v" id="sLift">0</span></div>
     <div class="stat bad"><span class="k">Vẫn đang suspend</span><span class="v" id="sStill">0</span></div>
     <div class="stat warn"><span class="k">Account đang chạy có vi phạm</span><span class="v" id="sAct">0</span></div>
+  </section>
+
+  <section class="tablewrap" aria-label="Theo ngày">
+    <table class="daily">
+      <thead><tr><th>Ngày suspend</th><th>Tổng suspend</th><th>Chưa appeal</th><th>Đã appeal</th><th>Đã lifted</th><th>Còn suspend</th></tr></thead>
+      <tbody id="dailyRows"></tbody>
+    </table>
   </section>
 
   <nav class="tabs" role="tablist">
@@ -281,6 +311,7 @@ const S = {
   names: {}, live: {}, accounts: {}, creatives: {}, meta: {}, templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })),
   tplDirty: false, tab: 'sus', sel: { sus: new Set(), act: new Set(), pick: new Set() }, expanded: new Set(),
   job: null, connector: 'pending', profiles: {},
+  bcs: [], selBc: new Set(), acctBc: {}, bcScanned: {},
 };
 
 // ---------- utils ----------
@@ -322,18 +353,32 @@ const shortReason = (t) => { const s = String(t || ''); const m = s.match(/^(.{0
 async function tt(tool, input, { write = false } = {}) {
   if (!S.mcp) throw { code: 'no_mcp', message: 'Chưa kết nối được TikTok' };
   const opts = write ? { cache: false } : { cache: { staleTime: 60000 } };
-  let res;
-  try { res = await S.mcp.callTool(SERVER, tool, input, opts); }
-  catch (e) {
-    if (!write && e && e.retryable) { await sleep((e.retryAfterMs || 1200) + Math.random() * 800); res = await S.mcp.callTool(SERVER, tool, input, opts); }
-    else { connectorError(e); throw e; }
+  // Đọc: thử lại khi TikTok báo giới hạn tần suất (2s, 4s, 8s, 16s). Ghi (appeal): không bao giờ tự gửi lại.
+  for (let attempt = 0; ; attempt++) {
+    let res, p, err = null;
+    try {
+      await throttle();
+      res = await S.mcp.callTool(SERVER, tool, input, opts);
+      p = res.payload;
+      if (typeof p === 'string') { try { p = JSON.parse(p); } catch { /* keep text */ } }
+      if (!p || typeof p !== 'object') err = { code: 'bad_payload', message: typeof p === 'string' ? clip(p, 160) : 'TikTok trả về dữ liệu không đọc được' };
+      else if (p.code !== undefined && p.code !== 0) err = { code: 'tiktok', tiktokCode: p.code, message: `TikTok ${p.code}: ${p.message || ''}`.trim() };
+    } catch (e) { err = e; }
+    if (!err) { setConn('ok'); return p.data || {}; }
+    const limited = isRateLimit(err) || (err.retryable && !write);
+    if (!write && limited && attempt < 4) { rateBackoff = Math.min(16000, 2000 * 2 ** attempt); await sleep(rateBackoff + Math.random() * 600); continue; }
+    connectorError(err);
+    throw err;
   }
-  let p = res.payload;
-  if (typeof p === 'string') { try { p = JSON.parse(p); } catch { /* keep text */ } }
-  if (!p || typeof p !== 'object') throw { code: 'bad_payload', message: 'TikTok trả về dữ liệu không đọc được' };
-  if (p.code !== undefined && p.code !== 0) throw { code: 'tiktok', message: `TikTok ${p.code}: ${p.message || ''}`.trim() };
-  setConn('ok');
-  return p.data || {};
+}
+let rateBackoff = 0, lastCall = 0;
+const isRateLimit = (e) => /rate.?limit|too many|frequen|40100|51021/i.test(errMsg(e) + ' ' + ((e && e.tiktokCode) || ''));
+// Giãn các lượt gọi TikTok (≥ 350ms) để tránh "rate limit exceeded"
+async function throttle() {
+  const wait = lastCall + 350 - Date.now();
+  lastCall = Math.max(Date.now(), lastCall + 350);
+  if (wait > 0) await sleep(wait);
+  if (rateBackoff) { rateBackoff = Math.max(0, rateBackoff - 500); }
 }
 function connectorError(e) {
   const code = e && e.code;
@@ -352,18 +397,64 @@ function setConn(state) {
   S.connector = state;
   const c = $('#conn');
   c.className = 'pill ' + (state === 'ok' ? 'ok' : state === 'bad' ? 'bad' : '');
-  c.textContent = state === 'ok' ? `TikTok đã kết nối · ${Object.keys(S.names).length} account` : state === 'bad' ? 'TikTok chưa kết nối' : state === 'none' ? 'Mở trong claude.ai để kết nối TikTok' : 'Đang kết nối TikTok…';
+  c.textContent = state === 'ok' ? `TikTok đã kết nối · ${S.bcs.length} BC` : state === 'bad' ? 'TikTok chưa kết nối' : state === 'none' ? 'Mở trong claude.ai để kết nối TikTok' : 'Đang kết nối TikTok…';
 }
 function showBanner(msg, bad) { const b = $('#banner'); b.textContent = msg; b.className = 'banner' + (bad ? ' bad' : ''); b.hidden = !msg; }
 
-async function loadNames(force) {
-  if (!force && Object.keys(S.names).length) return;
-  const d = await tt('auth_advertiser_get', {});
-  const m = {};
-  for (const a of d.list || []) m[String(a.advertiser_id)] = a.advertiser_name;
-  S.names = m;
-  setConn('ok');
-  renderAll();
+async function loadBcs() {
+  const list = [];
+  for (let page = 1; page <= 10; page++) {
+    const d = await tt('bc_get', { page, page_size: 50 });
+    for (const b of d.list || []) if (b.bc_info && b.bc_info.bc_id) list.push({ bc_id: String(b.bc_info.bc_id), name: b.bc_info.name || b.bc_info.bc_id, status: b.bc_info.status || '' });
+    if (page >= ((d.page_info && d.page_info.total_page) || 1)) break;
+  }
+  S.bcs = list.sort((a, b) => a.name.localeCompare(b.name));
+  renderBcs();
+}
+// Account trong các BC đã chọn (cả account được share vào BC)
+async function loadBcAccounts(job) {
+  const ids = new Set();
+  for (const bc of S.selBc) {
+    for (let page = 1; page <= 200; page++) {
+      if (job && job.cancelled) break;
+      const d = await tt('bc_asset_get', { bc_id: bc, asset_type: 'ADVERTISER', page, page_size: 50 });
+      for (const a of d.list || []) {
+        const id = String(a.asset_id);
+        ids.add(id); S.names[id] = a.asset_name || id;
+        S.acctBc[id] = uniq([...(S.acctBc[id] || []), bc]);
+      }
+      if (job) { job.text = `Đang lấy danh sách account · BC ${bcName(bc)} · trang ${page}`; renderJob(); }
+      if (page >= ((d.page_info && d.page_info.total_page) || 1)) break;
+    }
+  }
+  return [...ids];
+}
+const bcName = (id) => (S.bcs.find((b) => b.bc_id === id) || {}).name || id;
+function renderBcs() {
+  const q = $('#bcQ').value.trim().toLowerCase();
+  $('#bcList').innerHTML = S.bcs.filter((b) => !q || `${b.name} ${b.bc_id}`.toLowerCase().includes(q)).map((b) => `<label title="${esc(b.bc_id)}"><input type="checkbox" data-bc="${esc(b.bc_id)}" ${S.selBc.has(b.bc_id) ? 'checked' : ''}><span>${esc(b.name)}</span>${b.status && b.status !== 'ENABLE' ? `<span class="chip bad">${esc(b.status)}</span>` : ''}</label>`).join('') || '<span class="sub">Không tìm thấy BC.</span>';
+  const names = [...S.selBc].map(bcName);
+  $('#bcSummary').innerHTML = names.length ? `<b style="color:var(--ink);text-transform:none;letter-spacing:0">${names.length} BC</b> · ${esc(clip(names.join(', '), 160))}` : (S.bcs.length ? '<span class="chip warn">Chưa chọn BC — bấm để chọn BC bạn phụ trách</span>' : 'Đang tải danh sách BC…');
+  $('#btnRefreshAll').disabled = !S.selBc.size;
+  $('#bcPull').disabled = !S.selBc.size;
+}
+async function savePrefs() {
+  const list = [...S.selBc];
+  try { localStorage.setItem('nuyen.bcs', JSON.stringify(list)); } catch { /* optional */ }
+  if (S.db && S.uid) { try { await S.db.doc(`data/users/${S.uid}/prefs`).set({ bcs: list }); } catch { /* optional */ } }
+}
+async function loadPrefs() {
+  let list = null;
+  if (S.db && S.uid) { try { const d = await S.db.doc(`data/users/${S.uid}/prefs`).get(); if (d.exists) list = d.data().bcs; } catch { /* optional */ } }
+  if (!list) { try { list = JSON.parse(localStorage.getItem('nuyen.bcs') || 'null'); } catch { list = null; } }
+  S.selBc = new Set(Array.isArray(list) ? list.map(String) : []);
+}
+// Account thuộc phạm vi BC đang chọn
+function inScope(id) {
+  if (!S.selBc.size) return false;
+  const doc = S.accounts[id] || {};
+  const bcs = uniq([...(S.acctBc[id] || []), ...(doc.bc_ids || []), doc.owner_bc_id || '']);
+  return bcs.some((b) => S.selBc.has(b));
 }
 
 // ---------- shared store ----------
@@ -377,7 +468,8 @@ function writeDoc(path, data) {
 // Đọc dữ liệu đã lưu một lần (chắc chắn đầy đủ) trước khi cho phép cập nhật, rồi mới theo dõi realtime
 async function loadSaved() {
   const db = S.db;
-  const [acc, cr, meta, tpl] = await Promise.all([db.collection('accounts').get(), db.collection('creatives').get(), db.doc('meta/scan').get(), db.doc('config/templates').get()]);
+  const [acc, cr, meta, tpl, bcm] = await Promise.all([db.collection('accounts').get(), db.collection('creatives').get(), db.doc('meta/scan').get(), db.doc('config/templates').get(), db.doc('meta/bcs').get()]);
+  S.bcScanned = bcm.exists ? (bcm.data().scanned || {}) : {};
   acc.docs.forEach((d) => { S.accounts[d.id] = d.data(); });
   cr.docs.forEach((d) => { S.creatives[d.id] = d.data(); });
   S.meta = meta.exists ? meta.data() : {};
@@ -405,7 +497,7 @@ function renderJob() {
   if (!j) { el.hidden = true; return; }
   el.hidden = false;
   $('#jobTitle').textContent = j.finished ? j.title + ' — xong' : j.title + '…';
-  $('#jobText').textContent = j.summary || `${j.done}/${j.total}${j.ok || j.fail ? ` · thành công ${j.ok} · lỗi ${j.fail}` : ''}`;
+  $('#jobText').textContent = j.summary || j.text || `${j.done}/${j.total}${j.ok || j.fail ? ` · thành công ${j.ok} · lỗi ${j.fail}` : ''}`;
   $('#jobFill').style.width = (j.total ? Math.min(100, (j.done / j.total) * 100) : 0) + '%';
   $('#jobCancel').hidden = j.finished || !j.cancellable;
   $('#jobClose').hidden = !j.finished;
@@ -417,22 +509,27 @@ $('#jobClose').onclick = () => { S.job = null; renderJob(); };
 // ---------- status refresh ----------
 async function refreshStatuses(ids) {
   const all = !ids;
-  const job = startJob(all ? 'Cập nhật trạng thái tất cả account' : `Cập nhật trạng thái ${ids.length} account`, 1);
+  if (all && !S.selBc.size) { $('#bcBox').open = true; toast('Chọn BC bạn phụ trách trước'); return; }
+  const job = startJob(all ? `Cập nhật trạng thái account · ${S.selBc.size} BC` : `Cập nhật trạng thái ${ids.length} account`, 1);
   if (!job) return;
   try {
-    if (all) { await loadNames(true); ids = Object.keys(S.names); }
+    const scanBcs = [...S.selBc];
+    if (all) ids = await loadBcAccounts(job);
+    job.text = '';
     const parts = chunk(ids, 100);
     job.total = parts.length;
     renderJob();
-    await pool(parts, 3, async (part) => {
+    await pool(parts, 1, async (part) => {
       try {
         const d = await tt('advertiser_info_get', { advertiser_ids: part, fields: ['advertiser_id', 'name', 'status', 'rejection_reason', 'owner_bc_id', 'company', 'create_time'] });
         for (const i of d.list || []) S.live[String(i.advertiser_id)] = i;
+        job.ok++;
       } catch (e) { job.fail++; job.errors.push(errMsg(e)); }
       job.done++; renderJob();
     });
     const now = nowIso();
-    const firstEver = !S.meta.first_full_at && !Object.keys(S.accounts).length;
+    // BC chưa từng quét: account đang bị khoá sẵn => không biết ngày thật (≈)
+    const newBc = (id) => !(S.acctBc[id] || []).some((b) => S.bcScanned[b]) && !(S.accounts[id]);
     let newly = 0, lifted = 0;
     const writes = [];
     for (const id of ids) {
@@ -441,16 +538,17 @@ async function refreshStatuses(ids) {
       const susp = SUSP.has(info.status);
       const r = parseReason(info.rejection_reason);
       const name = info.name || S.names[id] || id;
-      const base = { advertiser_id: id, name, status: info.status, reason: r.text, endtime: r.endtime, owner_bc_id: info.owner_bc_id || '', company: info.company || '', last_checked: now };
+      const base = { advertiser_id: id, name, status: info.status, reason: r.text, endtime: r.endtime, owner_bc_id: info.owner_bc_id || '', company: info.company || '', last_checked: now,
+        bc_ids: uniq([...((doc && doc.bc_ids) || []), ...(S.acctBc[id] || [])]) };
       let next = null;
       if (susp && (!doc || doc.latest !== 'suspended')) {
         newly++;
-        next = { ...(doc || {}), ...base, latest: 'suspended', suspended_at: now, suspended_source: !doc && firstEver ? 'first_seen' : 'detected', lifted_at: null, account_appealed_at: null, account_appealed_by: null,
+        next = { ...(doc || {}), ...base, latest: 'suspended', suspended_at: now, suspended_source: !doc && newBc(id) ? 'first_seen' : 'detected', lifted_at: null, account_appealed_at: null, account_appealed_by: null,
           history: [...((doc && doc.history) || []), { status: info.status, at: now }].slice(-20) };
       } else if (!susp && doc && doc.latest === 'suspended') {
         lifted++;
         next = { ...doc, ...base, latest: 'lifted', lifted_at: now, history: [...(doc.history || []), { status: info.status, at: now }].slice(-20) };
-      } else if (doc && (!all || doc.status !== info.status || doc.reason !== r.text || doc.name !== name)) {
+      } else if (doc && (!all || doc.status !== info.status || doc.reason !== r.text || doc.name !== name || (base.bc_ids.length !== (doc.bc_ids || []).length))) {
         next = { ...doc, ...base };
       }
       if (next) { S.accounts[id] = next; writes.push(['accounts/' + id, next]); }
@@ -459,6 +557,8 @@ async function refreshStatuses(ids) {
     if (all && job.fail < parts.length) {
       S.meta = { ...S.meta, first_full_at: S.meta.first_full_at || now, last_full_at: now, total: ids.length };
       await writeDoc('meta/scan', S.meta);
+      scanBcs.forEach((b) => { if (!S.bcScanned[b]) S.bcScanned[b] = now; });
+      await writeDoc('meta/bcs', { scanned: S.bcScanned });
     }
     endJob(`${ids.length} account · ${newly} mới bị suspend · ${lifted} được lifted${job.fail ? ` · ${job.fail} nhóm lỗi` : ''}`);
   } catch (e) { job.errors.push(errMsg(e)); endJob('Lỗi: ' + errMsg(e)); }
@@ -568,8 +668,13 @@ function summary(id) {
 }
 function range() { return { from: $('#dFrom').value, to: $('#dTo').value }; }
 function inRange(iso) { const { from, to } = range(); const d = dayOf(iso); return !!d && (!from || d >= from) && (!to || d <= to); }
+// Bị khoá từ trước khi bắt đầu theo dõi: đánh dấu lúc quét, hoặc được lưu ngay trong lần quét đầu tiên
+const isFirstSeen = (a) => a.suspended_source === 'first_seen' || !!(S.meta.first_full_at && a.suspended_at && a.suspended_at <= S.meta.first_full_at);
+const hasRange = () => { const { from, to } = range(); return !!(from || to); };
+// Account bị khoá trước khi bắt đầu theo dõi (≈) không có ngày thật => chỉ hiện ở "Tất cả"
+const datedMatch = (a) => (hasRange() ? !isFirstSeen(a) && inRange(a.suspended_at) : true);
 function suspendedRows(withFilters) {
-  let rows = Object.values(S.accounts).filter((a) => a.suspended_at && inRange(a.suspended_at));
+  let rows = Object.values(S.accounts).filter((a) => a.suspended_at && inScope(a.advertiser_id) && datedMatch(a));
   if (!withFilters) return rows;
   const q = $('#susQ').value.trim().toLowerCase(), latest = $('#susLatest').value, ap = $('#susAppeal').value, asc = $('#susSort').value === 'asc';
   if (q) rows = rows.filter((a) => `${a.advertiser_id} ${a.name}`.toLowerCase().includes(q));
@@ -579,16 +684,40 @@ function suspendedRows(withFilters) {
   return rows.sort((x, y) => (asc ? 1 : -1) * String(x.suspended_at).localeCompare(String(y.suspended_at)));
 }
 function activeViolRows() {
-  return Object.values(S.creatives).filter((c) => c.ads && c.ads.length && !isSuspended(c.advertiser_id))
+  return Object.values(S.creatives).filter((c) => c.ads && c.ads.length && !isSuspended(c.advertiser_id) && inScope(c.advertiser_id))
     .sort((a, b) => b.ads.length - a.ads.length);
 }
 
 // ---------- rendering ----------
 function renderHeader() {
-  $('#lastScan').textContent = S.meta.last_full_at ? 'Cập nhật lần cuối ' + fmt(S.meta.last_full_at) : 'Chưa cập nhật trạng thái lần nào';
+  const lastBc = [...S.selBc].map((b) => S.bcScanned[b]).filter(Boolean).sort().pop();
+  $('#lastScan').textContent = S.meta.last_full_at ? 'Cập nhật lần cuối ' + fmt(S.meta.last_full_at) : (lastBc ? 'Quét BC lần đầu ' + fmt(lastBc) : 'Chưa cập nhật trạng thái lần nào');
   const { from, to } = range();
-  $('#rangeLabel').textContent = !from && !to ? 'Đang xem: tất cả các ngày' : `Đang xem: ${from || '…'} → ${to || '…'}`;
+  $('#rangeLabel').textContent = !from && !to ? 'Đang xem: tất cả các ngày' : `Đang xem: ${from || '…'} → ${to || '…'} · không gồm account ≈ (bị khoá trước khi theo dõi)`;
 }
+function renderDaily() {
+  const all = Object.values(S.accounts).filter((a) => a.suspended_at && inScope(a.advertiser_id));
+  const groups = {};
+  for (const a of all) { const k = isFirstSeen(a) ? '~' : dayOf(a.suspended_at); (groups[k] = groups[k] || []).push(a); }
+  const { from, to } = range();
+  const keys = Object.keys(groups).filter((k) => k !== '~').sort().reverse();
+  const row = (k, list, label) => {
+    const ap = list.filter((a) => a.account_appealed_at).length, lift = list.filter((a) => a.latest === 'lifted').length;
+    const on = k !== '~' && from === k && to === k;
+    return `<tr data-day="${esc(k)}" class="${on ? 'on' : ''}"><td>${label}</td><td class="n-bad">${list.length}</td><td class="${list.length - ap ? 'n-warn' : ''}">${list.length - ap}</td><td class="${ap ? 'n-ok' : ''}">${ap}</td><td class="${lift ? 'n-ok' : ''}">${lift}</td><td class="${list.length - lift ? 'n-bad' : ''}">${list.length - lift}</td></tr>`;
+  };
+  const fmtDay = (k) => { const [y, m, d] = k.split('-'); const today = dayStr(0), yest = dayStr(1); return `${d}/${m}/${y}${k === today ? ' · hôm nay' : k === yest ? ' · hôm qua' : ''}`; };
+  $('#dailyRows').innerHTML = keys.slice(0, 31).map((k) => row(k, groups[k], fmtDay(k))).join('')
+    + (groups['~'] ? row('~', groups['~'], '≈ Đã bị khoá trước khi bắt đầu theo dõi <span class="sub">(TikTok API không trả ngày suspend thật)</span>') : '')
+    || `<tr><td colspan="6" class="empty">${S.selBc.size ? 'Chưa có account bị suspend trong các BC đã chọn. Bấm “↻ Cập nhật trạng thái BC đã chọn”.' : 'Chọn Business Center bạn phụ trách ở trên rồi kéo trạng thái account.'}</td></tr>`;
+}
+$('#dailyRows').onclick = (e) => {
+  const tr = e.target.closest('tr[data-day]'); if (!tr) return;
+  const k = tr.dataset.day;
+  if (k === '~') { $('#dFrom').value = ''; $('#dTo').value = ''; } else { $('#dFrom').value = k; $('#dTo').value = k; }
+  $$('#quick button').forEach((x) => x.classList.toggle('on', (k === '~' && x.dataset.r === '') || (k === dayStr(0) && x.dataset.r === '0') || (k === dayStr(1) && x.dataset.r === '1')));
+  if (S.tab !== 'sus') $('.tabs button[data-tab="sus"]').click(); else renderAll();
+};
 function renderStats() {
   const rows = suspendedRows(false);
   $('#sTotal').textContent = rows.length;
@@ -635,8 +764,8 @@ function renderSus() {
       : `<div class="tl now lifted"><b>LIFTED</b><span class="sub">Mở lại ${fmt(a.lifted_at)}</span><span class="sub">Cập nhật ${fmt(a.last_checked)}</span></div>`;
     return `<tr>
       <td><input type="checkbox" data-sel="sus" value="${esc(id)}" ${S.sel.sus.has(id) ? 'checked' : ''} aria-label="Chọn ${esc(a.name)}"></td>
-      <td class="acct"><b class="${sus ? 'sus' : 'lifted'}">${esc(a.name)}</b><span class="sub mono">${esc(id)}</span>${a.owner_bc_id ? `<div class="sub">BC ${esc(a.owner_bc_id)}</div>` : ''}</td>
-      <td><div class="tl s"><b>SUSPEND</b><span class="sub">${a.suspended_source === 'first_seen' ? '≈ ' : ''}${fmt(a.suspended_at)}</span>${a.reason ? `<span class="sub clamp" title="${esc(a.reason)}">${esc(shortReason(a.reason))}</span>` : ''}${a.endtime ? `<span class="sub">Khoá tới ${esc(a.endtime)}</span>` : ''}</div></td>
+      <td class="acct"><b class="${sus ? 'sus' : 'lifted'}">${esc(a.name)}</b><span class="sub mono">${esc(id)}</span></td>
+      <td><div class="tl s"><b>SUSPEND</b><span class="sub">${isFirstSeen(a) ? `≈ Đã khoá trước khi theo dõi · thấy lần đầu ${fmt(a.suspended_at)}` : fmt(a.suspended_at)}</span>${a.reason ? `<span class="sub clamp" title="${esc(a.reason)}">${esc(shortReason(a.reason))}</span>` : ''}${a.endtime ? `<span class="sub">Khoá tới ${esc(a.endtime)}</span>` : ''}</div></td>
       <td>${appealCell}</td>
       <td>${nowCell}</td>
       <td>${creativeChips(id)}</td>
@@ -670,17 +799,17 @@ function renderAct() {
 }
 function pickerRows() {
   const q = $('#pkQ').value.trim().toLowerCase(), bc = $('#pkBc').value, unchecked = $('#pkUnchecked').checked;
-  return Object.keys(S.names).filter((id) => !isSuspended(id))
+  return Object.keys(S.names).filter((id) => !isSuspended(id) && inScope(id))
     .filter((id) => !q || `${id} ${S.names[id]}`.toLowerCase().includes(q))
-    .filter((id) => !bc || (S.live[id] && S.live[id].owner_bc_id) === bc)
+    .filter((id) => !bc || (S.acctBc[id] || []).includes(bc))
     .filter((id) => !unchecked || !S.creatives[id]);
 }
 function renderPicker() {
-  const bcs = uniq(Object.values(S.live).map((l) => l.owner_bc_id)).sort();
+  const bcs = [...S.selBc];
   const sel = $('#pkBc'), cur = sel.value;
-  if (sel.options.length - 1 !== bcs.length) { sel.innerHTML = '<option value="">Mọi Business Center</option>' + bcs.map((b) => `<option value="${esc(b)}">BC ${esc(b)}</option>`).join(''); sel.value = cur; }
+  if (sel.options.length - 1 !== bcs.length) { sel.innerHTML = '<option value="">Mọi BC đã chọn</option>' + bcs.map((b) => `<option value="${esc(b)}">${esc(bcName(b))}</option>`).join(''); sel.value = bcs.includes(cur) ? cur : ''; }
   const rows = pickerRows();
-  $('#pkCount').textContent = Object.keys(S.names).length ? `${rows.length} account đang chạy khớp bộ lọc` : 'Đang tải danh sách account…';
+  $('#pkCount').textContent = Object.keys(S.names).length ? `${rows.length} account đang chạy khớp bộ lọc` : 'Bấm “Cập nhật trạng thái BC đã chọn” để tải danh sách account';
   $('#pkCheckAll').textContent = `Kiểm tra tất cả ${rows.length} account đang lọc`;
   $('#pkCheckAll').disabled = !rows.length;
   $('#pkList').innerHTML = rows.slice(0, 100).map((id) => `<label><input type="checkbox" data-sel="pick" value="${esc(id)}" ${S.sel.pick.has(id) ? 'checked' : ''}> <span>${esc(S.names[id])}</span> <span class="sub mono">${esc(id)}</span><span class="spacer"></span>${S.creatives[id] ? `<span class="sub">đã kiểm tra ${fmt(S.creatives[id].checked_at)}</span>` : ''}</label>`).join('')
@@ -717,7 +846,7 @@ function updateBars() {
   $('#actAll').checked = !!m && m === activeViolRows().length;
 }
 function renderAll() {
-  renderHeader(); renderStats();
+  renderHeader(); renderStats(); renderDaily();
   if (S.tab === 'sus') renderSus();
   if (S.tab === 'act') renderAct();
   if (S.tab === 'log') renderLog();
@@ -848,6 +977,12 @@ $('#tplSave').onclick = async () => {
   S.templates = list; await writeDoc('config/templates', { list }); S.tplDirty = false; renderTemplates(); toast(S.db ? 'Đã lưu template cho cả team' : 'Đã lưu tạm (không có bộ nhớ chung)');
 };
 
+// ---------- BC picker ----------
+$('#bcQ').oninput = () => renderBcs();
+$('#bcList').onchange = (e) => { const b = e.target.dataset.bc; if (!b) return; e.target.checked ? S.selBc.add(b) : S.selBc.delete(b); renderBcs(); savePrefs(); renderAll(); };
+$('#bcNone').onclick = () => { S.selBc.clear(); renderBcs(); savePrefs(); renderAll(); };
+$('#bcPull').onclick = () => { $('#bcBox').open = false; refreshStatuses(null); };
+
 // ---------- events ----------
 $$('.tabs button').forEach((b) => { b.onclick = () => { S.tab = b.dataset.tab; $$('.tabs button').forEach((x) => x.classList.toggle('on', x === b)); $$('.panel').forEach((p) => { p.hidden = p.id !== 'p-' + S.tab; }); if (S.tab === 'tpl') renderTemplates(); renderAll(); }; });
 $('#quick').onclick = (e) => {
@@ -902,6 +1037,7 @@ const use = (n) => (window.claude && window.claude.use ? window.claude.use(n).ca
   const [mcp, db, user] = await Promise.all([use('mcp'), use('db'), use('user')]);
   S.mcp = mcp; S.db = db; S.user = user;
   if (user) { try { S.uid = await user.id(); } catch { S.uid = null; } }
+  await loadPrefs(); renderBcs();
   if (db) {
     try { await loadSaved(); } catch (e) { S.db = null; showBanner('Không đọc được dữ liệu đã lưu (' + errMsg(e) + ') — lần xem này sẽ không lưu lịch sử.', true); }
     if (S.db) subscribe();
@@ -909,11 +1045,10 @@ const use = (n) => (window.claude && window.claude.use ? window.claude.use(n).ca
   S.booted = true;
   if (!mcp) { setConn('none'); showBanner('Trang cần mở trong claude.ai (đã đăng nhập) để kết nối TikTok.', true); return; }
   try {
-    await loadNames(false);
-    await sleep(800);
-    const last = S.meta.last_full_at ? Date.parse(S.meta.last_full_at) : 0;
-    if (Date.now() - last > 60 * 60 * 1000) refreshStatuses(null);
-  } catch (e) { if (!S.connector || S.connector !== 'bad') showBanner('Không tải được danh sách account: ' + errMsg(e), true); }
+    await loadBcs();
+    if (!S.selBc.size) $('#bcBox').open = true;
+    setConn('ok');
+  } catch (e) { if (S.connector !== 'bad') showBanner('Không tải được danh sách Business Center: ' + errMsg(e), true); }
 })();
 })();
 </script>
