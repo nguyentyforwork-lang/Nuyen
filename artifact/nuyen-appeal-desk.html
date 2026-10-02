@@ -74,6 +74,12 @@ header.top .in { max-width: 1440px; margin: 0 auto; padding: 10px 16px; display:
 .quick button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat { white-space: normal; cursor: pointer; text-align: left; font: inherit; color: inherit; border-radius: var(--r); }
+.stat:hover { border-color: var(--muted); }
+.stat.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.stat .s { font-size: 11px; color: var(--muted); }
+.creative-mini { display: grid; gap: 6px; min-width: 280px; }
+.creative-mini .it { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; display: grid; gap: 2px; }
 .stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; display: grid; gap: 2px; }
 .stat .k { font-size: 12px; color: var(--muted); }
 .stat .v { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
@@ -100,7 +106,7 @@ tbody tr:last-child td { border-bottom: 0; }
 td.empty { text-align: center; color: var(--muted); padding: 36px 16px; }
 tr.detail > td { background: var(--sunk); padding: 8px 10px 12px 44px; }
 tr.detail table { background: var(--surface); border-radius: 8px; }
-.acct b { display: block; }
+.acct b, .acct .sub { display: block; }
 .acct b.sus { color: var(--bad); } .acct b.lifted { color: var(--ok); }
 
 .tl { display: grid; gap: 1px; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--line); min-width: 120px; max-width: 240px; font-size: 12px; }
@@ -174,60 +180,21 @@ tr.detail table { background: var(--surface); border-radius: 8px; }
     <div id="jobErr" class="sub"></div>
   </div>
 
-  <section class="stats" aria-label="Tổng quan theo khoảng ngày">
-    <div class="stat bad"><span class="k">Tổng account bị suspend</span><span class="v" id="sTotal">0</span></div>
-    <div class="stat ok"><span class="k">Đã appeal</span><span class="v" id="sAp">0</span></div>
-    <div class="stat warn"><span class="k">Chưa appeal</span><span class="v" id="sNa">0</span></div>
-    <div class="stat ok"><span class="k">Đã lifted</span><span class="v" id="sLift">0</span></div>
-    <div class="stat bad"><span class="k">Vẫn đang suspend</span><span class="v" id="sStill">0</span></div>
-    <div class="stat warn"><span class="k">Account đang chạy có vi phạm</span><span class="v" id="sAct">0</span></div>
+  <section class="stats" aria-label="Tổng quan">
+    <button class="stat bad" data-card="total"><span class="k">Tổng account bị suspend</span><span class="v" id="sTotal">0</span><span class="s">Đang suspend · mọi ngày</span></button>
+    <button class="stat bad" data-card="range"><span class="k">Account suspend theo ngày</span><span class="v" id="sRange">0</span><span class="s" id="sRangeLabel">Khoảng ngày đang chọn</span></button>
+    <button class="stat ok" data-card="appealed"><span class="k">Đã appeal</span><span class="v" id="sAp">0</span><span class="s">Trong khoảng ngày · chưa appeal <b id="sNa">0</b></span></button>
+    <button class="stat ok" data-card="lifted"><span class="k">Đã lifted</span><span class="v" id="sLift">0</span><span class="s">Trong khoảng ngày</span></button>
+    <button class="stat warn" data-card="active" aria-expanded="false"><span class="k">Account đang chạy có vi phạm</span><span class="v" id="sAct">0</span><span class="s" id="sActHint">▾ Bấm để xem</span></button>
   </section>
 
-  <section class="tablewrap" aria-label="Theo ngày">
-    <table class="daily">
-      <thead><tr><th>Ngày suspend</th><th>Tổng suspend</th><th>Chưa appeal</th><th>Đã appeal</th><th>Đã lifted</th><th>Còn suspend</th></tr></thead>
-      <tbody id="dailyRows"></tbody>
-    </table>
-  </section>
-
-  <nav class="tabs" role="tablist">
-    <button data-tab="sus" class="on">① Account bị suspend<span class="count" id="tcSus">0</span></button>
-    <button data-tab="act">② Account đang chạy có vi phạm<span class="count" id="tcAct">0</span></button>
-    <button data-tab="log">Lịch sử appeal</button>
-    <button data-tab="tpl">Template</button>
-  </nav>
-
-  <!-- ① SUSPENDED -->
-  <section class="panel" id="p-sus">
-    <div class="toolbar">
-      <input type="search" id="susQ" placeholder="Tìm ID / tên account">
-      <select id="susLatest"><option value="">Mọi trạng thái mới nhất</option><option value="suspended">Vẫn SUSPEND</option><option value="lifted">Đã LIFTED</option></select>
-      <select id="susAppeal"><option value="">Đã / chưa appeal</option><option value="done">Đã appeal</option><option value="none">Chưa appeal</option></select>
-      <select id="susSort"><option value="desc">Ngày suspend: mới nhất trước</option><option value="asc">Ngày suspend: cũ nhất trước</option></select>
-    </div>
-    <div class="toolbar actionbar">
-      <label class="chk"><input type="checkbox" id="susAll"> Chọn tất cả</label>
-      <span class="sub" id="susSel">0 account được chọn</span>
-      <span class="spacer"></span>
-      <button id="susRefresh" disabled>↻ Cập nhật trạng thái</button>
-      <button id="susCheck" disabled>Kiểm tra creative</button>
-      <button id="susBulk" class="primary" disabled>Bulk appeal creative</button>
-      <button id="susAcc" disabled>Appeal account</button>
-    </div>
-    <div class="tablewrap"><table>
-      <thead><tr><th></th><th>Account</th><th>① Suspend</th><th>→ ② Appeal account</th><th>→ ③ Trạng thái mới nhất</th><th>Creative vi phạm</th><th></th></tr></thead>
-      <tbody id="susRows"></tbody>
-    </table></div>
-  </section>
-
-  <!-- ② ACTIVE -->
-  <section class="panel" id="p-act" hidden>
-    <p class="hint">Account vẫn đang chạy nhưng có creative bị TikTok báo vi phạm (bị từ chối hoặc chỉ được duyệt ở một số thị trường). Chọn account bên dưới để kiểm tra, rồi bulk appeal.</p>
+  <section class="panel" id="activePanel" hidden>
     <div class="picker">
-      <h3>Kiểm tra creative account đang chạy</h3>
+      <h3>Account đang chạy có creative vi phạm</h3>
+      <p class="hint">Account vẫn chạy nhưng có creative bị TikTok báo vi phạm (bị từ chối hoặc chỉ duyệt ở một số thị trường). Chọn account để kiểm tra rồi bulk appeal.</p>
       <div class="toolbar">
         <input type="search" id="pkQ" placeholder="Tìm ID / tên account">
-        <select id="pkBc"><option value="">Mọi Business Center</option></select>
+        <select id="pkBc"><option value="">Mọi BC đã chọn</option></select>
         <label class="chk"><input type="checkbox" id="pkUnchecked"> Chỉ account chưa kiểm tra</label>
         <span class="sub" id="pkCount"></span>
         <span class="spacer"></span>
@@ -246,6 +213,42 @@ tr.detail table { background: var(--surface); border-radius: 8px; }
     <div class="tablewrap"><table>
       <thead><tr><th></th><th>Account</th><th>Trạng thái</th><th>Creative vi phạm</th><th>Kiểm tra lúc</th><th></th></tr></thead>
       <tbody id="actRows"></tbody>
+    </table></div>
+  </section>
+
+  <section class="tablewrap" aria-label="Theo ngày">
+    <table class="daily">
+      <thead><tr><th>Ngày suspend</th><th>Tổng suspend</th><th>Chưa appeal</th><th>Đã appeal</th><th>Đã lifted</th><th>Còn suspend</th></tr></thead>
+      <tbody id="dailyRows"></tbody>
+    </table>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button data-tab="sus" class="on">Account bị suspend<span class="count" id="tcSus">0</span></button>
+    <button data-tab="log">Lịch sử appeal</button>
+    <button data-tab="tpl">Template</button>
+  </nav>
+
+  <!-- SUSPENDED -->
+  <section class="panel" id="p-sus">
+    <div class="toolbar">
+      <b id="susTitle"></b>
+      <span class="spacer"></span>
+      <input type="search" id="susQ" placeholder="Tìm ID / tên account">
+      <select id="susSort"><option value="desc">Ngày suspend: mới nhất trước</option><option value="asc">Ngày suspend: cũ nhất trước</option></select>
+    </div>
+    <div class="toolbar actionbar">
+      <label class="chk"><input type="checkbox" id="susAll"> Chọn tất cả</label>
+      <span class="sub" id="susSel">0 account được chọn</span>
+      <span class="spacer"></span>
+      <button id="susRefresh" disabled>↻ Cập nhật trạng thái</button>
+      <button id="susMark" disabled>Đánh dấu đã appeal</button>
+      <button id="susAcc" disabled>Appeal account</button>
+      <button id="susBulk" class="primary" disabled>Bulk appeal creative</button>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>Account</th><th>Lý do suspend</th><th>Trạng thái</th><th>Creative</th></tr></thead>
+      <tbody id="susRows"></tbody>
     </table></div>
   </section>
 
@@ -311,7 +314,7 @@ const S = {
   names: {}, live: {}, accounts: {}, creatives: {}, meta: {}, templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })),
   tplDirty: false, tab: 'sus', sel: { sus: new Set(), act: new Set(), pick: new Set() }, expanded: new Set(),
   job: null, connector: 'pending', profiles: {},
-  bcs: [], selBc: new Set(), acctBc: {}, bcScanned: {},
+  bcs: [], selBc: new Set(), acctBc: {}, bcScanned: {}, card: 'total', activeOpen: false, pendingCheck: new Set(),
 };
 
 // ---------- utils ----------
@@ -491,7 +494,7 @@ function startJob(title, total) {
   S.job = { title, total, done: 0, ok: 0, fail: 0, errors: [], cancelled: false, finished: false, cancellable: true };
   renderJob(); return S.job;
 }
-function endJob(summary) { if (!S.job) return; S.job.finished = true; S.job.summary = summary; renderJob(); renderAll(); }
+function endJob(summary) { if (!S.job) return; S.job.finished = true; S.job.summary = summary; renderJob(); renderAll(); if (S.pendingCheck.size) setTimeout(runPending, 300); }
 function renderJob() {
   const j = S.job, el = $('#job');
   if (!j) { el.hidden = true; return; }
@@ -673,14 +676,21 @@ const isFirstSeen = (a) => a.suspended_source === 'first_seen' || !!(S.meta.firs
 const hasRange = () => { const { from, to } = range(); return !!(from || to); };
 // Account bị khoá trước khi bắt đầu theo dõi (≈) không có ngày thật => chỉ hiện ở "Tất cả"
 const datedMatch = (a) => (hasRange() ? !isFirstSeen(a) && inRange(a.suspended_at) : true);
+function scopedSuspended() { return Object.values(S.accounts).filter((a) => a.suspended_at && inScope(a.advertiser_id)); }
+const CARD_TITLE = { total: 'Tổng account đang bị suspend', range: 'Account bị suspend trong khoảng ngày', appealed: 'Account đã appeal (trong khoảng ngày)', lifted: 'Account đã lifted (trong khoảng ngày)' };
+function cardRows(card) {
+  const base = scopedSuspended();
+  if (card === 'total') return base.filter((a) => a.latest === 'suspended');
+  const dated = base.filter(datedMatch);
+  if (card === 'appealed') return dated.filter((a) => a.account_appealed_at);
+  if (card === 'lifted') return dated.filter((a) => a.latest === 'lifted');
+  return dated;
+}
 function suspendedRows(withFilters) {
-  let rows = Object.values(S.accounts).filter((a) => a.suspended_at && inScope(a.advertiser_id) && datedMatch(a));
+  let rows = cardRows(withFilters ? S.card : 'range');
   if (!withFilters) return rows;
-  const q = $('#susQ').value.trim().toLowerCase(), latest = $('#susLatest').value, ap = $('#susAppeal').value, asc = $('#susSort').value === 'asc';
+  const q = $('#susQ').value.trim().toLowerCase(), asc = $('#susSort').value === 'asc';
   if (q) rows = rows.filter((a) => `${a.advertiser_id} ${a.name}`.toLowerCase().includes(q));
-  if (latest) rows = rows.filter((a) => a.latest === latest);
-  if (ap === 'done') rows = rows.filter((a) => a.account_appealed_at);
-  if (ap === 'none') rows = rows.filter((a) => !a.account_appealed_at);
   return rows.sort((x, y) => (asc ? 1 : -1) * String(x.suspended_at).localeCompare(String(y.suspended_at)));
 }
 function activeViolRows() {
@@ -714,19 +724,25 @@ function renderDaily() {
 $('#dailyRows').onclick = (e) => {
   const tr = e.target.closest('tr[data-day]'); if (!tr) return;
   const k = tr.dataset.day;
-  if (k === '~') { $('#dFrom').value = ''; $('#dTo').value = ''; } else { $('#dFrom').value = k; $('#dTo').value = k; }
+  if (k === '~') { $('#dFrom').value = ''; $('#dTo').value = ''; S.card = 'total'; } else { $('#dFrom').value = k; $('#dTo').value = k; S.card = 'range'; }
   $$('#quick button').forEach((x) => x.classList.toggle('on', (k === '~' && x.dataset.r === '') || (k === dayStr(0) && x.dataset.r === '0') || (k === dayStr(1) && x.dataset.r === '1')));
   if (S.tab !== 'sus') $('.tabs button[data-tab="sus"]').click(); else renderAll();
 };
 function renderStats() {
-  const rows = suspendedRows(false);
-  $('#sTotal').textContent = rows.length;
-  $('#sAp').textContent = rows.filter((a) => a.account_appealed_at).length;
-  $('#sNa').textContent = rows.filter((a) => !a.account_appealed_at).length;
-  $('#sLift').textContent = rows.filter((a) => a.latest === 'lifted').length;
-  $('#sStill').textContent = rows.filter((a) => a.latest === 'suspended').length;
+  const range = cardRows('range');
+  $('#sTotal').textContent = cardRows('total').length;
+  $('#sRange').textContent = range.length;
+  $('#sAp').textContent = range.filter((a) => a.account_appealed_at).length;
+  $('#sNa').textContent = range.filter((a) => !a.account_appealed_at).length;
+  $('#sLift').textContent = range.filter((a) => a.latest === 'lifted').length;
+  const { from, to } = { from: $('#dFrom').value, to: $('#dTo').value };
+  $('#sRangeLabel').textContent = !from && !to ? 'Tất cả các ngày' : from === to ? `Ngày ${from.split('-').reverse().join('/')}` : `${from || '…'} → ${to || '…'}`;
   const act = activeViolRows().length;
-  $('#sAct').textContent = act; $('#tcAct').textContent = act; $('#tcSus').textContent = rows.length;
+  $('#sAct').textContent = act;
+  $('#sActHint').textContent = S.activeOpen ? '▴ Bấm để thu gọn' : '▾ Bấm để xem';
+  $('#tcSus').textContent = suspendedRows(true).length;
+  $$('.stat[data-card]').forEach((b) => b.classList.toggle('on', b.dataset.card === S.card || (b.dataset.card === 'active' && S.activeOpen)));
+  $('.stat[data-card="active"]').setAttribute('aria-expanded', String(S.activeOpen));
 }
 function creativeChips(id) {
   const s = summary(id);
@@ -749,34 +765,35 @@ function creativeTable(id) {
       <td><span class="chip ${cls}">${l}</span>${last ? `<div class="sub">${fmt(last.at)}</div>` : ''}${last && !last.ok ? `<div class="sub" style="color:var(--bad)">${esc(last.error)}</div>` : ''}${a.appeal_reject.length ? `<div class="sub" title="${esc(a.appeal_reject.join('\n'))}">${esc(clip(a.appeal_reject[0], 80))}</div>` : ''}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
+function creativeMini(id) {
+  if (!S.sel.sus.has(id)) return '<span class="sub">Tích chọn để xem creative</span>';
+  const c = S.creatives[id];
+  if (!c) return `<span class="sub">${S.pendingCheck.has(id) || (S.job && !S.job.finished) ? 'Đang kiểm tra creative…' : 'Chưa kiểm tra'}</span>`;
+  const head = `<div class="toolbar">${creativeChips(id)}</div>`;
+  if (!c.ads.length) return head + `<button class="link" data-act="check" data-id="${esc(id)}">Kiểm tra lại</button>`;
+  return `<div class="creative-mini">${head}${c.ads.slice(0, 8).map((a) => {
+    const [l, cls] = AP_LABEL[appealState(a)];
+    return `<div class="it"><div class="toolbar"><b style="font-size:12px">${esc(clip(a.name, 60))}</b>${a.review_status === 'UNAVAILABLE' ? '<span class="chip bad">Bị từ chối</span>' : '<span class="chip warn">Duyệt một phần</span>'}<span class="chip ${cls}">${l}</span></div>${a.reasons[0] ? `<span class="sub clamp" title="${esc(a.reasons.join('\n'))}">${esc(a.reasons[0])}</span>` : ''}${a.videos.length ? `<span class="sub">${a.videos.map(esc).join(', ')}</span>` : ''}</div>`;
+  }).join('')}${c.ads.length > 8 ? `<span class="sub">… và ${c.ads.length - 8} creative khác</span>` : ''}
+  <div class="toolbar"><button class="sm primary" data-act="appeal" data-id="${esc(id)}">Appeal creative</button><button class="link" data-act="check" data-id="${esc(id)}">Kiểm tra lại</button></div></div>`;
+}
 function renderSus() {
+  $('#susTitle').textContent = CARD_TITLE[S.card] || CARD_TITLE.total;
   const rows = suspendedRows(true);
   const ids = new Set(rows.map((r) => r.advertiser_id));
   [...S.sel.sus].forEach((id) => { if (!ids.has(id)) S.sel.sus.delete(id); });
   $('#susRows').innerHTML = rows.map((a) => {
-    const id = a.advertiser_id, s = summary(id), open = S.expanded.has('sus' + id);
-    const sus = a.latest === 'suspended';
-    const appealCell = a.account_appealed_at
-      ? `<div class="tl ap"><b>ĐÃ APPEAL</b><span class="sub">${fmt(a.account_appealed_at)}${a.account_appealed_by && S.profiles[a.account_appealed_by] ? ' · ' + esc(S.profiles[a.account_appealed_by]) : ''}</span><button class="link" data-act="unmark" data-id="${esc(id)}">Bỏ đánh dấu</button></div>`
-      : `<div class="tl na"><b>CHƯA APPEAL</b><button class="link" data-act="mark" data-id="${esc(id)}">Đánh dấu đã appeal</button></div>`;
-    const nowCell = sus
-      ? `<div class="tl now sus" title="${esc(STATUS_VI[a.status] || a.status)}"><b>SUSPEND</b><span class="sub">${esc(STATUS_VI[a.status] || a.status)}</span><span class="sub">Cập nhật ${fmt(a.last_checked)}</span></div>`
-      : `<div class="tl now lifted"><b>LIFTED</b><span class="sub">Mở lại ${fmt(a.lifted_at)}</span><span class="sub">Cập nhật ${fmt(a.last_checked)}</span></div>`;
+    const id = a.advertiser_id, sus = a.latest === 'suspended';
+    const when = isFirstSeen(a) ? `≈ Đã khoá trước khi theo dõi` : `Suspend ${fmt(a.suspended_at)}`;
     return `<tr>
       <td><input type="checkbox" data-sel="sus" value="${esc(id)}" ${S.sel.sus.has(id) ? 'checked' : ''} aria-label="Chọn ${esc(a.name)}"></td>
-      <td class="acct"><b class="${sus ? 'sus' : 'lifted'}">${esc(a.name)}</b><span class="sub mono">${esc(id)}</span></td>
-      <td><div class="tl s"><b>SUSPEND</b><span class="sub">${isFirstSeen(a) ? `≈ Đã khoá trước khi theo dõi · thấy lần đầu ${fmt(a.suspended_at)}` : fmt(a.suspended_at)}</span>${a.reason ? `<span class="sub clamp" title="${esc(a.reason)}">${esc(shortReason(a.reason))}</span>` : ''}${a.endtime ? `<span class="sub">Khoá tới ${esc(a.endtime)}</span>` : ''}</div></td>
-      <td>${appealCell}</td>
-      <td>${nowCell}</td>
-      <td>${creativeChips(id)}</td>
-      <td><div class="acts">
-        <button class="sm" data-act="refresh" data-id="${esc(id)}">↻ Cập nhật</button>
-        <button class="sm" data-act="check" data-id="${esc(id)}">${s ? 'Kiểm tra lại' : 'Kiểm tra creative'}</button>
-        ${s && s.total ? `<button class="sm primary" data-act="appeal" data-id="${esc(id)}">Appeal creative</button>` : ''}
-        ${sus ? `<button class="sm" data-act="accappeal" data-id="${esc(id)}">Appeal account</button>` : ''}
-        ${s && s.total ? `<button class="sm" data-act="toggle" data-key="sus" data-id="${esc(id)}">${open ? '▾ Ẩn' : '▸ Xem'} creative</button>` : ''}
-      </div></td></tr>${open ? `<tr class="detail"><td colspan="7">${creativeTable(id)}</td></tr>` : ''}`;
-  }).join('') || `<tr><td colspan="7" class="empty">${Object.keys(S.accounts).length ? 'Không có account bị suspend khớp bộ lọc.' : 'Chưa có dữ liệu. Bấm “↻ Cập nhật trạng thái tất cả” để kéo trạng thái toàn bộ account từ TikTok — account bị suspend sẽ hiện ở đây.'}</td></tr>`;
+      <td class="acct"><b class="${sus ? 'sus' : 'lifted'}">${esc(a.name)}</b><span class="sub mono">${esc(id)}</span><span class="sub">${when}</span></td>
+      <td class="reason">${a.reason ? `<div class="clamp" title="${esc(a.reason)}">${esc(shortReason(a.reason))}</div>` : `<span class="sub">${esc(STATUS_VI[a.status] || a.status || '')}</span>`}${a.endtime ? `<div class="sub">Khoá tới ${esc(a.endtime)}</div>` : ''}</td>
+      <td><div class="chips">${sus ? '<span class="chip bad">SUSPEND</span>' : `<span class="chip ok">LIFTED ${fmt(a.lifted_at)}</span>`}${a.account_appealed_at ? `<span class="chip ok">Đã appeal</span>` : '<span class="chip warn">Chưa appeal</span>'}</div>
+        <div class="sub">Cập nhật ${fmt(a.last_checked)}</div>
+        <div class="toolbar">${a.account_appealed_at ? `<button class="link" data-act="unmark" data-id="${esc(id)}">Bỏ đánh dấu appeal</button>` : `<button class="link" data-act="mark" data-id="${esc(id)}">Đánh dấu đã appeal</button>`}<button class="link" data-act="refresh" data-id="${esc(id)}">↻ Cập nhật</button>${sus ? `<button class="link" data-act="accappeal" data-id="${esc(id)}">Appeal account</button>` : ''}</div></td>
+      <td>${creativeMini(id)}</td></tr>`;
+  }).join('') || `<tr><td colspan="5" class="empty">${!S.selBc.size ? 'Chọn Business Center bạn phụ trách ở trên rồi bấm “Kéo trạng thái account”.' : Object.keys(S.accounts).length ? 'Không có account nào trong mục này.' : 'Chưa có dữ liệu. Bấm “↻ Cập nhật trạng thái BC đã chọn”.'}</td></tr>`;
   updateBars();
 }
 function renderAct() {
@@ -838,7 +855,7 @@ function updateBars() {
   const n = S.sel.sus.size;
   const susRows = suspendedRows(true);
   $('#susSel').textContent = `${n} account được chọn`;
-  ['#susRefresh', '#susCheck', '#susBulk', '#susAcc'].forEach((s) => { $(s).disabled = !n; });
+  ['#susRefresh', '#susMark', '#susBulk', '#susAcc'].forEach((s) => { $(s).disabled = !n; });
   $('#susAll').checked = !!n && n === susRows.length;
   const m = S.sel.act.size;
   $('#actSel').textContent = `${m} account được chọn`;
@@ -848,7 +865,7 @@ function updateBars() {
 function renderAll() {
   renderHeader(); renderStats(); renderDaily();
   if (S.tab === 'sus') renderSus();
-  if (S.tab === 'act') renderAct();
+  if (S.activeOpen) renderAct();
   if (S.tab === 'log') renderLog();
   if (S.connector === 'ok') setConn('ok');
 }
@@ -984,16 +1001,24 @@ $('#bcNone').onclick = () => { S.selBc.clear(); renderBcs(); savePrefs(); render
 $('#bcPull').onclick = () => { $('#bcBox').open = false; refreshStatuses(null); };
 
 // ---------- events ----------
-$$('.tabs button').forEach((b) => { b.onclick = () => { S.tab = b.dataset.tab; $$('.tabs button').forEach((x) => x.classList.toggle('on', x === b)); $$('.panel').forEach((p) => { p.hidden = p.id !== 'p-' + S.tab; }); if (S.tab === 'tpl') renderTemplates(); renderAll(); }; });
+$$('.tabs button').forEach((b) => { b.onclick = () => { S.tab = b.dataset.tab; $$('.tabs button').forEach((x) => x.classList.toggle('on', x === b)); $$('.panel[id^="p-"]').forEach((p) => { p.hidden = p.id !== 'p-' + S.tab; }); if (S.tab === 'tpl') renderTemplates(); renderAll(); }; });
 $('#quick').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   const r = b.dataset.r;
   if (r === '') { $('#dFrom').value = ''; $('#dTo').value = ''; } else if (r === '1') { $('#dFrom').value = $('#dTo').value = dayStr(1); } else { $('#dFrom').value = dayStr(+r); $('#dTo').value = dayStr(0); }
   $$('#quick button').forEach((x) => x.classList.toggle('on', x === b));
+  S.card = r === '' ? 'total' : 'range';
   renderAll();
 };
-['#dFrom', '#dTo'].forEach((s) => { $(s).onchange = () => { $$('#quick button').forEach((x) => x.classList.remove('on')); renderAll(); }; });
-['#susLatest', '#susAppeal', '#susSort'].forEach((s) => { $(s).onchange = renderSus; });
+['#dFrom', '#dTo'].forEach((s) => { $(s).onchange = () => { $$('#quick button').forEach((x) => x.classList.remove('on')); S.card = 'range'; renderAll(); }; });
+$('#susSort').onchange = renderSus;
+// Ô tổng quan: bấm để đổi danh sách bên dưới; ô "đang chạy có vi phạm" sổ ra khung riêng
+$$('.stat[data-card]').forEach((b) => { b.onclick = () => {
+  const c = b.dataset.card;
+  if (c === 'active') { S.activeOpen = !S.activeOpen; $('#activePanel').hidden = !S.activeOpen; renderAll(); if (S.activeOpen) $('#activePanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+  S.card = c; S.sel.sus.clear();
+  if (S.tab !== 'sus') $('.tabs button[data-tab="sus"]').click(); else renderAll();
+}; });
 let deb; const debounce = (fn) => { clearTimeout(deb); deb = setTimeout(fn, 200); };
 $('#susQ').oninput = () => debounce(renderSus);
 $('#pkQ').oninput = () => debounce(renderPicker);
@@ -1001,9 +1026,24 @@ $('#pkBc').onchange = renderPicker; $('#pkUnchecked').onchange = renderPicker;
 
 document.addEventListener('change', (e) => {
   const t = e.target, g = t.dataset && t.dataset.sel;
-  if (g) { t.checked ? S.sel[g].add(t.value) : S.sel[g].delete(t.value); if (g === 'pick') renderPicker(); else updateBars(); }
+  if (g) {
+    t.checked ? S.sel[g].add(t.value) : S.sel[g].delete(t.value);
+    if (g === 'pick') renderPicker();
+    else if (g === 'sus') { if (t.checked) ensureChecked([t.value]); renderSus(); }
+    else updateBars();
+  }
 });
-$('#susAll').onchange = (e) => { S.sel.sus = new Set(e.target.checked ? suspendedRows(true).map((a) => a.advertiser_id) : []); renderSus(); };
+$('#susAll').onchange = (e) => { S.sel.sus = new Set(e.target.checked ? suspendedRows(true).map((a) => a.advertiser_id) : []); if (e.target.checked) ensureChecked([...S.sel.sus]); renderSus(); };
+// Tích chọn account => tự kiểm tra creative (xếp hàng nếu đang có việc chạy)
+function ensureChecked(ids) {
+  ids.filter((id) => !S.creatives[id]).forEach((id) => S.pendingCheck.add(id));
+  if (S.pendingCheck.size && (!S.job || S.job.finished)) runPending();
+}
+async function runPending() {
+  const ids = [...S.pendingCheck].filter((id) => S.sel.sus.has(id) && !S.creatives[id]);
+  S.pendingCheck.clear();
+  if (ids.length) await checkAccounts(ids);
+}
 $('#actAll').onchange = (e) => { S.sel.act = new Set(e.target.checked ? activeViolRows().map((c) => c.advertiser_id) : []); renderAct(); };
 
 document.addEventListener('click', (e) => {
@@ -1021,7 +1061,7 @@ document.addEventListener('click', (e) => {
 });
 $('#btnRefreshAll').onclick = () => refreshStatuses(null);
 $('#susRefresh').onclick = () => refreshStatuses([...S.sel.sus]);
-$('#susCheck').onclick = () => checkAccounts([...S.sel.sus]);
+$('#susMark').onclick = () => markAppealed([...S.sel.sus], true);
 $('#susBulk').onclick = () => openAppeal([...S.sel.sus]);
 $('#susAcc').onclick = () => openAccAppeal([...S.sel.sus].filter((id) => isSuspended(id)));
 $('#actCheck').onclick = () => checkAccounts([...S.sel.act]);
