@@ -87,6 +87,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .files { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 .chip.warn { background: var(--warn-soft); color: var(--warn); }
+.filechip input { width: 150px; padding: 2px 6px; font-size: 12px; }
+.filechip input:disabled { opacity: .5; }
+.filechip .icon { padding: 0 4px; }
 .chip.plain { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
 .map { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
 .banner { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 9px 12px; font-size: 13px; }
@@ -176,7 +179,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     <div id="sampleNote" class="banner" hidden><b>Đang dùng dữ liệu mẫu.</b> Khách hàng và entity trong mẫu là tên giả để minh họa. Tải file của bạn lên để thay thế.</div>
     <div>
       <h3>Ghép cột</h3>
-      <p class="hint">Tự nhận theo tên cột. Kiểm tra lại nếu file có nhiều cột chi phí (Cash, Credit…). File không có cột tên khách thì cả file được tính là 1 khách, đặt tên theo tên file — nên đặt tên file là tên khách, ví dụ <b>Bazooka.xlsx</b>.</p>
+      <p class="hint">Tự nhận theo tên cột. Kiểm tra lại nếu file có nhiều cột chi phí (Cash, Credit…). File không có cột tên khách thì mỗi file là 1 khách, tên khách sửa ở ô cạnh tên file. Các file cùng tên khách được cộng chung để xếp tier.</p>
     </div>
     <div class="map" id="mapping"></div>
   </section>
@@ -378,7 +381,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     const rows = R.map(([id, name, c, cost]) => {
       const o = {}; [who[name][0], who[name][1], id, name, tz, c, 'USD', cost].forEach((v, i) => o[H[i]] = v); return o;
     });
-    return { name: 'du-lieu-mau.xlsx', headers: H, rows };
+    return { name: 'du-lieu-mau.xlsx', customer: 'Mẫu', headers: H, rows };
   })();
 
   function autoMap(headers) {
@@ -397,7 +400,9 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
   function renderData() {
     $('sampleNote').hidden = !isSample;
     $('fileList').innerHTML = files.length
-      ? files.map(f => `<span class="chip">${esc(f.name)} · ${fmtInt(f.rows.length)} dòng</span>`).join('')
+      ? files.map((f, i) => `<span class="chip filechip"><label for="fc-${i}">${esc(f.name)} · ${fmtInt(f.rows.length)} dòng · khách:</label>` +
+          `<input type="text" id="fc-${i}" data-fc="${i}" value="${esc(f.customer)}" ${mapping.customer ? 'disabled title="Đang lấy tên khách từ cột trong file"' : ''}>` +
+          `<button class="icon" type="button" data-delfile="${i}" title="Bỏ file này">×</button></span>`).join('')
       : '<span class="chip plain">Chưa có file</span>';
     const hs = allHeaders();
     $('mapping').innerHTML = FIELDS.map(f => {
@@ -407,7 +412,12 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
         '</select></label>';
     }).join('');
   }
-  $('mapping').addEventListener('change', e => { const k = e.target.dataset.map; if (k) { mapping[k] = e.target.value; compute(); } });
+  $('fileList').addEventListener('input', e => { const i = e.target.dataset.fc; if (i != null) { files[+i].customer = e.target.value; compute(); } });
+  $('fileList').addEventListener('click', e => {
+    const b = e.target.closest('[data-delfile]'); if (!b) return;
+    files.splice(+b.dataset.delfile, 1); if (!files.length) isSample = false; renderData(); compute();
+  });
+  $('mapping').addEventListener('change', e => { const k = e.target.dataset.map; if (k) { mapping[k] = e.target.value; if (k === 'customer') renderData(); compute(); } });
 
   // Find the header row (exports often have title rows above it)
   function sheetToRows(ws) {
@@ -436,7 +446,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
         // Use the sheet with the most rows
         let pick = null;
         wb.SheetNames.forEach(n => { const r = sheetToRows(wb.Sheets[n]); if (!pick || r.rows.length > pick.rows.length) pick = r; });
-        files.push({ name: file.name, ...pick });
+        files.push({ name: file.name, customer: file.name.replace(/\.[^.]+$/, ''), ...pick });
       } catch (err) { toast('Không đọc được ' + file.name + ': ' + err.message); }
     }
     mapping = autoMap(allHeaders());
@@ -486,7 +496,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     policy.groups.forEach(g => { if (!g.isDefault) g.countries.forEach(c => lookup.set(normCountry(c), g.id)); });
 
     const rows = [];
-    files.forEach(f => { const fileName = f.name.replace(/\.[^.]+$/, ''); f.rows.forEach(r => {
+    files.forEach(f => { const fileName = String(f.customer ?? '').trim(); f.rows.forEach(r => {
       const accName = m.accountName ? String(r[m.accountName] ?? '').trim() : '';
       const accId = m.accountId ? String(r[m.accountId] ?? '').trim() : '';
       const customer = (m.customer ? String(r[m.customer] ?? '').trim() : '') || fileName || '(không tên)';
