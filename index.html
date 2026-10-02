@@ -90,6 +90,13 @@ tbody tr:last-child td { border-bottom: 0; }
 .filechip input { width: 150px; padding: 2px 6px; font-size: 12px; }
 .filechip input:disabled { opacity: .5; }
 .filechip .icon { padding: 0 4px; }
+.reports { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 14px; }
+.rep { display: grid; gap: 8px; min-width: 0; }
+.rep-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.rep-head b { font-size: 15px; }
+.rep td.label { font-weight: 600; background: var(--bg); text-align: center; }
+.rep tr.total td { font-weight: 700; border-top: 2px solid var(--line); }
+.rep .amt { color: var(--bad); }
 .chip.plain { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
 .map { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
 .banner { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 9px 12px; font-size: 13px; }
@@ -197,6 +204,8 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     <div class="tiles" id="tiles"></div>
     <div id="warnings"></div>
     <div class="tw"><table id="results"></table></div>
+    <div class="sec-head"><h3>Report Final Rebate theo khách</h3></div>
+    <div class="reports" id="report"></div>
   </section>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -601,7 +610,37 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     if (!shown) h += `<tr><td class="empty" colspan="${gs.length + 5}">Không có kết quả khớp "${esc(q)}".</td></tr>`;
     h += `</tbody><tfoot><tr><td>Tổng</td>${cells(root, true)}</tr></tfoot>`;
     tbl.innerHTML = h;
+    renderReport();
   }
+
+  // Report in the "Final Rebate" layout: one table per customer
+  function reportRows(c) {
+    const gs = policy.groups;
+    const rate = g => c.by[g.id] ? (c.cbBy[g.id] || 0) / c.by[g.id] : (c.tiers.size === 1 ? (policy.tiers[[...c.tiers][0]].rates[g.id] || 0) / 100 : 0);
+    return gs.map(g => ({ name: g.name, rate: rate(g), spend: c.by[g.id] || 0, cb: c.cbBy[g.id] || 0 }));
+  }
+  function renderReport() {
+    const el = $('report');
+    if (!result) { el.innerHTML = ''; return; }
+    el.innerHTML = sorted(result.root.children).map((c, ci) => {
+      const rows = reportRows(c);
+      return `<div class="rep"><div class="rep-head"><b>${esc(c.name)} <span class="sub">${tierLabel(c)}</span></b>` +
+        `<button type="button" data-copyrep="${ci}">Sao chép report</button></div><div class="tw"><table>` +
+        '<thead><tr><th></th><th>Region</th><th class="num">Rebate Rate</th><th class="num">Total Ads Spending</th><th class="num">Rebate Amount</th></tr></thead><tbody>' +
+        rows.map((r, i) => `<tr>${i === 0 ? `<td class="label" rowspan="${rows.length + 1}">Final Rebate:</td>` : ''}<td>${esc(r.name)}</td>` +
+          `<td class="num">${fmtPct(r.rate)}</td><td class="num">$${fmt(r.spend)}</td><td class="num">$${fmt(r.cb)}</td></tr>`).join('') +
+        `<tr class="total"><td colspan="2" class="num">Total amount</td><td class="num">$${fmt(c.cost)}</td><td class="num amt">$${fmt(c.cb)}</td></tr>` +
+        '</tbody></table></div></div>';
+    }).join('');
+  }
+  $('report').addEventListener('click', async e => {
+    const b = e.target.closest('[data-copyrep]'); if (!b) return;
+    const c = sorted(result.root.children)[+b.dataset.copyrep];
+    const tsv = [['', 'Region', 'Rebate Rate', 'Total Ads Spending', 'Rebate Amount'],
+      ...reportRows(c).map((r, i) => [i === 0 ? 'Final Rebate:' : '', r.name, fmtPct(r.rate), '$' + fmt(r.spend), '$' + fmt(r.cb)]),
+      ['', '', 'Total amount', '$' + fmt(c.cost), '$' + fmt(c.cb)]].map(r => r.join('\t')).join('\n');
+    try { await navigator.clipboard.writeText(tsv); toast('Đã sao chép report ' + c.name); } catch (err) { toast('Trình duyệt chặn sao chép'); }
+  });
   $('results').addEventListener('click', e => {
     const t = e.target.closest('[data-tog]'); if (!t) return;
     const k = t.dataset.tog; expanded.has(k) ? expanded.delete(k) : expanded.add(k); renderResults();
@@ -641,6 +680,14 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     const det = [['Khách hàng', 'Entity', 'Account ID', 'Account name', 'Quốc gia', 'Khu vực', 'Chi tiêu (USD)', 'Tổng xét tier', 'Tier', 'Tỷ lệ (%)', 'Cashback (USD)']];
     result.rows.forEach(r => det.push([r.customer, r.entity, r.accId, r.accName, r.country, gname[r.gid], r.cost, r2(r.basisTotal), r.tier + 1, r4(r.rate), r2(r.cb)]));
     const wb = XLSX.utils.book_new();
+    const rep = [];
+    sorted(result.root.children).forEach(c => {
+      rep.push([c.name, c.tiers.size === 1 ? 'Tier ' + ([...c.tiers][0] + 1) : '']);
+      rep.push(['', 'Region', 'Rebate Rate', 'Total Ads Spending', 'Rebate Amount']);
+      reportRows(c).forEach((r, i) => rep.push([i === 0 ? 'Final Rebate:' : '', r.name, r4(r.rate) + '%', r2(r.spend), r2(r.cb)]));
+      rep.push(['', '', 'Total amount', r2(c.cost), r2(c.cb)], []);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rep), 'Report');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows()), 'Theo entity');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(acc), 'Theo account');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(det), 'Chi tiet dong');
