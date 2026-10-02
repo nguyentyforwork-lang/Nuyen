@@ -21,11 +21,27 @@
     <div class="progress"><div id="jobFill"></div></div>
   </div>
 
+  <section class="datebar">
+    <b>Ngày suspend</b>
+    <label>từ <input type="date" id="susFrom"></label>
+    <label>đến <input type="date" id="susTo"></label>
+    <div class="quick">
+      <button data-sus-range="0">Hôm nay</button>
+      <button data-sus-range="1">Hôm qua</button>
+      <button data-sus-range="7">7 ngày</button>
+      <button data-sus-range="30">30 ngày</button>
+      <button data-sus-range="" class="on">Tất cả</button>
+    </div>
+    <span id="rangeLabel" class="sub"></span>
+  </section>
+
   <section class="stats">
-    <div class="stat"><div class="label">Tổng account</div><div class="value" id="cAccounts">–</div></div>
-    <div class="stat danger"><div class="label">Account bị suspend</div><div class="value" id="cSuspended">–</div></div>
+    <div class="stat danger"><div class="label">Tổng account bị suspend</div><div class="value" id="cRangeTotal">–</div></div>
+    <div class="stat"><div class="label">Đã appeal</div><div class="value" id="cRangeAppealed">–</div></div>
+    <div class="stat warn"><div class="label">Chưa appeal</div><div class="value" id="cRangeNotAppealed">–</div></div>
+    <div class="stat ok"><div class="label">Đã lifted</div><div class="value" id="cRangeLifted">–</div></div>
+    <div class="stat danger"><div class="label">Vẫn đang suspend</div><div class="value" id="cRangeStill">–</div></div>
     <div class="stat warn"><div class="label">Account đang chạy có vi phạm</div><div class="value" id="cActiveViol">–</div></div>
-    <div class="stat warn"><div class="label">Creative bị từ chối</div><div class="value" id="cRejected">–</div></div>
   </section>
 
   <nav class="tabs">
@@ -46,29 +62,36 @@
         <li><b>Appeal account</b><span>Copy nội dung, dán vào Ads Manager</span></li>
       </ol>
       <div class="toolbar">
-        <label>Suspend từ <input type="date" id="susFrom"></label>
-        <label>đến <input type="date" id="susTo"></label>
-        <div class="quick">
-          <button data-sus-range="0">Hôm nay</button>
-          <button data-sus-range="1">Hôm qua</button>
-          <button data-sus-range="7">7 ngày</button>
-          <button data-sus-range="30">30 ngày</button>
-          <button data-sus-range="">Tất cả</button>
-        </div>
         <input type="search" id="susQ" placeholder="Tìm ID / tên / công ty">
-        <button id="btnScanAcc">Quét account</button>
+        <select id="susLatest">
+          <option value="">Mọi trạng thái mới nhất</option>
+          <option value="suspended">Vẫn SUSPEND</option>
+          <option value="lifted">Đã LIFTED</option>
+        </select>
+        <select id="susAppeal">
+          <option value="">Đã / chưa appeal</option>
+          <option value="done">Đã appeal</option>
+          <option value="none">Chưa appeal</option>
+        </select>
+        <select id="susSort">
+          <option value="desc">Ngày suspend: mới nhất trước</option>
+          <option value="asc">Ngày suspend: cũ nhất trước</option>
+        </select>
+        <span class="spacer"></span>
+        <button id="btnScanAcc">↻ Cập nhật trạng thái tất cả</button>
         <button id="btnExportAcc">Xuất CSV</button>
       </div>
       <div class="toolbar actionbar">
         <label class="check"><input type="checkbox" class="selAll" data-group="suspended"> Chọn tất cả</label>
         <span class="sub selCount" data-group="suspended">0 account được chọn</span>
         <span class="spacer"></span>
+        <button id="btnUpdateSel" disabled>↻ Cập nhật trạng thái</button>
         <button class="btnCheck" data-group="suspended" disabled>① Kiểm tra creative</button>
         <button class="btnBulk primary" data-group="suspended" disabled>② Bulk appeal creative</button>
         <button id="btnAccAppeal" disabled>③ Appeal account</button>
       </div>
       <div class="table-wrap"><table class="groups">
-        <thead><tr><th></th><th>Account</th><th>Suspend</th><th>Creative vi phạm</th><th>Tiến độ</th><th></th></tr></thead>
+        <thead><tr><th></th><th>Account</th><th>① Suspend</th><th>→ ② Appeal</th><th>→ ③ Trạng thái mới nhất</th><th>Creative vi phạm</th><th></th></tr></thead>
         <tbody id="rows-suspended"></tbody>
       </table></div>
     </section>

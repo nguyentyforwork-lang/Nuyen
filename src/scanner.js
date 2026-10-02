@@ -56,11 +56,14 @@ function createScanner({ client, store, env = process.env, log = console, appeal
     return [...map.values()];
   }
 
-  async function scanAccountsImpl() {
+  // advertiserIds: chỉ cập nhật trạng thái các account này (mặc định: toàn bộ account)
+  async function scanAccountsImpl({ advertiserIds } = {}) {
     const now = new Date().toISOString();
     const db = store.db;
-    const advertisers = await collectAdvertisers();
-    const infos = await client.getAdvertiserInfo(advertisers.map((a) => a.advertiser_id));
+    const ids = advertiserIds && advertiserIds.length
+      ? advertiserIds.map(String)
+      : (await collectAdvertisers()).map((a) => a.advertiser_id);
+    const infos = await client.getAdvertiserInfo(ids);
     let newlySuspended = 0;
 
     for (const info of infos) {
@@ -99,7 +102,7 @@ function createScanner({ client, store, env = process.env, log = console, appeal
       db.accounts[id] = acc;
     }
 
-    const result = { type: 'accounts', at: now, total: infos.length, suspended: Object.values(db.accounts).filter((a) => a.suspended).length, newlySuspended };
+    const result = { type: 'accounts', at: now, total: infos.length, partial: !!(advertiserIds && advertiserIds.length), suspended: Object.values(db.accounts).filter((a) => a.suspended).length, newlySuspended };
     db.scans = [result, ...db.scans].slice(0, 200);
     store.save();
     return result;

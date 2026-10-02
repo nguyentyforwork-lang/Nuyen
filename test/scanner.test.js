@@ -58,15 +58,17 @@ test('suspended account: deep check finds violating ads hidden behind ACCOUNT_PU
   assert.ok(store.db.accounts['2'].creatives_checked_at);
 });
 
-test('bulk appeal across accounts picks template by reject reason and skips appealed ads', async () => {
+test('bulk appeal across accounts uses default template, matches keyword templates, skips appealed ads', async () => {
   const { client, store, scanner } = setup();
+  store.db.templates.push({ id: 'tpl-landing', kind: 'creative', name: 'Landing', keywords: ['landing page'], text: 'LP {ad_name}: {reason}' });
   await scanner.fullScan();
   const plan = scanner.buildAppealPlan({ advertiserIds: ['1', '2'] });
   assert.equal(plan.items.length, 2);
   assert.equal(plan.accounts, 2);
-  assert.equal(plan.items.find((i) => i.ad_id === '21').template_id, 'creative-landing');
-  assert.equal(plan.items.find((i) => i.ad_id === '11').template_id, 'creative-misleading');
-  assert.match(plan.items.find((i) => i.ad_id === '21').reason, /ad21.*Landing page is not functional/);
+  assert.equal(plan.items.find((i) => i.ad_id === '21').reason, 'LP ad21: Landing page is not functional');
+  const def = plan.items.find((i) => i.ad_id === '11');
+  assert.equal(def.template_id, 'creative-default');
+  assert.match(def.reason, /^My campaign was wrongly flag/);
 
   scanner.startAppealJob({ advertiserIds: ['1', '2'] });
   const job = await waitJob(scanner);
@@ -79,13 +81,38 @@ test('bulk appeal across accounts picks template by reject reason and skips appe
   assert.throws(() => scanner.startAppealJob({ advertiserIds: ['1'] }), /Không có creative/);
 });
 
+test('update status of selected accounts only: suspended -> lifted', async () => {
+  const { client, store, scanner } = setup();
+  await scanner.scanAccounts();
+  client.state.statuses['2'] = 'STATUS_ENABLE';
+  const r = await scanner.scanAccounts({ advertiserIds: ['2'] });
+  assert.equal(r.total, 1);
+  assert.equal(store.db.accounts['2'].suspended, false);
+  assert.ok(store.db.accounts['2'].reactivated_at);
+  assert.ok(store.db.accounts['2'].suspended_at); // vẫn giữ ngày suspend để hiện tiến trình
+});
+
+test('migrates old built-in templates to the new defaults, keeps user templates', () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'nuyen-')), 'db.json');
+  fs.writeFileSync(file, JSON.stringify({ settings: { defaultTemplateId: 'creative-landing' }, templates: [
+    { id: 'creative-default', kind: 'creative', name: 'old', keywords: [], text: 'old' },
+    { id: 'creative-landing', kind: 'creative', name: 'old lp', keywords: ['landing'], text: 'old' },
+    { id: 'tpl-mine', kind: 'creative', name: 'mine', keywords: [], text: 'mine' },
+  ] }));
+  const { db } = createStore(file);
+  assert.deepEqual(db.templates.map((t) => t.id), ['creative-default', 'account-default', 'tpl-mine']);
+  assert.match(db.templates[0].text, /^My campaign was wrongly flag/);
+  assert.match(db.templates[1].text, /^My account was suspended/);
+  assert.equal(db.settings.defaultTemplateId, 'creative-default');
+});
+
 test('custom text and fixed template', async () => {
   const { scanner } = setup();
   await scanner.fullScan();
   const custom = scanner.buildAppealPlan({ adIds: ['11'], text: 'Please re-review {ad_id}' });
   assert.equal(custom.items[0].reason, 'Please re-review 11');
-  const fixed = scanner.buildAppealPlan({ adIds: ['11'], templateId: 'creative-quality' });
-  assert.equal(fixed.items[0].template_id, 'creative-quality');
+  const fixed = scanner.buildAppealPlan({ adIds: ['11'], templateId: 'creative-default' });
+  assert.equal(fixed.items[0].template_id, 'creative-default');
 });
 
 test('auto appeal respects scope and max per ad; resolves when approved', async () => {
@@ -105,8 +132,9 @@ test('auto appeal respects scope and max per ad; resolves when approved', async 
 
 test('template matching and rendering', () => {
   const { DEFAULT_TEMPLATES } = require('../src/templates');
-  assert.equal(matchTemplate(DEFAULT_TEMPLATES, ['Unrealistic results']).id, 'creative-misleading');
-  assert.equal(matchTemplate(DEFAULT_TEMPLATES, ['something else']).id, 'creative-default');
+  const tpls = [...DEFAULT_TEMPLATES, { id: 'x', kind: 'creative', keywords: ['unrealistic'], text: '' }];
+  assert.equal(matchTemplate(tpls, ['Unrealistic results']).id, 'x');
+  assert.equal(matchTemplate(tpls, ['something else']).id, 'creative-default');
   assert.equal(render('{a}-{reason}', { a: 'x' }), 'x-policy violation');
 });
 

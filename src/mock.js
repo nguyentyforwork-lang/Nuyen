@@ -18,6 +18,7 @@ function createMockClient() {
         let s = 'STATUS_ENABLE';
         if (i % 4 === 1) s = 'STATUS_LIMIT';
         if (tick >= 2 && i % 5 === 3) s = 'STATUS_DISABLE';
+        if (tick >= 3 && (i === 1 || i === 9)) s = 'STATUS_ENABLE'; // được mở lại (lifted)
         status[id] = s;
         return {
           advertiser_id: id, name: accounts[i] ? accounts[i].name : id, status: s,

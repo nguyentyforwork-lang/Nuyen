@@ -38,12 +38,38 @@ function toCsv(rows, columns) {
   return '﻿' + [columns.map((c) => c[0]).join(','), ...rows.map((r) => columns.map((c) => esc(c[1](r))).join(','))].join('\n');
 }
 
-function queryAccounts(q) {
-  let rows = Object.values(store.db.accounts);
-  const view = q.get('view') || 'suspended';
+// Account từng bị suspend trong khoảng ngày (cả đang suspend lẫn đã lifted)
+// q: from, to, q (từ khoá), latest=suspended|lifted, appeal=done|none, sort=desc|asc
+function suspendedAccounts(q) {
   const from = q.get('from'), to = q.get('to');
-  if (view === 'suspended') rows = rows.filter((a) => a.suspended_at && (from || to ? inRange(a.suspended_at, from, to) : a.suspended));
-  if (view === 'current') rows = rows.filter((a) => a.suspended);
+  const kw = (q.get('q') || '').toLowerCase();
+  const latest = q.get('latest'), appeal = q.get('appeal');
+  const asc = q.get('sort') === 'asc';
+  return Object.values(store.db.accounts)
+    .filter((a) => a.suspended_at && (!(from || to) || inRange(a.suspended_at, from, to)))
+    .filter((a) => latest !== 'suspended' || a.suspended)
+    .filter((a) => latest !== 'lifted' || !a.suspended)
+    .filter((a) => appeal !== 'done' || a.account_appealed_at)
+    .filter((a) => appeal !== 'none' || !a.account_appealed_at)
+    .filter((a) => !kw || `${a.advertiser_id} ${a.name} ${a.company}`.toLowerCase().includes(kw))
+    .sort((x, y) => (asc ? 1 : -1) * x.suspended_at.localeCompare(y.suspended_at));
+}
+
+function suspendedStats(q) {
+  const rows = suspendedAccounts(new URLSearchParams({ from: q.get('from') || '', to: q.get('to') || '' }));
+  return {
+    total: rows.length,
+    appealed: rows.filter((a) => a.account_appealed_at).length,
+    notAppealed: rows.filter((a) => !a.account_appealed_at).length,
+    lifted: rows.filter((a) => !a.suspended).length,
+    stillSuspended: rows.filter((a) => a.suspended).length,
+  };
+}
+
+function queryAccounts(q) {
+  if ((q.get('view') || 'suspended') === 'suspended') return suspendedAccounts(q);
+  let rows = Object.values(store.db.accounts);
+  if (q.get('view') === 'current') rows = rows.filter((a) => a.suspended);
   const kw = (q.get('q') || '').toLowerCase();
   if (kw) rows = rows.filter((a) => `${a.advertiser_id} ${a.name} ${a.company}`.toLowerCase().includes(kw));
   return rows.sort((a, b) => (b.suspended_at || '').localeCompare(a.suspended_at || ''));
@@ -68,26 +94,29 @@ function queryCreatives(q) {
 // Gom creative vi phạm theo account cho 2 luồng: suspended | active
 function queryGroups(q) {
   const type = q.get('type') === 'active' ? 'active' : 'suspended';
-  const from = q.get('from'), to = q.get('to');
   const kw = (q.get('q') || '').toLowerCase();
   const byAcc = {};
   for (const c of Object.values(store.db.creatives)) {
     if (c.state === 'rejected') (byAcc[c.advertiser_id] = byAcc[c.advertiser_id] || []).push(c);
   }
   const accountTpl = store.db.templates.find((t) => t.kind === 'account');
-  return Object.values(store.db.accounts)
-    .filter((a) => (type === 'suspended' ? a.suspended && (!(from || to) || inRange(a.suspended_at, from, to)) : !a.suspended && (byAcc[a.advertiser_id] || []).length))
-    .filter((a) => !kw || `${a.advertiser_id} ${a.name} ${a.company}`.toLowerCase().includes(kw))
+  const rows = type === 'suspended'
+    ? suspendedAccounts(q)
+    : Object.values(store.db.accounts)
+      .filter((a) => !a.suspended && (byAcc[a.advertiser_id] || []).length)
+      .filter((a) => !kw || `${a.advertiser_id} ${a.name} ${a.company}`.toLowerCase().includes(kw));
+  return rows
     .map((a) => {
       const creatives = (byAcc[a.advertiser_id] || []).map((c) => ({ ...c, appeal_state: appealState(c) }));
       const count = (st) => creatives.filter((c) => c.appeal_state === st).length;
       return {
         ...a, history: undefined, creatives,
         summary: { total: creatives.length, none: count('none'), pending: count('pending'), sent: count('sent'), failed: count('failed') },
+        latest_state: a.suspended ? 'suspended' : a.suspended_at ? 'lifted' : 'active',
         account_appeal_text: type === 'suspended' && accountTpl ? render(accountTpl.text, accountVars(a)) : undefined,
       };
     })
-    .sort((x, y) => (y.suspended_at || '').localeCompare(x.suspended_at || '') || y.summary.total - x.summary.total);
+    .sort((x, y) => (type === 'active' ? y.summary.total - x.summary.total : 0));
 }
 
 // ===== Lịch quét tự động =====
@@ -138,7 +167,7 @@ function authorized(req) {
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
 
 const routes = {
-  'GET /api/status': () => ({
+  'GET /api/status': (req, q) => ({
     mock: MOCK,
     configured: MOCK || !!process.env.TIKTOK_ACCESS_TOKEN,
     running: scanner.running,
@@ -150,6 +179,7 @@ const routes = {
       rejected: Object.values(store.db.creatives).filter((c) => c.state === 'rejected').length,
       activeWithViolations: new Set(Object.values(store.db.creatives).filter((c) => c.state === 'rejected' && !(store.db.accounts[c.advertiser_id] || {}).suspended).map((c) => c.advertiser_id)).size,
       pendingAutoAppeal: scanner.autoAppealPlan().length,
+      range: suspendedStats(q),
     },
     job: scanner.job,
     lastScans: store.db.scans.slice(0, 10),
@@ -174,7 +204,7 @@ const routes = {
     schedule();
     return s;
   },
-  'POST /api/scan/accounts': () => scanner.scanAccounts(),
+  'POST /api/scan/accounts': async (req) => scanner.scanAccounts({ advertiserIds: (await readBody(req)).advertiser_ids }),
   'POST /api/scan/creatives': async (req) => scanner.scanCreatives({ advertiserIds: (await readBody(req)).advertiser_ids }),
   'POST /api/scan/full': () => scanner.fullScan(),
   // Body chung cho preview/bulk: { advertiser_ids?, ad_ids?, template_id: 'auto'|id, text?, skip_appealed }
@@ -213,9 +243,12 @@ const routes = {
   'GET /api/export/accounts.csv': (req, q) => ({
     csv: toCsv(queryAccounts(q), [
       ['Advertiser ID', (a) => a.advertiser_id], ['Tên', (a) => a.name], ['Công ty', (a) => a.company],
-      ['Trạng thái', (a) => a.status], ['Lý do', (a) => a.rejection_reason],
       ['Ngày suspend', (a) => localDate(a.suspended_at)], ['Ước lượng', (a) => (a.suspended_at_estimated ? 'có' : '')],
-      ['Mở lại', (a) => localDate(a.reactivated_at)], ['Số dư', (a) => a.balance], ['Tiền tệ', (a) => a.currency], ['BC', (a) => a.owner_bc_id],
+      ['Lý do', (a) => a.rejection_reason],
+      ['Appeal account', (a) => (a.account_appealed_at ? 'Đã appeal ' + localDate(a.account_appealed_at) : 'Chưa appeal')],
+      ['Trạng thái mới nhất', (a) => (a.suspended ? 'SUSPEND' : a.suspended_at ? 'LIFTED' : 'ACTIVE')],
+      ['Ngày lifted', (a) => (a.suspended ? '' : localDate(a.reactivated_at))], ['Status TikTok', (a) => a.status],
+      ['Cập nhật lúc', (a) => localDate(a.last_checked)], ['Số dư', (a) => a.balance], ['Tiền tệ', (a) => a.currency], ['BC', (a) => a.owner_bc_id],
     ]),
     name: 'suspended-accounts.csv',
   }),

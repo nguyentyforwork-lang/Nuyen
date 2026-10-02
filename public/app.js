@@ -39,10 +39,13 @@ async function copy(text) {
 // ===== Status & job =====
 let jobPoll = null;
 async function refreshStatus() {
-  const s = await api('/api/status');
+  const s = await api('/api/status?' + dateParams());
   TZ = s.tz;
-  $('#cAccounts').textContent = s.counts.accounts; $('#cSuspended').textContent = s.counts.suspended;
-  $('#cActiveViol').textContent = s.counts.activeWithViolations; $('#cRejected').textContent = s.counts.rejected;
+  const r = s.counts.range;
+  $('#cRangeTotal').textContent = r.total; $('#cRangeAppealed').textContent = r.appealed; $('#cRangeNotAppealed').textContent = r.notAppealed;
+  $('#cRangeLifted').textContent = r.lifted; $('#cRangeStill').textContent = r.stillSuspended; $('#cActiveViol').textContent = s.counts.activeWithViolations;
+  const f = $('#susFrom').value, t = $('#susTo').value;
+  $('#rangeLabel').textContent = !f && !t ? 'Đang xem: tất cả các ngày' : `Đang xem: ${f || '…'} → ${t || '…'}`;
   const rs = $('#runState');
   rs.textContent = s.running ? `Đang ${s.running}…` : s.nextRunAt ? `Lần quét tới: ${fmtDate(s.nextRunAt)}` : 'Không tự quét';
   rs.classList.toggle('busy', !!s.running);
@@ -79,11 +82,28 @@ function startJobPoll() {
 }
 
 // ===== Group views (luồng ① và ②) =====
-function groupQuery(type) {
-  const q = new URLSearchParams({ type });
-  if (type === 'suspended') { q.set('from', $('#susFrom').value); q.set('to', $('#susTo').value); q.set('q', $('#susQ').value); }
-  else q.set('q', $('#actQ').value);
+const dateParams = () => new URLSearchParams({ from: $('#susFrom').value, to: $('#susTo').value });
+function suspendedFilters() {
+  const q = dateParams();
+  q.set('q', $('#susQ').value); q.set('latest', $('#susLatest').value); q.set('appeal', $('#susAppeal').value); q.set('sort', $('#susSort').value);
   return q;
+}
+function groupQuery(type) {
+  const q = type === 'suspended' ? suspendedFilters() : new URLSearchParams({ q: $('#actQ').value });
+  q.set('type', type);
+  return q;
+}
+// Tiến trình 1 account: Suspend → Đã appeal / Chưa appeal → Trạng thái mới nhất (SUSPEND đỏ / LIFTED xanh)
+function timeline(a) {
+  const id = esc(a.advertiser_id);
+  const sus = `<div class="tl sus"><b>SUSPEND</b><span class="sub">${a.suspended_at_estimated ? '≈ ' : ''}${fmtDate(a.suspended_at)}</span>${a.rejection_reason ? `<span class="sub">${esc(a.rejection_reason)}</span>` : ''}</div>`;
+  const appeal = a.account_appealed_at
+    ? `<div class="tl appealed"><b>Đã appeal</b><span class="sub">${fmtDate(a.account_appealed_at)}</span><button class="link" data-act="mark" data-id="${id}" data-value="0">Bỏ đánh dấu</button></div>`
+    : `<div class="tl notappealed"><b>Chưa appeal</b><button class="link" data-act="mark" data-id="${id}" data-value="1">Đánh dấu đã appeal</button></div>`;
+  const latest = a.latest_state === 'suspended'
+    ? `<div class="tl latest sus" title="Status TikTok: ${esc(a.status)}"><b>SUSPEND</b><span class="sub">Cập nhật ${fmtDate(a.last_checked)}</span></div>`
+    : `<div class="tl latest lifted" title="Status TikTok: ${esc(a.status)}"><b>LIFTED</b><span class="sub">Mở lại ${fmtDate(a.reactivated_at)}</span><span class="sub">Cập nhật ${fmtDate(a.last_checked)}</span></div>`;
+  return `<td>${sus}</td><td>${appeal}</td><td>${latest}</td>`;
 }
 function progressSteps(a, type) {
   const s = a.summary;
@@ -114,11 +134,24 @@ async function loadGroups(type) {
   groupsData[type] = rows;
   const ids = new Set(rows.map((r) => r.advertiser_id));
   for (const id of [...selected[type]]) if (!ids.has(id)) selected[type].delete(id);
-  const cols = 6;
+  const cols = type === 'suspended' ? 7 : 6;
   $(`#rows-${type}`).innerHTML = rows.map((a) => {
     const id = a.advertiser_id;
     const open = expanded.has(type + id);
     const checked = !!a.creatives_checked_at;
+    if (type === 'suspended') return `<tr>
+      <td><input type="checkbox" class="pick" data-group="${type}" value="${esc(id)}" ${selected[type].has(id) ? 'checked' : ''}></td>
+      <td><b class="${a.latest_state === 'suspended' ? 'latest-sus' : 'latest-lifted'}">${esc(a.name)}</b><div class="sub mono">${esc(id)}</div><div class="sub">${esc(a.company || '')}</div></td>
+      ${timeline(a)}
+      <td>${summaryChips(a.summary, checked)}${checked ? `<div class="sub">Kiểm tra ${fmtDate(a.creatives_checked_at)}</div>` : ''}</td>
+      <td><div class="row-actions">
+        <button data-act="refresh" data-id="${esc(id)}">↻ Cập nhật</button>
+        <button data-act="check" data-id="${esc(id)}" data-group="${type}">${checked ? 'Kiểm tra lại' : 'Kiểm tra creative'}</button>
+        ${a.summary.total ? `<button data-act="appeal" data-id="${esc(id)}" data-group="${type}" class="primary">Appeal creative</button>` : ''}
+        ${a.latest_state === 'suspended' ? `<button data-act="accappeal" data-id="${esc(id)}">Appeal acc</button>` : ''}
+        ${a.summary.total ? `<button data-act="toggle" data-id="${esc(id)}" data-group="${type}">${open ? '▾ Ẩn' : '▸ Xem'} creative</button>` : ''}
+      </div></td>
+    </tr>${open ? `<tr class="detail"><td colspan="${cols}">${creativeTable(a.creatives)}</td></tr>` : ''}`;
     return `<tr>
       <td><input type="checkbox" class="pick" data-group="${type}" value="${esc(id)}" ${selected[type].has(id) ? 'checked' : ''}></td>
       <td>${esc(a.name)}<div class="sub mono">${esc(id)}</div><div class="sub">${esc(a.company || '')}</div></td>
@@ -146,6 +179,7 @@ function updateActionBars() {
     $(`.selAll[data-group=${type}]`).checked = n > 0 && n === groupsData[type].length;
   }
   $('#btnAccAppeal').disabled = !selected.suspended.size;
+  $('#btnUpdateSel').disabled = !selected.suspended.size;
   const b = $('#btnAppealAds'); b.textContent = `Appeal đã chọn (${selected.ads.size})`; b.disabled = !selected.ads.size;
 }
 
@@ -220,7 +254,7 @@ $('#accList').addEventListener('click', (e) => {
 $('#accCopyAll').addEventListener('click', () => copy($$('#accList textarea').map((t) => `[${t.dataset.id}]\n${t.value}`).join('\n\n')));
 $('#accMark').addEventListener('click', async () => {
   await api('/api/accounts/account-appealed', { method: 'POST', body: { advertiser_ids: accModalIds } });
-  toast(`Đã đánh dấu ${accModalIds.length} account đã appeal`); $('#accModal').close(); loadGroups('suspended');
+  toast(`Đã đánh dấu ${accModalIds.length} account đã appeal`); $('#accModal').close(); reload();
 });
 
 // ===== All creatives =====
@@ -306,14 +340,21 @@ $$('.tabs button').forEach((b) => b.addEventListener('click', () => {
   reload();
 }));
 
+// Bộ lọc ngày suspend nằm trên cùng: đổi ngày => cập nhật số tổng + tab ①
+function onDateChange(activeBtn) {
+  $$('[data-sus-range]').forEach((x) => x.classList.toggle('on', x === activeBtn));
+  refreshStatus();
+  if ($('.tabs .active').dataset.tab === 'suspended') loadGroups('suspended');
+}
 $$('[data-sus-range]').forEach((b) => b.addEventListener('click', () => {
   const v = b.dataset.susRange;
   if (v === '') { $('#susFrom').value = ''; $('#susTo').value = ''; }
   else if (v === '1') { $('#susFrom').value = $('#susTo').value = dayStr(1); }
   else { $('#susFrom').value = dayStr(Number(v)); $('#susTo').value = dayStr(0); }
-  loadGroups('suspended');
+  onDateChange(b);
 }));
-['#susFrom', '#susTo'].forEach((s) => $(s).addEventListener('change', () => loadGroups('suspended')));
+['#susFrom', '#susTo'].forEach((s) => $(s).addEventListener('change', () => onDateChange(null)));
+['#susLatest', '#susAppeal', '#susSort'].forEach((s) => $(s).addEventListener('change', () => loadGroups('suspended')));
 let debounce;
 $('#susQ').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => loadGroups('suspended'), 250); });
 $('#actQ').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => loadGroups('active'), 250); });
@@ -337,6 +378,8 @@ document.addEventListener('click', (e) => {
   const { act, id, group } = b.dataset;
   const acc = group ? groupsData[group].find((a) => a.advertiser_id === id) : null;
   if (act === 'check') checkAccounts([id], b);
+  if (act === 'refresh') updateStatus([id], b);
+  if (act === 'mark') markAccountAppealed([id], b.dataset.value === '1');
   if (act === 'appeal') openAppealModal({ advertiser_ids: [id] }, `Appeal creative – ${acc ? acc.name : id}`);
   if (act === 'accappeal') openAccountModal([id]);
   if (act === 'toggle') { const k = group + id; expanded.has(k) ? expanded.delete(k) : expanded.add(k); loadGroups(group); }
@@ -355,11 +398,22 @@ $('#btnFullScan').addEventListener('click', (e) => withBusy(e.target, async () =
   toast(`Xong: ${r.accounts.suspended} account suspend, ${r.creatives.rejected} creative vi phạm${r.appeals ? `, đã auto appeal ${r.appeals.ok}` : ''}`);
   await reload();
 }));
-$('#btnScanAcc').addEventListener('click', (e) => withBusy(e.target, async () => {
-  const r = await api('/api/scan/accounts', { method: 'POST' });
-  toast(`Đã quét ${r.total} account – ${r.newlySuspended} account mới bị suspend`); await loadGroups('suspended');
-}));
-$('#btnExportAcc').addEventListener('click', () => { location.href = '/api/export/accounts.csv?' + new URLSearchParams({ view: 'suspended', from: $('#susFrom').value, to: $('#susTo').value, q: $('#susQ').value }); });
+// Cập nhật trạng thái mới nhất (SUSPEND / LIFTED) từ TikTok; ids rỗng = tất cả account
+function updateStatus(ids, btn) {
+  return withBusy(btn, async () => {
+    const before = Object.fromEntries(groupsData.suspended.map((a) => [a.advertiser_id, a.latest_state]));
+    const r = await api('/api/scan/accounts', { method: 'POST', body: { advertiser_ids: ids } });
+    await reload();
+    const lifted = groupsData.suspended.filter((a) => before[a.advertiser_id] === 'suspended' && a.latest_state === 'lifted').length;
+    toast(`Đã cập nhật ${r.total} account${r.newlySuspended ? ` · ${r.newlySuspended} mới bị suspend` : ''}${lifted ? ` · ${lifted} account đã LIFTED` : ''}`);
+  });
+}
+async function markAccountAppealed(ids, value) {
+  try { await api('/api/accounts/account-appealed', { method: 'POST', body: { advertiser_ids: ids, value } }); reload(); } catch (e) { toast('Lỗi: ' + e.message); }
+}
+$('#btnScanAcc').addEventListener('click', (e) => updateStatus([], e.target));
+$('#btnUpdateSel').addEventListener('click', (e) => updateStatus([...selected.suspended], e.target));
+$('#btnExportAcc').addEventListener('click', () => { const q = suspendedFilters(); q.set('view', 'suspended'); location.href = '/api/export/accounts.csv?' + q; });
 $('#btnExportCr').addEventListener('click', () => { location.href = '/api/export/creatives.csv?' + crQuery(); });
 
 reload();

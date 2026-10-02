@@ -6,7 +6,8 @@ Web nội bộ quản lý appeal TikTok Ads theo 2 luồng:
 
 **② Account đang chạy nhưng có creative bị báo policy** → *Bulk appeal* nhiều account một lần, trước khi account bị khoá.
 
-Mỗi account có thanh tiến độ (Kiểm tra ✓ → Appeal creative x/y → Appeal account ✓). Bulk appeal chạy nền, có thanh tiến độ và xem trước nội dung từng appeal trước khi gửi.
+Bộ lọc **ngày suspend** nằm trên cùng; các ô tổng (Tổng account bị suspend · Đã appeal · Chưa appeal · Đã lifted · Vẫn đang suspend) tính theo khoảng ngày đang chọn.
+Mỗi account ở tab ① hiện tiến trình **Suspend → Đã appeal / Chưa appeal → Trạng thái mới nhất** (SUSPEND màu đỏ, LIFTED màu xanh). Nút *↻ Cập nhật trạng thái* kéo lại trạng thái mới nhất từ TikTok cho 1 account, các account được chọn, hoặc tất cả. Bulk appeal chạy nền, có thanh tiến độ và xem trước nội dung từng appeal trước khi gửi.
 
 Không cần cài thư viện ngoài — chỉ cần Node.js ≥ 18.
 
@@ -44,7 +45,7 @@ App TikTok cần quyền: *Ad Account Management*, *Ads Management* (đọc ad +
 - **Appeal**: gọi `/adgroup/appeal/` với `adgroup_id` + `ad_id` + nội dung từ template.
   Mặc định bỏ qua ad đã appeal / đang được xét; ad appeal bị lỗi được gửi lại.
   Auto appeal (tab *Cài đặt*) chọn được phạm vi (tất cả / chỉ account suspend / chỉ account đang chạy), giới hạn số lần appeal mỗi ad (mặc định 1) và số appeal mỗi lần chạy.
-- **Template** (tab *Template*): có sẵn template cho Misleading claims, Landing page, Prohibited products, IP/brand, Low quality, Sensitive content + 1 template appeal account.
+- **Template** (tab *Template*): có sẵn 2 template — *Campaign / creative bị flag* (mặc định khi appeal creative) và *Appeal account bị suspend*. Thêm template riêng cho từng loại vi phạm bằng cách điền từ khoá.
   Chế độ “Tự chọn theo lý do vi phạm” dùng template đầu tiên có *từ khoá* xuất hiện trong lý do TikTok trả về; không khớp thì dùng template mặc định.
   Biến: `{ad_name} {ad_id} {advertiser_id} {advertiser_name} {company} {reason}`.
 - **Appeal account bị suspend**: TikTok Business API **không có** endpoint appeal cho account — phải làm trong Ads Manager / Business Center (web có link sẵn tới từng account).
