@@ -97,6 +97,10 @@ tbody tr:last-child td { border-bottom: 0; }
 .rep td.label { font-weight: 600; background: var(--bg); text-align: center; }
 .rep tr.total td { font-weight: 700; border-top: 2px solid var(--line); }
 .rep .amt { color: var(--bad); }
+.bcheck { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+#boosterTable input[type="text"] { width: 120px; font-family: var(--font-num); text-align: right; }
+#boosterTable input.pin { width: 70px; }
+#bRules input { width: 72px; }
 .chip.plain { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
 .map { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
 .banner { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 9px 12px; font-size: 13px; }
@@ -206,6 +210,32 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     <div class="tw"><table id="results"></table></div>
     <div class="sec-head"><h3>Report Final Rebate theo khách</h3></div>
     <div class="reports" id="report"></div>
+  </section>
+
+  <!-- 4. Booster -->
+  <section class="card" id="boosterSec">
+    <div class="sec-head">
+      <h2><span class="step">4</span>Booster quý (Gaming / Apps)</h2>
+      <div class="btns"><button id="copyBooster" type="button">Sao chép bảng booster</button></div>
+    </div>
+    <p class="hint">Spend quý này lấy từ kết quả cashback ở trên, chỉ cộng các khu vực được tick. Mặc định bỏ France &amp; Hungary. Nhập spend đủ điều kiện booster của quý trước để tính tăng trưởng QoQ (R), chọn Game hay App, nhập Smart+ Penetration (P) nếu có.</p>
+    <div class="controls">
+      <label class="field"><span>Tính booster theo</span>
+        <select id="bLevel">
+          <option value="customer">Khách hàng (cả file)</option>
+          <option value="account">Từng Advertiser Account ID</option>
+        </select>
+      </label>
+      <label class="field"><span>Loại cho tất cả</span>
+        <select id="bAllType"><option value="">— chọn —</option><option value="game">Game</option><option value="app">App</option></select>
+      </label>
+      <div class="field"><span>Spend tính booster gồm</span><div class="btns" id="bGroups"></div></div>
+    </div>
+    <details>
+      <summary class="sub">Điều kiện booster (sửa được)</summary>
+      <div class="tw"><table id="bRules"></table></div>
+    </details>
+    <div class="tw"><table id="boosterTable"></table></div>
   </section>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -559,6 +589,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       const missing = !files.length ? 'Tải file chi tiêu lên ở bước 2 (hoặc bấm "Dùng dữ liệu mẫu") để xem kết quả.'
         : 'Chọn cột quốc gia và cột chi tiêu ở phần "Ghép cột" để tính.';
       tbl.innerHTML = `<tbody><tr><td class="empty">${missing}</td></tr></tbody>`;
+      renderBooster();
       return;
     }
     const { root, unmatched, def } = result;
@@ -610,7 +641,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     if (!shown) h += `<tr><td class="empty" colspan="${gs.length + 5}">Không có kết quả khớp "${esc(q)}".</td></tr>`;
     h += `</tbody><tfoot><tr><td>Tổng</td>${cells(root, true)}</tr></tfoot>`;
     tbl.innerHTML = h;
-    renderReport();
+    renderBooster();
   }
 
   // Report in the "Final Rebate" layout: one table per customer
@@ -639,6 +670,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
         rows.map((r, i) => `<tr>${i === 0 ? `<td class="label" rowspan="${rows.length + 1}">Final Rebate:</td>` : ''}<td>${esc(r.name)}</td>` +
           `<td class="num">${fmtPct(r.rate)}</td><td class="num">$${fmt(r.spend)}</td><td class="num">$${fmt(r.cb)}</td></tr>`).join('') +
         `<tr class="total"><td colspan="2" class="num">Total amount</td><td class="num">$${fmt(c.cost)}</td><td class="num amt">$${fmt(c.cb)}</td></tr>` +
+        boosterReportRows(c) +
         '</tbody></table></div>' +
         `<details><summary class="sub">Chi tiết ${countryRows(c.name).length} quốc gia</summary><div class="tw"><table>` +
         '<thead><tr><th>Target Country</th><th class="num">Sales Performance (USD)</th><th>Region</th></tr></thead><tbody>' +
@@ -698,9 +730,13 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       rep.push([c.name, c.tiers.size === 1 ? 'Tier ' + ([...c.tiers][0] + 1) : '']);
       rep.push(['', 'Region', 'Rebate Rate', 'Total Ads Spending', 'Rebate Amount']);
       reportRows(c).forEach((r, i) => rep.push([i === 0 ? 'Final Rebate:' : '', r.name, r4(r.rate) + '%', r2(r.spend), r2(r.cb)]));
-      rep.push(['', '', 'Total amount', r2(c.cost), r2(c.cb)], []);
+      rep.push(['', '', 'Total amount', r2(c.cost), r2(c.cb)]);
+      const bAmt = boosterByCustomer(c.name);
+      if (bAmt) rep.push(['', 'Booster', '', '', r2(bAmt)], ['', '', 'Total rebate (Cashback + Booster)', '', r2(c.cb + bAmt)]);
+      rep.push([]);
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rep), 'Report');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(boosterRows()), 'Booster');
     const ctry = [['Khách hàng', 'Target Country', 'Sales Performance - USD', 'Regions']];
     sorted(result.root.children).forEach(c => countryRows(c.name).forEach(r => ctry.push([c.name, r.country, r2(r.cost), r.region])));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ctry), 'Theo quoc gia');
@@ -711,8 +747,144 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     catch (err) { toast('Không tải file được ở đây. Dùng "Sao chép bảng" rồi dán vào Excel.'); }
   });
 
+  // ---------- Booster ----------
+  const BOOSTER_DEFAULT = {
+    game: [{ tier: 'T2', r: 90, p: 70, rate: 2 }, { tier: 'T1', r: 50, p: 70, rate: 1 }],
+    app:  [{ tier: 'T2', r: 30, p: 70, rate: 2 }, { tier: 'T1', r: 20, p: 70, rate: 1 }],
+  };
+  const BKEY = 'cashback-booster-v1';
+  let booster = { level: 'customer', excluded: null, rules: clone(BOOSTER_DEFAULT), inputs: {} };
+  try { const s = localStorage.getItem(BKEY); if (s) booster = Object.assign(booster, JSON.parse(s)); } catch (e) {}
+  const saveBooster = () => { try { localStorage.setItem(BKEY, JSON.stringify(booster)); } catch (e) {} };
+  const excludedSet = () => new Set(booster.excluded ?? policy.groups.filter(g => /france|hungary/i.test(g.name)).map(g => g.id));
+  let bUnits = [];
+
+  function boosterUnits() {
+    if (!result) return [];
+    const ex = excludedSet(); const m = new Map();
+    result.rows.forEach(r => {
+      const acc = r.accId || r.accName;
+      const key = booster.level === 'customer' ? 'c:' + r.customer : 'a:' + r.customer + '\u0001' + acc;
+      const u = m.get(key) || { key, customer: r.customer, name: booster.level === 'customer' ? r.customer : (r.accName || acc), id: booster.level === 'customer' ? '' : r.accId, spend: 0 };
+      if (!ex.has(r.gid)) u.spend += r.cost;
+      m.set(key, u);
+    });
+    return [...m.values()].sort((a, b) => a.customer.localeCompare(b.customer) || b.spend - a.spend);
+  }
+  const blank = v => String(v ?? '').trim() === '';
+  function evalUnit(u) {
+    const inp = booster.inputs[u.key] || {};
+    const type = inp.type || 'game';
+    const rules = booster.rules[type];
+    const prev = parseNum(inp.prev), P = blank(inp.p) ? null : parseNum(inp.p);
+    const R = !blank(inp.prev) && prev > 0 ? (u.spend - prev) / prev : null;
+    let hit = null, reason = '';
+    if (blank(inp.prev)) reason = 'Nhập spend quý trước';
+    else if (prev <= 0) reason = 'Quý trước = 0, không tính được R';
+    else {
+      hit = rules.find(t => R * 100 >= t.r && (P == null || P >= t.p)) || null;
+      if (!hit) {
+        const minR = Math.min(...rules.map(t => t.r));
+        reason = R * 100 < minR ? `R chưa đạt ${minR}%` : `Smart+ dưới ${Math.min(...rules.map(t => t.p))}%`;
+      }
+    }
+    return { type, prev, R, P, hit, reason, amount: hit ? u.spend * hit.rate / 100 : 0 };
+  }
+  const boosterByCustomer = name => bUnits.filter(u => u.customer === name).reduce((s, u) => s + evalUnit(u).amount, 0);
+
+  function renderBoosterRules() {
+    const row = (type, i, t) => `<tr><td>${type === 'game' ? 'Gaming' : 'Apps'}</td><td>${t.tier}</td>` +
+      ['r', 'p', 'rate'].map(f => `<td><input type="number" step="any" id="br-${type}-${i}-${f}" data-bt="${type}" data-bi="${i}" data-bf="${f}" value="${t[f]}"><span class="pct">%</span></td>`).join('') + '</tr>';
+    $('bRules').innerHTML = '<thead><tr><th>Loại</th><th>Tier</th><th>QoQ Growth R ≥</th><th>Smart+ P ≥</th><th>Rebate</th></tr></thead><tbody>' +
+      ['game', 'app'].map(type => booster.rules[type].map((t, i) => row(type, i, t)).join('')).join('') + '</tbody>';
+  }
+  $('bRules').addEventListener('input', e => {
+    const d = e.target.dataset; if (!d.bt) return;
+    booster.rules[d.bt][+d.bi][d.bf] = parseFloat(e.target.value) || 0; saveBooster(); refreshBooster();
+  });
+
+  function renderBooster() {
+    $('bLevel').value = booster.level;
+    const ex = excludedSet();
+    $('bGroups').innerHTML = policy.groups.map(g => `<label class="bcheck"><input type="checkbox" id="bg-${g.id}" data-bg="${g.id}"${ex.has(g.id) ? '' : ' checked'}>${esc(g.name)}</label>`).join('');
+    bUnits = boosterUnits();
+    const tbl = $('boosterTable');
+    if (!result) { tbl.innerHTML = '<tbody><tr><td class="empty">Tính cashback ở trên trước, rồi nhập số liệu booster ở đây.</td></tr></tbody>'; return; }
+    const acct = booster.level === 'account';
+    tbl.innerHTML = `<thead><tr><th>${acct ? 'Khách / Account' : 'Khách hàng'}</th><th class="num">Spend quý này (đủ ĐK)</th><th class="num">Spend quý trước</th>` +
+      '<th class="num">QoQ Growth (R)</th><th>Loại</th><th class="num">Smart+ (P)</th><th>Kết quả</th><th class="num">Booster</th></tr></thead><tbody>' +
+      bUnits.map((u, i) => {
+        const inp = booster.inputs[u.key] || {};
+        return `<tr><td class="name">${acct ? `<span class="sub">${esc(u.customer)}</span><br>` : ''}${esc(u.name)}${u.id && u.id !== u.name ? ` <span class="sub">${esc(u.id)}</span>` : ''}</td>` +
+          `<td class="num">$${fmt(u.spend)}</td>` +
+          `<td class="num"><input type="text" inputmode="decimal" id="bprev-${i}" data-bu="${i}" data-bfield="prev" value="${esc(inp.prev ?? '')}" placeholder="0.00"></td>` +
+          `<td class="num" id="bR-${i}"></td>` +
+          `<td><select id="btype-${i}" data-bu="${i}" data-bfield="type"><option value="game"${(inp.type || 'game') === 'game' ? ' selected' : ''}>Game</option><option value="app"${inp.type === 'app' ? ' selected' : ''}>App</option></select></td>` +
+          `<td class="num"><input type="text" class="pin" inputmode="decimal" id="bp-${i}" data-bu="${i}" data-bfield="p" value="${esc(inp.p ?? '')}" placeholder="%"></td>` +
+          `<td id="bS-${i}"></td><td class="num cb" id="bA-${i}"></td></tr>`;
+      }).join('') +
+      '</tbody><tfoot><tr><td>Tổng</td><td class="num" id="bSpendTotal"></td><td colspan="5"></td><td class="num cb" id="bTotal"></td></tr></tfoot>';
+    refreshBooster();
+  }
+  function refreshBooster() {
+    let total = 0, spend = 0;
+    bUnits.forEach((u, i) => {
+      const ev = evalUnit(u); total += ev.amount; spend += u.spend;
+      $('bR-' + i).innerHTML = ev.R == null ? '<span class="sub">–</span>' : fmtPct(ev.R);
+      const tName = ev.type === 'game' ? 'Game' : 'App';
+      $('bS-' + i).innerHTML = ev.hit
+        ? `<span class="chip">${tName} ${ev.hit.tier} · ${ev.hit.rate}%</span>${ev.P == null ? ' <span class="sub">chưa nhập P, giả định đạt</span>' : ''}`
+        : `<span class="chip ${blank((booster.inputs[u.key] || {}).prev) ? 'plain' : 'warn'}">${esc(ev.reason)}</span>`;
+      $('bA-' + i).textContent = fmt(ev.amount);
+    });
+    if ($('bTotal')) { $('bTotal').textContent = fmt(total); $('bSpendTotal').textContent = '$' + fmt(spend); }
+    renderReport();
+  }
+  $('boosterTable').addEventListener('input', e => {
+    const d = e.target.dataset; if (d.bu == null) return;
+    const u = bUnits[+d.bu]; booster.inputs[u.key] = Object.assign({}, booster.inputs[u.key], { [d.bfield]: e.target.value });
+    saveBooster(); refreshBooster();
+  });
+  $('bLevel').addEventListener('change', e => { booster.level = e.target.value; saveBooster(); renderBooster(); });
+  $('bAllType').addEventListener('change', e => {
+    const v = e.target.value; if (!v) return;
+    bUnits.forEach(u => booster.inputs[u.key] = Object.assign({}, booster.inputs[u.key], { type: v }));
+    e.target.value = ''; saveBooster(); renderBooster();
+  });
+  $('bGroups').addEventListener('change', e => {
+    const id = e.target.dataset.bg; if (!id) return;
+    const ex = excludedSet(); e.target.checked ? ex.delete(id) : ex.add(id);
+    booster.excluded = [...ex]; saveBooster(); renderBooster();
+  });
+  function boosterRows() {
+    const out = [['Khách hàng', 'Account', 'Spend quý này (đủ ĐK)', 'Spend quý trước', 'QoQ Growth (R)', 'Loại', 'Smart+ (P)', 'Tier', 'Rate', 'Booster (USD)']];
+    bUnits.forEach(u => {
+      const ev = evalUnit(u);
+      out.push([u.customer, booster.level === 'account' ? (u.name + (u.id ? ' ' + u.id : '')) : '', Math.round(u.spend * 100) / 100, ev.prev || '',
+        ev.R == null ? '' : fmtPct(ev.R), ev.type === 'game' ? 'Game' : 'App', ev.P == null ? '' : ev.P + '%',
+        ev.hit ? ev.hit.tier : ev.reason, ev.hit ? ev.hit.rate + '%' : '', Math.round(ev.amount * 100) / 100]);
+    });
+    return out;
+  }
+  $('copyBooster').addEventListener('click', async () => {
+    if (!result) { toast('Chưa có kết quả'); return; }
+    try { await navigator.clipboard.writeText(boosterRows().map(r => r.join('\t')).join('\n')); toast('Đã sao chép bảng booster'); }
+    catch (err) { toast('Trình duyệt chặn sao chép'); }
+  });
+  function boosterReportRows(c) {
+    const us = bUnits.filter(u => u.customer === c.name); if (!us.length) return '';
+    const evs = us.map(evalUnit); const amt = evs.reduce((s, e) => s + e.amount, 0);
+    if (!evs.some(e => e.hit)) return '';
+    const spend = us.reduce((s, u) => s + u.spend, 0);
+    const hits = [...new Set(evs.filter(e => e.hit).map(e => `${e.type === 'game' ? 'Gaming' : 'Apps'} Booster ${e.hit.tier}`))].join(', ');
+    const rate = us.length === 1 ? fmtPct(evs[0].hit.rate / 100) : (spend ? fmtPct(amt / spend) : '');
+    return `<tr><td></td><td>${esc(hits)}</td><td class="num">${rate}</td><td class="num">$${fmt(spend)}</td><td class="num">$${fmt(amt)}</td></tr>` +
+      `<tr class="total"><td></td><td colspan="3" class="num">Total rebate (Cashback + Booster)</td><td class="num amt">$${fmt(c.cb + amt)}</td></tr>`;
+  }
+
   // ---------- Boot ----------
   renderPolicy();
+  renderBoosterRules();
   files = [SAMPLE]; isSample = true; mapping = autoMap(SAMPLE.headers);
   renderData(); compute();
 })();
