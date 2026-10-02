@@ -1,0 +1,919 @@
+<title>Nuyen Appeal Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: operations desk — sticky top bar, date filter driving the totals, tabbed work queues below. */
+:root {
+  --bg: #f3f4f7; --surface: #ffffff; --sunk: #eef0f4; --ink: #14161b; --muted: #5d6472; --line: #e0e3e9;
+  --accent: #c8124f; --accent-ink: #ffffff; --accent-soft: #fbe7ee;
+  --bad: #c62f2f; --bad-soft: #fdecec; --ok: #187a4c; --ok-soft: #e5f5ec; --warn: #a05f0c; --warn-soft: #fcf1df;
+  --font-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1014; --surface: #161920; --sunk: #1c2029; --ink: #e7e9ee; --muted: #9aa1ae; --line: #2a2f39;
+  --accent: #ff4f87; --accent-ink: #14161b; --accent-soft: #3a1825;
+  --bad: #ff6b6b; --bad-soft: #3a1a1c; --ok: #44c98f; --ok-soft: #14301f; --warn: #e6a64e; --warn-soft: #36290f; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e1014; --surface: #161920; --sunk: #1c2029; --ink: #e7e9ee; --muted: #9aa1ae; --line: #2a2f39;
+  --accent: #ff4f87; --accent-ink: #14161b; --accent-soft: #3a1825;
+  --bad: #ff6b6b; --bad-soft: #3a1a1c; --ok: #44c98f; --ok-soft: #14301f; --warn: #e6a64e; --warn-soft: #36290f; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font-body); margin: 0; }
+.wrap { padding-inline: 16px; padding-block: 0 48px; max-width: 1440px; margin: 0 auto; display: grid; gap: 14px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { padding: 7px 12px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; cursor: pointer; white-space: nowrap; }
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.link { border: 0; background: none; padding: 0; color: var(--accent); font-size: 12px; }
+button.sm { padding: 4px 8px; font-size: 12px; }
+input, select, textarea { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+textarea { width: 100%; resize: vertical; line-height: 1.5; }
+.mono { font-family: var(--font-mono); font-size: 12px; }
+.sub { color: var(--muted); font-size: 12px; }
+.spacer { flex: 1; }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+header.top .in { max-width: 1440px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+.mark { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; }
+.brand small { font-weight: 400; color: var(--muted); font-size: 12px; display: block; }
+.pill { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--sunk); color: var(--muted); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.bad { background: var(--bad-soft); color: var(--bad); } .pill.warn { background: var(--warn-soft); color: var(--warn); }
+
+.banner { padding: 10px 14px; border-radius: var(--r); background: var(--warn-soft); color: var(--warn); }
+.banner.bad { background: var(--bad-soft); color: var(--bad); }
+.job { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; display: grid; gap: 6px; }
+.job .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.bar { height: 6px; background: var(--sunk); border-radius: 999px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+
+.datebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; margin-top: 14px; }
+.datebar b { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 4px; }
+.datebar label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.quick { display: flex; flex-wrap: wrap; gap: 4px; }
+.quick button { padding: 5px 10px; font-size: 13px; }
+.quick button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; display: grid; gap: 2px; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.stat.bad .v { color: var(--bad); } .stat.ok .v { color: var(--ok); } .stat.warn .v { color: var(--warn); }
+
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 9px 12px; }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs .count { font-size: 11px; background: var(--sunk); border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
+.panel[hidden] { display: none; }
+.panel { display: grid; gap: 10px; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.toolbar input[type=search] { min-width: 200px; flex: 0 1 260px; }
+.actionbar { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 54px); z-index: 10; }
+label.chk { display: inline-flex; gap: 6px; align-items: center; }
+.hint { color: var(--muted); font-size: 13px; margin: 0; max-width: 90ch; }
+
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+td.empty { text-align: center; color: var(--muted); padding: 36px 16px; }
+tr.detail > td { background: var(--sunk); padding: 8px 10px 12px 44px; }
+tr.detail table { background: var(--surface); border-radius: 8px; }
+.acct b { display: block; }
+.acct b.sus { color: var(--bad); } .acct b.lifted { color: var(--ok); }
+
+.tl { display: grid; gap: 1px; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--line); min-width: 120px; max-width: 240px; font-size: 12px; }
+.tl b { font-size: 12px; letter-spacing: .04em; }
+.tl.s b { color: var(--bad); }
+.tl.ap b { color: var(--ok); } .tl.na b { color: var(--warn); }
+.tl.now { border-width: 2px; }
+.tl.now.sus { border-color: var(--bad); background: var(--bad-soft); } .tl.now.sus b { color: var(--bad); }
+.tl.now.lifted { border-color: var(--ok); background: var(--ok-soft); } .tl.now.lifted b { color: var(--ok); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--sunk); color: var(--ink); white-space: nowrap; }
+.chip.bad { background: var(--bad-soft); color: var(--bad); } .chip.ok { background: var(--ok-soft); color: var(--ok); } .chip.warn { background: var(--warn-soft); color: var(--warn); }
+.acts { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.reason { max-width: 420px; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 8px; min-width: 0; }
+.card label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.picker { display: grid; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; }
+.picker h3, .card h3 { margin: 0; font-size: 15px; text-wrap: balance; }
+.picklist { max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.picklist label { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.picklist label:last-child { border-bottom: 0; }
+
+.overlay { position: fixed; inset: 0; background: rgba(8, 10, 14, .55); z-index: 50; display: grid; place-items: center; padding: 16px; }
+.overlay[hidden] { display: none; }
+.modal { background: var(--surface); border-radius: 14px; width: min(980px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 18px; display: grid; gap: 12px; box-shadow: 0 18px 60px rgba(0,0,0,.35); }
+.modal h2 { margin: 0; font-size: 18px; text-wrap: balance; }
+.modal .foot { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; position: sticky; bottom: -18px; background: var(--surface); padding-block: 10px 0; }
+.modal .preview { max-height: 340px; overflow: auto; }
+.toast { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); max-width: min(440px, calc(100vw - 32px)); background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 10px; z-index: 60; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+.toast[hidden] { display: none; }
+@media (max-width: 640px) { .actionbar { position: static; } .stat .v { font-size: 22px; } }
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+
+<header class="top"><div class="in">
+  <div class="brand"><span class="mark">N</span><div>Nuyen Appeal Desk<small>TikTok Ads · account suspend &amp; creative appeal</small></div></div>
+  <span class="spacer"></span>
+  <span id="conn" class="pill">Đang kết nối TikTok…</span>
+  <span id="lastScan" class="sub"></span>
+  <button id="btnRefreshAll" class="primary">↻ Cập nhật trạng thái tất cả</button>
+</div></header>
+
+<div class="wrap">
+  <section class="datebar" aria-label="Lọc theo ngày suspend">
+    <b>Ngày suspend</b>
+    <label>từ <input type="date" id="dFrom"></label>
+    <label>đến <input type="date" id="dTo"></label>
+    <div class="quick" id="quick">
+      <button data-r="0">Hôm nay</button><button data-r="1">Hôm qua</button><button data-r="7">7 ngày</button><button data-r="30">30 ngày</button><button data-r="" class="on">Tất cả</button>
+    </div>
+    <span id="rangeLabel" class="sub"></span>
+  </section>
+
+  <div id="banner" class="banner" hidden></div>
+  <div id="job" class="job" hidden>
+    <div class="row"><b id="jobTitle"></b><span id="jobText" class="sub"></span><span class="spacer"></span><button id="jobCancel" class="sm">Dừng</button><button id="jobClose" class="sm" hidden>Đóng</button></div>
+    <div class="bar"><i id="jobFill"></i></div>
+    <div id="jobErr" class="sub"></div>
+  </div>
+
+  <section class="stats" aria-label="Tổng quan theo khoảng ngày">
+    <div class="stat bad"><span class="k">Tổng account bị suspend</span><span class="v" id="sTotal">0</span></div>
+    <div class="stat ok"><span class="k">Đã appeal</span><span class="v" id="sAp">0</span></div>
+    <div class="stat warn"><span class="k">Chưa appeal</span><span class="v" id="sNa">0</span></div>
+    <div class="stat ok"><span class="k">Đã lifted</span><span class="v" id="sLift">0</span></div>
+    <div class="stat bad"><span class="k">Vẫn đang suspend</span><span class="v" id="sStill">0</span></div>
+    <div class="stat warn"><span class="k">Account đang chạy có vi phạm</span><span class="v" id="sAct">0</span></div>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button data-tab="sus" class="on">① Account bị suspend<span class="count" id="tcSus">0</span></button>
+    <button data-tab="act">② Account đang chạy có vi phạm<span class="count" id="tcAct">0</span></button>
+    <button data-tab="log">Lịch sử appeal</button>
+    <button data-tab="tpl">Template</button>
+  </nav>
+
+  <!-- ① SUSPENDED -->
+  <section class="panel" id="p-sus">
+    <div class="toolbar">
+      <input type="search" id="susQ" placeholder="Tìm ID / tên account">
+      <select id="susLatest"><option value="">Mọi trạng thái mới nhất</option><option value="suspended">Vẫn SUSPEND</option><option value="lifted">Đã LIFTED</option></select>
+      <select id="susAppeal"><option value="">Đã / chưa appeal</option><option value="done">Đã appeal</option><option value="none">Chưa appeal</option></select>
+      <select id="susSort"><option value="desc">Ngày suspend: mới nhất trước</option><option value="asc">Ngày suspend: cũ nhất trước</option></select>
+    </div>
+    <div class="toolbar actionbar">
+      <label class="chk"><input type="checkbox" id="susAll"> Chọn tất cả</label>
+      <span class="sub" id="susSel">0 account được chọn</span>
+      <span class="spacer"></span>
+      <button id="susRefresh" disabled>↻ Cập nhật trạng thái</button>
+      <button id="susCheck" disabled>Kiểm tra creative</button>
+      <button id="susBulk" class="primary" disabled>Bulk appeal creative</button>
+      <button id="susAcc" disabled>Appeal account</button>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>Account</th><th>① Suspend</th><th>→ ② Appeal account</th><th>→ ③ Trạng thái mới nhất</th><th>Creative vi phạm</th><th></th></tr></thead>
+      <tbody id="susRows"></tbody>
+    </table></div>
+  </section>
+
+  <!-- ② ACTIVE -->
+  <section class="panel" id="p-act" hidden>
+    <p class="hint">Account vẫn đang chạy nhưng có creative bị TikTok báo vi phạm (bị từ chối hoặc chỉ được duyệt ở một số thị trường). Chọn account bên dưới để kiểm tra, rồi bulk appeal.</p>
+    <div class="picker">
+      <h3>Kiểm tra creative account đang chạy</h3>
+      <div class="toolbar">
+        <input type="search" id="pkQ" placeholder="Tìm ID / tên account">
+        <select id="pkBc"><option value="">Mọi Business Center</option></select>
+        <label class="chk"><input type="checkbox" id="pkUnchecked"> Chỉ account chưa kiểm tra</label>
+        <span class="sub" id="pkCount"></span>
+        <span class="spacer"></span>
+        <button id="pkCheckSel" disabled>Kiểm tra đã chọn</button>
+        <button id="pkCheckAll">Kiểm tra tất cả account đang lọc</button>
+      </div>
+      <div class="picklist" id="pkList"></div>
+    </div>
+    <div class="toolbar actionbar">
+      <label class="chk"><input type="checkbox" id="actAll"> Chọn tất cả</label>
+      <span class="sub" id="actSel">0 account được chọn</span>
+      <span class="spacer"></span>
+      <button id="actCheck" disabled>Kiểm tra lại</button>
+      <button id="actBulk" class="primary" disabled>Bulk appeal creative</button>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>Account</th><th>Trạng thái</th><th>Creative vi phạm</th><th>Kiểm tra lúc</th><th></th></tr></thead>
+      <tbody id="actRows"></tbody>
+    </table></div>
+  </section>
+
+  <!-- LOG -->
+  <section class="panel" id="p-log" hidden>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Thời gian</th><th>Account</th><th>Appeal</th><th>Người gửi</th><th>Kết quả</th></tr></thead>
+      <tbody id="logRows"></tbody>
+    </table></div>
+  </section>
+
+  <!-- TEMPLATES -->
+  <section class="panel" id="p-tpl" hidden>
+    <p class="hint">Biến dùng được trong nội dung: <span class="mono">{advertiser_id} {advertiser_name} {ad_name} {ad_id} {reason}</span>. Template creative được chọn sẵn khi bulk appeal; nội dung vẫn sửa được trước khi gửi.</p>
+    <div class="toolbar"><button id="tplAdd">+ Thêm template</button><button id="tplReset">Khôi phục 2 mẫu gốc</button><span class="spacer"></span><button id="tplSave" class="primary">Lưu template</button></div>
+    <div class="cards" id="tplList"></div>
+  </section>
+</div>
+
+<!-- Appeal creative modal -->
+<div class="overlay" id="mAppeal" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="maTitle">
+  <h2 id="maTitle">Bulk appeal creative</h2>
+  <div class="toolbar">
+    <label class="chk">Template <select id="maTpl"></select></label>
+    <label class="chk"><input type="checkbox" id="maSkip" checked> Bỏ qua ad đã appeal / đang xét</label>
+    <label class="chk"><input type="checkbox" id="maPartial" checked> Gồm ad chỉ duyệt một phần</label>
+  </div>
+  <textarea id="maText" rows="5" aria-label="Nội dung appeal"></textarea>
+  <div class="sub" id="maSum"></div>
+  <div class="tablewrap preview"><table>
+    <thead><tr><th><input type="checkbox" id="maAll" checked aria-label="Chọn tất cả"></th><th>Account</th><th>Ad</th><th>Tình trạng</th><th>Lý do TikTok</th></tr></thead>
+    <tbody id="maRows"></tbody>
+  </table></div>
+  <div class="foot"><button id="maCancel">Huỷ</button><button id="maSend" class="primary">Gửi appeal</button></div>
+</div></div>
+
+<!-- Appeal account modal -->
+<div class="overlay" id="mAcc" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mcTitle">
+  <h2 id="mcTitle">Appeal account bị suspend</h2>
+  <p class="hint">TikTok không cho appeal account qua API. Copy nội dung, mở ticket <b>Account Review</b> trong TikTok Business Support (hoặc Ads Manager) cho từng account, sau đó bấm <b>Đánh dấu đã appeal</b>.</p>
+  <div id="mcList" style="display:grid;gap:10px"></div>
+  <div class="foot"><button id="mcCopyAll">Copy tất cả</button><button id="mcClose">Đóng</button><button id="mcMark" class="primary">Đánh dấu đã appeal</button></div>
+</div></div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+'use strict';
+const SERVER = 'TikTok MCP';
+const SUSP = new Set(['STATUS_LIMIT', 'STATUS_DISABLE']);
+const TZ = 'Asia/Ho_Chi_Minh';
+const DEFAULT_TEMPLATES = [
+  { id: 'creative-default', kind: 'creative', name: 'Campaign bị flag',
+    text: 'My campaign was wrongly flag, and we believe this may be a mistake. The ad video is only used to demonstrate the app’s features and does not contain any prohibited content.\nThis wrongly flag is affecting our ability to scale, as we were preparing to increase spend to $7k–$10k daily. We would greatly appreciate a prompt review so we can continue advertising.\nThank you for your time and support.' },
+  { id: 'account-default', kind: 'account', name: 'Account bị suspend',
+    text: 'My account was suspended, and we believe this may be a mistake. The ad video is only used to demonstrate the app’s features and does not contain any prohibited content.\nThis suspension is affecting our ability to scale, as we were preparing to increase spend to $7k–$10k daily. We would greatly appreciate a prompt review so we can continue advertising.\nThank you for your time and support.' },
+];
+const STATUS_VI = { STATUS_ENABLE: 'Hoạt động', STATUS_LIMIT: 'Bị hạn chế (punish)', STATUS_DISABLE: 'Bị vô hiệu hoá', STATUS_PENDING_CONFIRM: 'Chờ duyệt', STATUS_PENDING_VERIFIED: 'Chờ xác minh', STATUS_CONFIRM_FAIL: 'Duyệt thất bại', STATUS_CONFIRM_FAIL_END: 'Duyệt thất bại' };
+
+const S = {
+  mcp: null, db: null, user: null, uid: null,
+  names: {}, live: {}, accounts: {}, creatives: {}, meta: {}, templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })),
+  tplDirty: false, tab: 'sus', sel: { sus: new Set(), act: new Set(), pick: new Set() }, expanded: new Set(),
+  job: null, connector: 'pending', profiles: {},
+};
+
+// ---------- utils ----------
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nowIso = () => new Date().toISOString();
+const fmt = (iso) => (iso ? new Date(iso).toLocaleString('vi-VN', { timeZone: TZ, day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '');
+const dayOf = (iso) => (iso ? new Date(iso).toLocaleDateString('sv-SE', { timeZone: TZ }) : '');
+const dayStr = (back) => new Date(Date.now() - back * 864e5).toLocaleDateString('sv-SE', { timeZone: TZ });
+const chunk = (a, n) => { const o = []; for (let i = 0; i < a.length; i += n) o.push(a.slice(i, i + n)); return o; };
+const uniq = (a) => [...new Set(a.filter(Boolean))];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const errMsg = (e) => (e && (e.message || e.code)) || String(e);
+async function pool(items, n, fn) {
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) { if (S.job && S.job.cancelled) return; const it = items[i++]; await fn(it); }
+  }));
+}
+function toast(msg, ms = 4500) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, ms); }
+async function copyText(text, el) {
+  try { await navigator.clipboard.writeText(text); toast('Đã copy'); }
+  catch { if (el) { el.focus(); el.select(); } toast('Không copy tự động được — nội dung đã được bôi đen, bấm Ctrl/⌘+C'); }
+}
+function render2(tpl, vars) { return String(tpl || '').replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? '')); }
+
+// Lý do suspend TikTok trả về dạng "1:text,endtime:...;2:text,endtime:..."
+function parseReason(raw) {
+  if (!raw) return { text: '', endtime: '' };
+  const parts = String(raw).split(/;(?=\s*\d+:)/).map((p) => p.replace(/^\s*\d+:/, ''));
+  let endtime = '';
+  const texts = uniq(parts.map((p) => { const m = p.match(/,?\s*endtime:\s*([\d\-: ]+)\s*$/); if (m) endtime = m[1].trim(); return p.replace(/,?\s*endtime:\s*[\d\-: ]+\s*$/, '').trim(); }));
+  return { text: texts.join(' | '), endtime };
+}
+const shortReason = (t) => { const s = String(t || ''); const m = s.match(/^(.{0,140}?[.!?])(\s|$)/); return m ? m[1] : s.slice(0, 140); };
+
+// ---------- TikTok via connector ----------
+async function tt(tool, input, { write = false } = {}) {
+  if (!S.mcp) throw { code: 'no_mcp', message: 'Chưa kết nối được TikTok' };
+  const opts = write ? { cache: false } : { cache: { staleTime: 60000 } };
+  let res;
+  try { res = await S.mcp.callTool(SERVER, tool, input, opts); }
+  catch (e) {
+    if (!write && e && e.retryable) { await sleep((e.retryAfterMs || 1200) + Math.random() * 800); res = await S.mcp.callTool(SERVER, tool, input, opts); }
+    else { connectorError(e); throw e; }
+  }
+  let p = res.payload;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch { /* keep text */ } }
+  if (!p || typeof p !== 'object') throw { code: 'bad_payload', message: 'TikTok trả về dữ liệu không đọc được' };
+  if (p.code !== undefined && p.code !== 0) throw { code: 'tiktok', message: `TikTok ${p.code}: ${p.message || ''}`.trim() };
+  setConn('ok');
+  return p.data || {};
+}
+function connectorError(e) {
+  const code = e && e.code;
+  const map = {
+    server_not_connected: `Chưa có connector "${SERVER}". Thêm nó trong claude.ai → Settings → Connectors rồi tải lại trang.`,
+    needs_reauth: `Connector "${SERVER}" cần đăng nhập lại: claude.ai → Settings → Connectors → Reconnect.`,
+    not_in_manifest: 'Bạn đã tắt quyền TikTok cho trang này. Bật lại trong phần quyền của trang để tiếp tục.',
+    selection_required: `Bạn có nhiều connector tên "${SERVER}" — hãy chọn một khi trang hỏi.`,
+    blocked_by_policy: 'Tổ chức của bạn đang chặn công cụ TikTok này.',
+    approval_required: 'Công cụ TikTok này cần duyệt từng lần — chưa hỗ trợ trong trang.',
+    consent_required: 'Bạn chưa cho phép trang dùng TikTok. Bấm lại nút để được hỏi.',
+  };
+  if (map[code]) { setConn('bad'); showBanner(map[code], true); }
+}
+function setConn(state) {
+  S.connector = state;
+  const c = $('#conn');
+  c.className = 'pill ' + (state === 'ok' ? 'ok' : state === 'bad' ? 'bad' : '');
+  c.textContent = state === 'ok' ? `TikTok đã kết nối · ${Object.keys(S.names).length} account` : state === 'bad' ? 'TikTok chưa kết nối' : state === 'none' ? 'Mở trong claude.ai để kết nối TikTok' : 'Đang kết nối TikTok…';
+}
+function showBanner(msg, bad) { const b = $('#banner'); b.textContent = msg; b.className = 'banner' + (bad ? ' bad' : ''); b.hidden = !msg; }
+
+async function loadNames(force) {
+  if (!force && Object.keys(S.names).length) return;
+  const d = await tt('auth_advertiser_get', {});
+  const m = {};
+  for (const a of d.list || []) m[String(a.advertiser_id)] = a.advertiser_name;
+  S.names = m;
+  setConn('ok');
+  renderAll();
+}
+
+// ---------- shared store ----------
+const wq = {};
+function writeDoc(path, data) {
+  if (!S.db) return Promise.resolve();
+  const p = (wq[path] || Promise.resolve()).then(() => S.db.doc(path).set(JSON.parse(JSON.stringify(data))));
+  wq[path] = p.catch(() => {});
+  return p.catch((e) => { if (e && e.code === 'quota_exceeded') toast('Bộ nhớ dữ liệu đã đầy — không lưu thêm được.'); else toast('Không lưu được: ' + errMsg(e)); });
+}
+// Đọc dữ liệu đã lưu một lần (chắc chắn đầy đủ) trước khi cho phép cập nhật, rồi mới theo dõi realtime
+async function loadSaved() {
+  const db = S.db;
+  const [acc, cr, meta, tpl] = await Promise.all([db.collection('accounts').get(), db.collection('creatives').get(), db.doc('meta/scan').get(), db.doc('config/templates').get()]);
+  acc.docs.forEach((d) => { S.accounts[d.id] = d.data(); });
+  cr.docs.forEach((d) => { S.creatives[d.id] = d.data(); });
+  S.meta = meta.exists ? meta.data() : {};
+  if (tpl.exists && Array.isArray(tpl.data().list)) S.templates = tpl.data().list;
+  renderAll();
+}
+function subscribe() {
+  const db = S.db;
+  db.collection('accounts').onSnapshot((snap) => { const m = {}; snap.docs.forEach((d) => { m[d.id] = d.data(); }); S.accounts = m; renderAll(); }, (e) => showBanner('Mất kết nối dữ liệu đã lưu: ' + errMsg(e), true));
+  db.collection('creatives').onSnapshot((snap) => { const m = {}; snap.docs.forEach((d) => { m[d.id] = d.data(); }); S.creatives = m; renderAll(); }, () => {});
+  db.doc('meta/scan').onSnapshot((d) => { S.meta = d.exists ? d.data() : {}; renderHeader(); }, () => {});
+  db.doc('config/templates').onSnapshot((d) => { if (d.exists && Array.isArray(d.data().list) && !S.tplDirty) { S.templates = d.data().list; if (S.tab === 'tpl') renderTemplates(); } }, () => {});
+}
+
+// ---------- job runner ----------
+function startJob(title, total) {
+  if (!S.booted) { toast('Đang tải dữ liệu đã lưu, thử lại sau vài giây'); return null; }
+  if (S.job && !S.job.finished) { toast('Đang chạy "' + S.job.title + '", vui lòng đợi'); return null; }
+  S.job = { title, total, done: 0, ok: 0, fail: 0, errors: [], cancelled: false, finished: false, cancellable: true };
+  renderJob(); return S.job;
+}
+function endJob(summary) { if (!S.job) return; S.job.finished = true; S.job.summary = summary; renderJob(); renderAll(); }
+function renderJob() {
+  const j = S.job, el = $('#job');
+  if (!j) { el.hidden = true; return; }
+  el.hidden = false;
+  $('#jobTitle').textContent = j.finished ? j.title + ' — xong' : j.title + '…';
+  $('#jobText').textContent = j.summary || `${j.done}/${j.total}${j.ok || j.fail ? ` · thành công ${j.ok} · lỗi ${j.fail}` : ''}`;
+  $('#jobFill').style.width = (j.total ? Math.min(100, (j.done / j.total) * 100) : 0) + '%';
+  $('#jobCancel').hidden = j.finished || !j.cancellable;
+  $('#jobClose').hidden = !j.finished;
+  $('#jobErr').textContent = j.errors.slice(0, 3).join(' · ') + (j.errors.length > 3 ? ` (+${j.errors.length - 3} lỗi khác)` : '');
+}
+$('#jobCancel').onclick = () => { if (S.job) { S.job.cancelled = true; $('#jobText').textContent = 'Đang dừng sau bước hiện tại…'; } };
+$('#jobClose').onclick = () => { S.job = null; renderJob(); };
+
+// ---------- status refresh ----------
+async function refreshStatuses(ids) {
+  const all = !ids;
+  const job = startJob(all ? 'Cập nhật trạng thái tất cả account' : `Cập nhật trạng thái ${ids.length} account`, 1);
+  if (!job) return;
+  try {
+    if (all) { await loadNames(true); ids = Object.keys(S.names); }
+    const parts = chunk(ids, 100);
+    job.total = parts.length;
+    renderJob();
+    await pool(parts, 3, async (part) => {
+      try {
+        const d = await tt('advertiser_info_get', { advertiser_ids: part, fields: ['advertiser_id', 'name', 'status', 'rejection_reason', 'owner_bc_id', 'company', 'create_time'] });
+        for (const i of d.list || []) S.live[String(i.advertiser_id)] = i;
+      } catch (e) { job.fail++; job.errors.push(errMsg(e)); }
+      job.done++; renderJob();
+    });
+    const now = nowIso();
+    const firstEver = !S.meta.first_full_at && !Object.keys(S.accounts).length;
+    let newly = 0, lifted = 0;
+    const writes = [];
+    for (const id of ids) {
+      const info = S.live[id]; if (!info) continue;
+      const doc = S.accounts[id];
+      const susp = SUSP.has(info.status);
+      const r = parseReason(info.rejection_reason);
+      const name = info.name || S.names[id] || id;
+      const base = { advertiser_id: id, name, status: info.status, reason: r.text, endtime: r.endtime, owner_bc_id: info.owner_bc_id || '', company: info.company || '', last_checked: now };
+      let next = null;
+      if (susp && (!doc || doc.latest !== 'suspended')) {
+        newly++;
+        next = { ...(doc || {}), ...base, latest: 'suspended', suspended_at: now, suspended_source: !doc && firstEver ? 'first_seen' : 'detected', lifted_at: null, account_appealed_at: null, account_appealed_by: null,
+          history: [...((doc && doc.history) || []), { status: info.status, at: now }].slice(-20) };
+      } else if (!susp && doc && doc.latest === 'suspended') {
+        lifted++;
+        next = { ...doc, ...base, latest: 'lifted', lifted_at: now, history: [...(doc.history || []), { status: info.status, at: now }].slice(-20) };
+      } else if (doc && (!all || doc.status !== info.status || doc.reason !== r.text || doc.name !== name)) {
+        next = { ...doc, ...base };
+      }
+      if (next) { S.accounts[id] = next; writes.push(['accounts/' + id, next]); }
+    }
+    await pool(writes, 4, ([p, d]) => writeDoc(p, d));
+    if (all && job.fail < parts.length) {
+      S.meta = { ...S.meta, first_full_at: S.meta.first_full_at || now, last_full_at: now, total: ids.length };
+      await writeDoc('meta/scan', S.meta);
+    }
+    endJob(`${ids.length} account · ${newly} mới bị suspend · ${lifted} được lifted${job.fail ? ` · ${job.fail} nhóm lỗi` : ''}`);
+  } catch (e) { job.errors.push(errMsg(e)); endJob('Lỗi: ' + errMsg(e)); }
+}
+
+// ---------- creative check ----------
+const REJECTED_RE = /AUDIT_DENY|REJECT|NOT_APPROVED|PARTIAL_AUDIT/;
+const clip = (s, n) => (String(s || '').length > n ? String(s).slice(0, n - 1) + '…' : String(s || ''));
+async function checkOne(id) {
+  const prev = S.creatives[id];
+  const prevAds = Object.fromEntries(((prev && prev.ads) || []).map((a) => [a.id, a]));
+  const ads = [], errors = [];
+  const isSus = isSuspended(id);
+  try {
+    const list = [];
+    for (let page = 1; page <= 20; page++) {
+      const d = await tt('smart_plus_ad_get', { advertiser_id: id, page, page_size: 100, fields: ['ad_name', 'campaign_id', 'campaign_name', 'adgroup_id', 'adgroup_name', 'operation_status', 'secondary_status', 'create_time'] });
+      list.push(...(d.list || []));
+      if (page >= ((d.page_info && d.page_info.total_page) || 1)) break;
+    }
+    const byId = Object.fromEntries(list.map((a) => [String(a.smart_plus_ad_id), a]));
+    for (const part of chunk(Object.keys(byId), 5)) {
+      const d = await tt('smart_plus_ad_review_info_get', { advertiser_id: id, smart_plus_ad_ids: part, extra_info_setting: { include_reject_info: true } });
+      const mats = {};
+      for (const m of d.material_review_infos || []) (mats[m.smart_plus_ad_id] = mats[m.smart_plus_ad_id] || []).push(m);
+      for (const r of d.smart_plus_ad_review_infos || []) {
+        const sid = String(r.smart_plus_ad_id), a = byId[sid] || {}, m = mats[sid] || [];
+        const badM = m.filter((x) => x.review_status !== 'ALL_AVAILABLE' || (x.reject_info || []).length);
+        const rej = [...(r.reject_info || []), ...badM.flatMap((x) => x.reject_info || [])];
+        if (r.review_status === 'ALL_AVAILABLE' && !badM.length && !rej.length) continue;
+        const p = prevAds[sid];
+        ads.push({
+          id: sid, kind: 'smart_plus', name: clip(a.ad_name, 120), campaign: clip(a.campaign_name, 80), adgroup: clip(a.adgroup_name, 80), adgroup_id: String(a.adgroup_id || ''),
+          review_status: r.review_status, appeal_status: r.appeal_status || '', appeal_reject: uniq((r.appeal_reject_reasons || []).map(String)).slice(0, 2).map((x) => clip(x, 200)),
+          reasons: uniq(rej.flatMap((x) => x.reasons || [])).slice(0, 3).map((x) => clip(x, 220)),
+          locations: uniq(rej.flatMap((x) => x.forbidden_locations || [])).slice(0, 40),
+          bad_materials: badM.length, total_materials: m.length,
+          videos: uniq(badM.map((x) => { const ri = (x.reject_info || [])[0]; return ri && ri.content_info && ri.content_info.video_content && ri.content_info.video_content.file_name; })).slice(0, 5).map((x) => clip(x, 60)),
+          appeals: (p && p.appeals) || [],
+        });
+      }
+    }
+  } catch (e) { errors.push('Smart+: ' + errMsg(e)); }
+  try {
+    const list = [];
+    for (let page = 1; page <= 10; page++) {
+      const d = await tt('ad_get', { advertiser_id: id, page, page_size: 1000, filtering: { campaign_automation_type: 'MANUAL' }, fields: ['ad_id', 'ad_name', 'adgroup_id', 'adgroup_name', 'campaign_name', 'secondary_status'] });
+      list.push(...(d.list || []));
+      if (page >= ((d.page_info && d.page_info.total_page) || 1)) break;
+    }
+    const cands = isSus ? list : list.filter((a) => REJECTED_RE.test(a.secondary_status || ''));
+    for (const part of chunk(cands, 100)) {
+      const d = await tt('ad_review_info_get', { advertiser_id: id, ad_ids: part.map((a) => String(a.ad_id)) });
+      const src = d.ad_review_map || d.ad_review_info || d.list || {};
+      const map = {};
+      if (Array.isArray(src)) src.forEach((r) => { map[String(r.ad_id)] = r; }); else Object.entries(src).forEach(([k, v]) => { map[String(k)] = v; });
+      for (const a of part) {
+        const aid = String(a.ad_id), r = map[aid] || {};
+        const bad = typeof r.is_approved === 'boolean' ? !r.is_approved : REJECTED_RE.test(a.secondary_status || '');
+        if (!bad) continue;
+        const ri = Array.isArray(r.reject_info) ? r.reject_info : r.reject_info ? [r.reject_info] : [];
+        const p = prevAds[aid];
+        ads.push({ id: aid, kind: 'manual', name: clip(a.ad_name, 120), campaign: clip(a.campaign_name, 80), adgroup: clip(a.adgroup_name, 80), adgroup_id: String(a.adgroup_id || ''),
+          review_status: 'UNAVAILABLE', appeal_status: r.appeal_status || '', appeal_reject: [], reasons: uniq(ri.map((x) => x.reason || x.reject_reason)).slice(0, 3).map((x) => clip(x, 220)),
+          locations: [], bad_materials: 0, total_materials: 0, videos: [], appeals: (p && p.appeals) || [] });
+      }
+    }
+  } catch (e) { if (!/does not support|Upgraded Smart/i.test(errMsg(e))) errors.push('Ad thường: ' + errMsg(e)); }
+  const doc = { advertiser_id: id, checked_at: nowIso(), ads: ads.slice(0, 120), errors: errors.slice(0, 3) };
+  S.creatives[id] = doc;
+  await writeDoc('creatives/' + id, doc);
+  return doc;
+}
+async function checkAccounts(ids, { quietEnd } = {}) {
+  const job = startJob(`Kiểm tra creative ${ids.length} account`, ids.length);
+  if (!job) return false;
+  let found = 0;
+  await pool(ids, 3, async (id) => {
+    try { const d = await checkOne(id); found += d.ads.length; if (d.errors.length) { job.fail++; job.errors.push(`${S.names[id] || id}: ${d.errors[0]}`); } else job.ok++; }
+    catch (e) { job.fail++; job.errors.push(`${S.names[id] || id}: ${errMsg(e)}`); }
+    job.done++; renderJob();
+    if (job.done % 5 === 0) renderAll();
+  });
+  endJob(`${job.done}/${ids.length} account · ${found} creative vi phạm${job.cancelled ? ' · đã dừng' : ''}`);
+  return !job.cancelled;
+}
+
+// ---------- derived ----------
+const isSuspended = (id) => { const d = S.accounts[id]; if (d) return d.latest === 'suspended'; const l = S.live[id]; return !!(l && SUSP.has(l.status)); };
+function appealState(ad) {
+  const st = ad.appeal_status || '';
+  const okApp = (ad.appeals || []).filter((a) => a.ok);
+  const last = (ad.appeals || []).at(-1);
+  if (/SUCC|PASS|APPROV/i.test(st)) return 'won';
+  if (/FAIL|REJECT/i.test(st)) return 'failed';
+  if (st && !/NOT_APPEAL/i.test(st)) return 'pending';
+  if (last && !last.ok) return 'error';
+  return okApp.length ? 'sent' : 'none';
+}
+const AP_LABEL = { none: ['Chưa appeal', 'warn'], sent: ['Đã gửi appeal', 'ok'], pending: ['Đang xét appeal', ''], won: ['Appeal thành công', 'ok'], failed: ['Appeal bị từ chối', 'bad'], error: ['Gửi lỗi', 'bad'] };
+function summary(id) {
+  const c = S.creatives[id];
+  if (!c) return null;
+  const s = { total: c.ads.length, none: 0, sent: 0, pending: 0, won: 0, failed: 0, error: 0 };
+  c.ads.forEach((a) => { s[appealState(a)]++; });
+  return s;
+}
+function range() { return { from: $('#dFrom').value, to: $('#dTo').value }; }
+function inRange(iso) { const { from, to } = range(); const d = dayOf(iso); return !!d && (!from || d >= from) && (!to || d <= to); }
+function suspendedRows(withFilters) {
+  let rows = Object.values(S.accounts).filter((a) => a.suspended_at && inRange(a.suspended_at));
+  if (!withFilters) return rows;
+  const q = $('#susQ').value.trim().toLowerCase(), latest = $('#susLatest').value, ap = $('#susAppeal').value, asc = $('#susSort').value === 'asc';
+  if (q) rows = rows.filter((a) => `${a.advertiser_id} ${a.name}`.toLowerCase().includes(q));
+  if (latest) rows = rows.filter((a) => a.latest === latest);
+  if (ap === 'done') rows = rows.filter((a) => a.account_appealed_at);
+  if (ap === 'none') rows = rows.filter((a) => !a.account_appealed_at);
+  return rows.sort((x, y) => (asc ? 1 : -1) * String(x.suspended_at).localeCompare(String(y.suspended_at)));
+}
+function activeViolRows() {
+  return Object.values(S.creatives).filter((c) => c.ads && c.ads.length && !isSuspended(c.advertiser_id))
+    .sort((a, b) => b.ads.length - a.ads.length);
+}
+
+// ---------- rendering ----------
+function renderHeader() {
+  $('#lastScan').textContent = S.meta.last_full_at ? 'Cập nhật lần cuối ' + fmt(S.meta.last_full_at) : 'Chưa cập nhật trạng thái lần nào';
+  const { from, to } = range();
+  $('#rangeLabel').textContent = !from && !to ? 'Đang xem: tất cả các ngày' : `Đang xem: ${from || '…'} → ${to || '…'}`;
+}
+function renderStats() {
+  const rows = suspendedRows(false);
+  $('#sTotal').textContent = rows.length;
+  $('#sAp').textContent = rows.filter((a) => a.account_appealed_at).length;
+  $('#sNa').textContent = rows.filter((a) => !a.account_appealed_at).length;
+  $('#sLift').textContent = rows.filter((a) => a.latest === 'lifted').length;
+  $('#sStill').textContent = rows.filter((a) => a.latest === 'suspended').length;
+  const act = activeViolRows().length;
+  $('#sAct').textContent = act; $('#tcAct').textContent = act; $('#tcSus').textContent = rows.length;
+}
+function creativeChips(id) {
+  const s = summary(id);
+  if (!s) return '<span class="sub">Chưa kiểm tra</span>';
+  const c = S.creatives[id];
+  const warn = c.errors && c.errors.length ? `<div class="sub" title="${esc(c.errors.join('\n'))}">⚠ ${esc(clip(c.errors[0], 70))}</div>` : '';
+  if (!s.total) return `<span class="chip ok">Không có creative vi phạm</span><div class="sub">Kiểm tra ${fmt(c.checked_at)}</div>${warn}`;
+  return `<div class="chips"><span class="chip">${s.total} vi phạm</span>${s.none ? `<span class="chip warn">${s.none} chưa appeal</span>` : ''}${s.sent + s.pending ? `<span class="chip">${s.sent + s.pending} đã gửi / đang xét</span>` : ''}${s.won ? `<span class="chip ok">${s.won} thành công</span>` : ''}${s.failed + s.error ? `<span class="chip bad">${s.failed + s.error} bị từ chối / lỗi</span>` : ''}</div><div class="sub">Kiểm tra ${fmt(c.checked_at)}</div>${warn}`;
+}
+function creativeTable(id) {
+  const c = S.creatives[id];
+  if (!c || !c.ads.length) return '<div class="sub">Không có creative vi phạm.</div>';
+  return `<table><thead><tr><th>Ad</th><th>Campaign / Ad group</th><th>Tình trạng duyệt</th><th>Lý do TikTok</th><th>Appeal</th></tr></thead><tbody>${c.ads.map((a) => {
+    const [l, cls] = AP_LABEL[appealState(a)];
+    const last = (a.appeals || []).at(-1);
+    return `<tr><td>${esc(a.name)}<div class="sub mono">${esc(a.id)}${a.kind === 'smart_plus' ? ' · Smart+' : ''}</div>${a.videos.length ? `<div class="sub">${a.videos.map(esc).join(', ')}</div>` : ''}</td>
+      <td>${esc(a.campaign)}<div class="sub">${esc(a.adgroup)}</div></td>
+      <td>${a.review_status === 'UNAVAILABLE' ? '<span class="chip bad">Bị từ chối</span>' : '<span class="chip warn">Duyệt một phần</span>'}${a.total_materials ? `<div class="sub">${a.bad_materials}/${a.total_materials} creative bị chặn</div>` : ''}${a.locations.length ? `<div class="sub" title="${esc(a.locations.join(', '))}">Bị chặn ở ${a.locations.length} thị trường</div>` : ''}</td>
+      <td class="reason">${a.reasons.map((r) => `<div class="clamp" title="${esc(r)}">${esc(r)}</div>`).join('') || '<span class="sub">—</span>'}</td>
+      <td><span class="chip ${cls}">${l}</span>${last ? `<div class="sub">${fmt(last.at)}</div>` : ''}${last && !last.ok ? `<div class="sub" style="color:var(--bad)">${esc(last.error)}</div>` : ''}${a.appeal_reject.length ? `<div class="sub" title="${esc(a.appeal_reject.join('\n'))}">${esc(clip(a.appeal_reject[0], 80))}</div>` : ''}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+function renderSus() {
+  const rows = suspendedRows(true);
+  const ids = new Set(rows.map((r) => r.advertiser_id));
+  [...S.sel.sus].forEach((id) => { if (!ids.has(id)) S.sel.sus.delete(id); });
+  $('#susRows').innerHTML = rows.map((a) => {
+    const id = a.advertiser_id, s = summary(id), open = S.expanded.has('sus' + id);
+    const sus = a.latest === 'suspended';
+    const appealCell = a.account_appealed_at
+      ? `<div class="tl ap"><b>ĐÃ APPEAL</b><span class="sub">${fmt(a.account_appealed_at)}${a.account_appealed_by && S.profiles[a.account_appealed_by] ? ' · ' + esc(S.profiles[a.account_appealed_by]) : ''}</span><button class="link" data-act="unmark" data-id="${esc(id)}">Bỏ đánh dấu</button></div>`
+      : `<div class="tl na"><b>CHƯA APPEAL</b><button class="link" data-act="mark" data-id="${esc(id)}">Đánh dấu đã appeal</button></div>`;
+    const nowCell = sus
+      ? `<div class="tl now sus" title="${esc(STATUS_VI[a.status] || a.status)}"><b>SUSPEND</b><span class="sub">${esc(STATUS_VI[a.status] || a.status)}</span><span class="sub">Cập nhật ${fmt(a.last_checked)}</span></div>`
+      : `<div class="tl now lifted"><b>LIFTED</b><span class="sub">Mở lại ${fmt(a.lifted_at)}</span><span class="sub">Cập nhật ${fmt(a.last_checked)}</span></div>`;
+    return `<tr>
+      <td><input type="checkbox" data-sel="sus" value="${esc(id)}" ${S.sel.sus.has(id) ? 'checked' : ''} aria-label="Chọn ${esc(a.name)}"></td>
+      <td class="acct"><b class="${sus ? 'sus' : 'lifted'}">${esc(a.name)}</b><span class="sub mono">${esc(id)}</span>${a.owner_bc_id ? `<div class="sub">BC ${esc(a.owner_bc_id)}</div>` : ''}</td>
+      <td><div class="tl s"><b>SUSPEND</b><span class="sub">${a.suspended_source === 'first_seen' ? '≈ ' : ''}${fmt(a.suspended_at)}</span>${a.reason ? `<span class="sub clamp" title="${esc(a.reason)}">${esc(shortReason(a.reason))}</span>` : ''}${a.endtime ? `<span class="sub">Khoá tới ${esc(a.endtime)}</span>` : ''}</div></td>
+      <td>${appealCell}</td>
+      <td>${nowCell}</td>
+      <td>${creativeChips(id)}</td>
+      <td><div class="acts">
+        <button class="sm" data-act="refresh" data-id="${esc(id)}">↻ Cập nhật</button>
+        <button class="sm" data-act="check" data-id="${esc(id)}">${s ? 'Kiểm tra lại' : 'Kiểm tra creative'}</button>
+        ${s && s.total ? `<button class="sm primary" data-act="appeal" data-id="${esc(id)}">Appeal creative</button>` : ''}
+        ${sus ? `<button class="sm" data-act="accappeal" data-id="${esc(id)}">Appeal account</button>` : ''}
+        ${s && s.total ? `<button class="sm" data-act="toggle" data-key="sus" data-id="${esc(id)}">${open ? '▾ Ẩn' : '▸ Xem'} creative</button>` : ''}
+      </div></td></tr>${open ? `<tr class="detail"><td colspan="7">${creativeTable(id)}</td></tr>` : ''}`;
+  }).join('') || `<tr><td colspan="7" class="empty">${Object.keys(S.accounts).length ? 'Không có account bị suspend khớp bộ lọc.' : 'Chưa có dữ liệu. Bấm “↻ Cập nhật trạng thái tất cả” để kéo trạng thái toàn bộ account từ TikTok — account bị suspend sẽ hiện ở đây.'}</td></tr>`;
+  updateBars();
+}
+function renderAct() {
+  const rows = activeViolRows();
+  const ids = new Set(rows.map((r) => r.advertiser_id));
+  [...S.sel.act].forEach((id) => { if (!ids.has(id)) S.sel.act.delete(id); });
+  $('#actRows').innerHTML = rows.map((c) => {
+    const id = c.advertiser_id, open = S.expanded.has('act' + id), l = S.live[id];
+    return `<tr>
+      <td><input type="checkbox" data-sel="act" value="${esc(id)}" ${S.sel.act.has(id) ? 'checked' : ''} aria-label="Chọn account"></td>
+      <td class="acct"><b>${esc(S.names[id] || (S.accounts[id] && S.accounts[id].name) || id)}</b><span class="sub mono">${esc(id)}</span></td>
+      <td><span class="chip ok">${esc(l ? STATUS_VI[l.status] || l.status : 'Đang chạy')}</span></td>
+      <td>${creativeChips(id)}</td>
+      <td class="sub">${fmt(c.checked_at)}</td>
+      <td><div class="acts"><button class="sm" data-act="check" data-id="${esc(id)}">Kiểm tra lại</button><button class="sm primary" data-act="appeal" data-id="${esc(id)}">Appeal creative</button><button class="sm" data-act="toggle" data-key="act" data-id="${esc(id)}">${open ? '▾ Ẩn' : '▸ Xem'} creative</button></div></td>
+    </tr>${open ? `<tr class="detail"><td colspan="6">${creativeTable(id)}</td></tr>` : ''}`;
+  }).join('') || '<tr><td colspan="6" class="empty">Chưa thấy account đang chạy nào có creative vi phạm. Dùng khung “Kiểm tra creative account đang chạy” phía trên để quét.</td></tr>';
+  renderPicker();
+  updateBars();
+}
+function pickerRows() {
+  const q = $('#pkQ').value.trim().toLowerCase(), bc = $('#pkBc').value, unchecked = $('#pkUnchecked').checked;
+  return Object.keys(S.names).filter((id) => !isSuspended(id))
+    .filter((id) => !q || `${id} ${S.names[id]}`.toLowerCase().includes(q))
+    .filter((id) => !bc || (S.live[id] && S.live[id].owner_bc_id) === bc)
+    .filter((id) => !unchecked || !S.creatives[id]);
+}
+function renderPicker() {
+  const bcs = uniq(Object.values(S.live).map((l) => l.owner_bc_id)).sort();
+  const sel = $('#pkBc'), cur = sel.value;
+  if (sel.options.length - 1 !== bcs.length) { sel.innerHTML = '<option value="">Mọi Business Center</option>' + bcs.map((b) => `<option value="${esc(b)}">BC ${esc(b)}</option>`).join(''); sel.value = cur; }
+  const rows = pickerRows();
+  $('#pkCount').textContent = Object.keys(S.names).length ? `${rows.length} account đang chạy khớp bộ lọc` : 'Đang tải danh sách account…';
+  $('#pkCheckAll').textContent = `Kiểm tra tất cả ${rows.length} account đang lọc`;
+  $('#pkCheckAll').disabled = !rows.length;
+  $('#pkList').innerHTML = rows.slice(0, 100).map((id) => `<label><input type="checkbox" data-sel="pick" value="${esc(id)}" ${S.sel.pick.has(id) ? 'checked' : ''}> <span>${esc(S.names[id])}</span> <span class="sub mono">${esc(id)}</span><span class="spacer"></span>${S.creatives[id] ? `<span class="sub">đã kiểm tra ${fmt(S.creatives[id].checked_at)}</span>` : ''}</label>`).join('')
+    + (rows.length > 100 ? `<label class="sub">… và ${rows.length - 100} account khác — gõ để lọc thêm</label>` : '');
+  $('#pkCheckSel').textContent = `Kiểm tra đã chọn (${S.sel.pick.size})`;
+  $('#pkCheckSel').disabled = !S.sel.pick.size;
+}
+function renderLog() {
+  const rows = [];
+  for (const c of Object.values(S.creatives)) for (const a of c.ads || []) for (const ap of a.appeals || []) rows.push({ at: ap.at, adv: c.advertiser_id, what: `Creative · ${a.name}`, sub: a.id, by: ap.by, ok: ap.ok, err: ap.error });
+  for (const a of Object.values(S.accounts)) if (a.account_appealed_at) rows.push({ at: a.account_appealed_at, adv: a.advertiser_id, what: 'Account (đánh dấu)', sub: '', by: a.account_appealed_by, ok: true });
+  rows.sort((x, y) => String(y.at).localeCompare(String(x.at)));
+  resolveProfiles(rows.map((r) => r.by));
+  $('#logRows').innerHTML = rows.slice(0, 500).map((r) => `<tr><td>${fmt(r.at)}</td><td>${esc(S.names[r.adv] || (S.accounts[r.adv] && S.accounts[r.adv].name) || r.adv)}<div class="sub mono">${esc(r.adv)}</div></td><td>${esc(r.what)}${r.sub ? `<div class="sub mono">${esc(r.sub)}</div>` : ''}</td><td>${esc((r.by && S.profiles[r.by]) || '')}</td><td>${r.ok ? '<span class="chip ok">Đã gửi</span>' : `<span class="chip bad">Lỗi</span> <span class="sub">${esc(r.err)}</span>`}</td></tr>`).join('')
+    || '<tr><td colspan="5" class="empty">Chưa có appeal nào.</td></tr>';
+}
+function renderTemplates() {
+  $('#tplList').innerHTML = S.templates.map((t, i) => `<div class="card">
+    <label>Tên<input data-tpl="${i}" data-f="name" value="${esc(t.name)}"></label>
+    <label>Dùng cho<select data-tpl="${i}" data-f="kind"><option value="creative" ${t.kind === 'creative' ? 'selected' : ''}>Appeal creative / campaign</option><option value="account" ${t.kind === 'account' ? 'selected' : ''}>Appeal account</option></select></label>
+    <label>Nội dung<textarea data-tpl="${i}" data-f="text" rows="8">${esc(t.text)}</textarea></label>
+    <div class="toolbar"><button class="sm" data-tplcopy="${i}">Copy</button>${S.templates.length > 1 ? `<button class="sm" data-tpldel="${i}">Xoá</button>` : ''}</div>
+  </div>`).join('');
+}
+function updateBars() {
+  const n = S.sel.sus.size;
+  const susRows = suspendedRows(true);
+  $('#susSel').textContent = `${n} account được chọn`;
+  ['#susRefresh', '#susCheck', '#susBulk', '#susAcc'].forEach((s) => { $(s).disabled = !n; });
+  $('#susAll').checked = !!n && n === susRows.length;
+  const m = S.sel.act.size;
+  $('#actSel').textContent = `${m} account được chọn`;
+  $('#actCheck').disabled = !m; $('#actBulk').disabled = !m;
+  $('#actAll').checked = !!m && m === activeViolRows().length;
+}
+function renderAll() {
+  renderHeader(); renderStats();
+  if (S.tab === 'sus') renderSus();
+  if (S.tab === 'act') renderAct();
+  if (S.tab === 'log') renderLog();
+  if (S.connector === 'ok') setConn('ok');
+}
+async function resolveProfiles(ids) {
+  if (!S.user || !S.user.profiles) return;
+  const need = uniq(ids).filter((id) => !(id in S.profiles));
+  if (!need.length) return;
+  need.forEach((id) => { S.profiles[id] = ''; });
+  try { const ps = await S.user.profiles(need); need.forEach((id) => { S.profiles[id] = (ps[id] && ps[id].name) || ''; }); renderAll(); } catch { /* names optional */ }
+}
+
+// ---------- appeal creative ----------
+let MA = null; // { ids }
+async function openAppeal(ids) {
+  const unchecked = ids.filter((id) => !S.creatives[id]);
+  if (unchecked.length) { const ok = await checkAccounts(unchecked); if (!ok) return; }
+  MA = { ids, excluded: new Set() };
+  const tpls = S.templates.filter((t) => t.kind === 'creative');
+  $('#maTpl').innerHTML = tpls.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('');
+  $('#maText').value = tpls[0] ? tpls[0].text : '';
+  $('#maTitle').textContent = ids.length > 1 ? `Bulk appeal creative · ${ids.length} account` : `Appeal creative · ${S.names[ids[0]] || (S.accounts[ids[0]] && S.accounts[ids[0]].name) || ids[0]}`;
+  $('#mAppeal').hidden = false;
+  renderAppealPreview();
+}
+function appealItems() {
+  const skip = $('#maSkip').checked, partial = $('#maPartial').checked;
+  const items = [];
+  let skipped = 0;
+  for (const id of MA.ids) for (const a of (S.creatives[id] && S.creatives[id].ads) || []) {
+    if (!partial && a.review_status !== 'UNAVAILABLE') continue;
+    const st = appealState(a);
+    if (skip && ['sent', 'pending', 'won'].includes(st)) { skipped++; continue; }
+    items.push({ adv: id, ad: a, key: id + ':' + a.id });
+  }
+  return { items, skipped };
+}
+function renderAppealPreview() {
+  const { items, skipped } = appealItems();
+  const chosen = items.filter((i) => !MA.excluded.has(i.key));
+  $('#maSum').textContent = `Sẽ gửi ${chosen.length} appeal trên ${new Set(chosen.map((i) => i.adv)).size} account${skipped ? ` · bỏ qua ${skipped} ad đã appeal / đang xét` : ''}. Không gửi lại tự động nếu lỗi.`;
+  $('#maRows').innerHTML = items.map((i) => `<tr><td><input type="checkbox" data-mak="${esc(i.key)}" ${MA.excluded.has(i.key) ? '' : 'checked'} aria-label="Chọn ad"></td><td>${esc(S.names[i.adv] || i.adv)}<div class="sub mono">${esc(i.adv)}</div></td><td>${esc(i.ad.name)}<div class="sub mono">${esc(i.ad.id)}</div></td><td>${i.ad.review_status === 'UNAVAILABLE' ? '<span class="chip bad">Bị từ chối</span>' : '<span class="chip warn">Duyệt một phần</span>'}<div class="sub">${AP_LABEL[appealState(i.ad)][0]}</div></td><td class="reason"><div class="clamp sub" title="${esc(i.ad.reasons.join('\n'))}">${esc(i.ad.reasons[0] || '')}</div></td></tr>`).join('')
+    || '<tr><td colspan="5" class="empty">Không có ad nào cần appeal.</td></tr>';
+  $('#maAll').checked = items.length > 0 && !MA.excluded.size;
+  $('#maSend').textContent = `Gửi ${chosen.length} appeal`;
+  $('#maSend').disabled = !chosen.length || !$('#maText').value.trim();
+}
+async function sendAppeals() {
+  const text = $('#maText').value.trim();
+  const items = appealItems().items.filter((i) => !MA.excluded.has(i.key));
+  $('#mAppeal').hidden = true;
+  const job = startJob(`Gửi appeal ${items.length} creative`, items.length);
+  if (!job) return;
+  const byAdv = {};
+  items.forEach((i) => { (byAdv[i.adv] = byAdv[i.adv] || []).push(i); });
+  for (const [adv, list] of Object.entries(byAdv)) {
+    if (job.cancelled) break;
+    const doc = JSON.parse(JSON.stringify(S.creatives[adv]));
+    for (const it of list) {
+      if (job.cancelled) break;
+      const ad = doc.ads.find((a) => a.id === it.ad.id);
+      const reason = render2(text, { advertiser_id: adv, advertiser_name: S.names[adv] || '', ad_name: ad.name, ad_id: ad.id, reason: ad.reasons[0] || '' }).slice(0, 1000);
+      const entry = { at: nowIso(), by: S.uid || '', ok: false };
+      try {
+        if (ad.kind === 'smart_plus') await tt('smart_plus_ad_appeal', { advertiser_id: adv, smart_plus_ad_id: ad.id, appeal_reason: reason }, { write: true });
+        else await tt('adgroup_appeal', { advertiser_id: adv, adgroup_id: ad.adgroup_id, ad_id: ad.id, appeal_reason: reason }, { write: true });
+        entry.ok = true; ad.appeal_status = 'APPEALING'; job.ok++;
+      } catch (e) { entry.error = clip(errMsg(e), 200); job.fail++; job.errors.push(`${ad.name}: ${entry.error}`); }
+      ad.appeals = [...(ad.appeals || []), entry].slice(-10);
+      job.done++; renderJob();
+      await sleep(250);
+    }
+    S.creatives[adv] = doc;
+    await writeDoc('creatives/' + adv, doc);
+    renderAll();
+  }
+  endJob(`Đã gửi ${job.ok}/${items.length} appeal${job.fail ? ` · ${job.fail} lỗi (xem Lịch sử appeal)` : ''}${job.cancelled ? ' · đã dừng' : ''}`);
+  S.sel.sus.clear(); S.sel.act.clear(); renderAll();
+}
+$('#maTpl').onchange = () => { const t = S.templates.filter((x) => x.kind === 'creative')[+$('#maTpl').value]; if (t) $('#maText').value = t.text; renderAppealPreview(); };
+$('#maText').oninput = () => { $('#maSend').disabled = !$('#maText').value.trim(); };
+$('#maSkip').onchange = renderAppealPreview; $('#maPartial').onchange = renderAppealPreview;
+$('#maAll').onchange = (e) => { const { items } = appealItems(); MA.excluded = e.target.checked ? new Set() : new Set(items.map((i) => i.key)); renderAppealPreview(); };
+$('#maRows').onchange = (e) => { const k = e.target.dataset.mak; if (!k) return; e.target.checked ? MA.excluded.delete(k) : MA.excluded.add(k); renderAppealPreview(); };
+$('#maCancel').onclick = () => { $('#mAppeal').hidden = true; };
+$('#maSend').onclick = sendAppeals;
+
+// ---------- appeal account ----------
+let MC = [];
+function openAccAppeal(ids) {
+  MC = ids;
+  const tpl = S.templates.find((t) => t.kind === 'account') || DEFAULT_TEMPLATES[1];
+  $('#mcList').innerHTML = ids.map((id) => {
+    const a = S.accounts[id] || { advertiser_id: id, name: S.names[id] || id };
+    const text = render2(tpl.text, { advertiser_id: id, advertiser_name: a.name, reason: a.reason || '' });
+    return `<div class="card"><div class="toolbar"><b>${esc(a.name)}</b><span class="sub mono">${esc(id)}</span>${a.account_appealed_at ? `<span class="chip ok">Đã appeal ${fmt(a.account_appealed_at)}</span>` : '<span class="chip warn">Chưa appeal</span>'}</div>
+      <textarea rows="5" data-acctext="${esc(id)}">${esc(text)}</textarea>
+      <div class="toolbar"><button class="sm" data-copyacc="${esc(id)}">Copy</button><a href="https://ads.tiktok.com/i18n/dashboard?aadvid=${encodeURIComponent(id)}" target="_blank" rel="noopener">Mở Ads Manager ↗</a><span class="sub mono">ID: ${esc(id)}</span></div></div>`;
+  }).join('');
+  $('#mAcc').hidden = false;
+}
+$('#mcList').onclick = (e) => { const id = e.target.dataset.copyacc; if (id) { const ta = document.querySelector(`[data-acctext="${CSS.escape(id)}"]`); copyText(ta.value, ta); } };
+$('#mcCopyAll').onclick = () => copyText($$('[data-acctext]').map((t) => `Advertiser ID: ${t.dataset.acctext}\n${t.value}`).join('\n\n'));
+$('#mcClose').onclick = () => { $('#mAcc').hidden = true; };
+$('#mcMark').onclick = async () => { await markAppealed(MC, true); $('#mAcc').hidden = true; toast(`Đã đánh dấu ${MC.length} account đã appeal`); };
+async function markAppealed(ids, value) {
+  for (const id of ids) {
+    const a = S.accounts[id]; if (!a) continue;
+    const next = { ...a, account_appealed_at: value ? nowIso() : null, account_appealed_by: value ? S.uid || '' : null };
+    S.accounts[id] = next; await writeDoc('accounts/' + id, next);
+  }
+  renderAll();
+}
+
+// ---------- templates ----------
+$('#tplList').oninput = (e) => { const i = e.target.dataset.tpl; if (i === undefined) return; S.templates[+i][e.target.dataset.f] = e.target.value; S.tplDirty = true; };
+$('#tplList').onchange = $('#tplList').oninput;
+$('#tplList').onclick = (e) => {
+  if (e.target.dataset.tpldel !== undefined) { S.templates.splice(+e.target.dataset.tpldel, 1); S.tplDirty = true; renderTemplates(); }
+  if (e.target.dataset.tplcopy !== undefined) { const ta = e.target.closest('.card').querySelector('textarea'); copyText(ta.value, ta); }
+};
+$('#tplAdd').onclick = () => { S.templates.push({ id: 'tpl-' + Date.now().toString(36), kind: 'creative', name: 'Template mới', text: '' }); S.tplDirty = true; renderTemplates(); };
+$('#tplReset').onclick = () => { S.templates = DEFAULT_TEMPLATES.map((t) => ({ ...t })); S.tplDirty = true; renderTemplates(); toast('Đã khôi phục — bấm “Lưu template” để lưu'); };
+$('#tplSave').onclick = async () => {
+  const list = S.templates.filter((t) => t.name.trim() && t.text.trim()).map((t) => ({ id: t.id, kind: t.kind, name: t.name.trim().slice(0, 80), text: t.text.trim().slice(0, 1000) }));
+  if (!list.some((t) => t.kind === 'creative') || !list.some((t) => t.kind === 'account')) { toast('Cần ít nhất 1 template creative và 1 template account'); return; }
+  S.templates = list; await writeDoc('config/templates', { list }); S.tplDirty = false; renderTemplates(); toast(S.db ? 'Đã lưu template cho cả team' : 'Đã lưu tạm (không có bộ nhớ chung)');
+};
+
+// ---------- events ----------
+$$('.tabs button').forEach((b) => { b.onclick = () => { S.tab = b.dataset.tab; $$('.tabs button').forEach((x) => x.classList.toggle('on', x === b)); $$('.panel').forEach((p) => { p.hidden = p.id !== 'p-' + S.tab; }); if (S.tab === 'tpl') renderTemplates(); renderAll(); }; });
+$('#quick').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  const r = b.dataset.r;
+  if (r === '') { $('#dFrom').value = ''; $('#dTo').value = ''; } else if (r === '1') { $('#dFrom').value = $('#dTo').value = dayStr(1); } else { $('#dFrom').value = dayStr(+r); $('#dTo').value = dayStr(0); }
+  $$('#quick button').forEach((x) => x.classList.toggle('on', x === b));
+  renderAll();
+};
+['#dFrom', '#dTo'].forEach((s) => { $(s).onchange = () => { $$('#quick button').forEach((x) => x.classList.remove('on')); renderAll(); }; });
+['#susLatest', '#susAppeal', '#susSort'].forEach((s) => { $(s).onchange = renderSus; });
+let deb; const debounce = (fn) => { clearTimeout(deb); deb = setTimeout(fn, 200); };
+$('#susQ').oninput = () => debounce(renderSus);
+$('#pkQ').oninput = () => debounce(renderPicker);
+$('#pkBc').onchange = renderPicker; $('#pkUnchecked').onchange = renderPicker;
+
+document.addEventListener('change', (e) => {
+  const t = e.target, g = t.dataset && t.dataset.sel;
+  if (g) { t.checked ? S.sel[g].add(t.value) : S.sel[g].delete(t.value); if (g === 'pick') renderPicker(); else updateBars(); }
+});
+$('#susAll').onchange = (e) => { S.sel.sus = new Set(e.target.checked ? suspendedRows(true).map((a) => a.advertiser_id) : []); renderSus(); };
+$('#actAll').onchange = (e) => { S.sel.act = new Set(e.target.checked ? activeViolRows().map((c) => c.advertiser_id) : []); renderAct(); };
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const id = b.dataset.id;
+  ({
+    refresh: () => refreshStatuses([id]),
+    check: () => checkAccounts([id]),
+    appeal: () => openAppeal([id]),
+    accappeal: () => openAccAppeal([id]),
+    mark: () => markAppealed([id], true),
+    unmark: () => markAppealed([id], false),
+    toggle: () => { const k = b.dataset.key + id; S.expanded.has(k) ? S.expanded.delete(k) : S.expanded.add(k); renderAll(); },
+  })[b.dataset.act]();
+});
+$('#btnRefreshAll').onclick = () => refreshStatuses(null);
+$('#susRefresh').onclick = () => refreshStatuses([...S.sel.sus]);
+$('#susCheck').onclick = () => checkAccounts([...S.sel.sus]);
+$('#susBulk').onclick = () => openAppeal([...S.sel.sus]);
+$('#susAcc').onclick = () => openAccAppeal([...S.sel.sus].filter((id) => isSuspended(id)));
+$('#actCheck').onclick = () => checkAccounts([...S.sel.act]);
+$('#actBulk').onclick = () => openAppeal([...S.sel.act]);
+$('#pkCheckSel').onclick = async () => { const ids = [...S.sel.pick]; S.sel.pick.clear(); await checkAccounts(ids); };
+$('#pkCheckAll').onclick = () => checkAccounts(pickerRows());
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#mAppeal').hidden = true; $('#mAcc').hidden = true; } });
+
+// ---------- boot ----------
+renderAll();
+const use = (n) => (window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
+(async () => {
+  const [mcp, db, user] = await Promise.all([use('mcp'), use('db'), use('user')]);
+  S.mcp = mcp; S.db = db; S.user = user;
+  if (user) { try { S.uid = await user.id(); } catch { S.uid = null; } }
+  if (db) {
+    try { await loadSaved(); } catch (e) { S.db = null; showBanner('Không đọc được dữ liệu đã lưu (' + errMsg(e) + ') — lần xem này sẽ không lưu lịch sử.', true); }
+    if (S.db) subscribe();
+  } else showBanner('Không mở được bộ nhớ chung — lịch sử suspend và appeal sẽ không được lưu trong lần xem này.', false);
+  S.booted = true;
+  if (!mcp) { setConn('none'); showBanner('Trang cần mở trong claude.ai (đã đăng nhập) để kết nối TikTok.', true); return; }
+  try {
+    await loadNames(false);
+    await sleep(800);
+    const last = S.meta.last_full_at ? Date.parse(S.meta.last_full_at) : 0;
+    if (Date.now() - last > 60 * 60 * 1000) refreshStatuses(null);
+  } catch (e) { if (!S.connector || S.connector !== 'bad') showBanner('Không tải được danh sách account: ' + errMsg(e), true); }
+})();
+})();
+</script>
