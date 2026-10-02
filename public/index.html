@@ -16,61 +16,88 @@
   </header>
 
   <div id="banner" class="banner hidden"></div>
+  <div id="jobBar" class="jobbar hidden">
+    <div><b id="jobTitle">Đang bulk appeal…</b> <span id="jobText" class="sub"></span></div>
+    <div class="progress"><div id="jobFill"></div></div>
+  </div>
 
   <section class="stats">
     <div class="stat"><div class="label">Tổng account</div><div class="value" id="cAccounts">–</div></div>
-    <div class="stat danger"><div class="label">Đang bị suspend</div><div class="value" id="cSuspended">–</div></div>
+    <div class="stat danger"><div class="label">Account bị suspend</div><div class="value" id="cSuspended">–</div></div>
+    <div class="stat warn"><div class="label">Account đang chạy có vi phạm</div><div class="value" id="cActiveViol">–</div></div>
     <div class="stat warn"><div class="label">Creative bị từ chối</div><div class="value" id="cRejected">–</div></div>
-    <div class="stat"><div class="label">Chờ auto appeal</div><div class="value" id="cPending">–</div></div>
   </section>
 
   <nav class="tabs">
-    <button data-tab="accounts" class="active">Account bị suspend</button>
-    <button data-tab="creatives">Creative vi phạm</button>
+    <button data-tab="suspended" class="active">① Account bị suspend</button>
+    <button data-tab="active">② Account đang chạy có vi phạm</button>
+    <button data-tab="creatives">Tất cả creative</button>
     <button data-tab="log">Lịch sử appeal</button>
+    <button data-tab="templates">Template</button>
     <button data-tab="settings">Cài đặt</button>
   </nav>
 
   <main>
-    <!-- ACCOUNTS -->
-    <section id="tab-accounts" class="tab active">
+    <!-- ① SUSPENDED FLOW -->
+    <section id="tab-suspended" class="tab active">
+      <ol class="flow">
+        <li><b>Kiểm tra creative</b><span>Tìm ad vi phạm trong account bị khoá</span></li>
+        <li><b>Appeal creative</b><span>Gửi appeal bằng template, có thể bulk nhiều account</span></li>
+        <li><b>Appeal account</b><span>Copy nội dung, dán vào Ads Manager</span></li>
+      </ol>
       <div class="toolbar">
-        <label>Từ ngày <input type="date" id="accFrom"></label>
-        <label>Đến ngày <input type="date" id="accTo"></label>
+        <label>Suspend từ <input type="date" id="susFrom"></label>
+        <label>đến <input type="date" id="susTo"></label>
         <div class="quick">
-          <button data-acc-range="0">Hôm nay</button>
-          <button data-acc-range="1">Hôm qua</button>
-          <button data-acc-range="7">7 ngày</button>
-          <button data-acc-range="30">30 ngày</button>
-          <button data-acc-range="">Tất cả</button>
+          <button data-sus-range="0">Hôm nay</button>
+          <button data-sus-range="1">Hôm qua</button>
+          <button data-sus-range="7">7 ngày</button>
+          <button data-sus-range="30">30 ngày</button>
+          <button data-sus-range="">Tất cả</button>
         </div>
-        <select id="accView">
-          <option value="suspended">Bị suspend (theo ngày)</option>
-          <option value="current">Đang bị suspend</option>
-          <option value="all">Tất cả account</option>
-        </select>
-        <input type="search" id="accQ" placeholder="Tìm ID / tên / công ty">
-        <span class="spacer"></span>
+        <input type="search" id="susQ" placeholder="Tìm ID / tên / công ty">
         <button id="btnScanAcc">Quét account</button>
         <button id="btnExportAcc">Xuất CSV</button>
       </div>
-      <p class="hint">Ngày suspend = lần quét đầu tiên phát hiện account chuyển sang trạng thái bị khoá. Dấu <b>≈</b> nghĩa là account đã bị khoá trước lần quét đầu tiên nên ngày chỉ là ước lượng. Appeal account phải làm trong TikTok Ads Manager (API không hỗ trợ).</p>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Advertiser ID</th><th>Tên / Công ty</th><th>Trạng thái</th><th>Lý do</th><th>Ngày suspend</th><th>Số dư</th><th></th></tr></thead>
-        <tbody id="accRows"></tbody>
+      <div class="toolbar actionbar">
+        <label class="check"><input type="checkbox" class="selAll" data-group="suspended"> Chọn tất cả</label>
+        <span class="sub selCount" data-group="suspended">0 account được chọn</span>
+        <span class="spacer"></span>
+        <button class="btnCheck" data-group="suspended" disabled>① Kiểm tra creative</button>
+        <button class="btnBulk primary" data-group="suspended" disabled>② Bulk appeal creative</button>
+        <button id="btnAccAppeal" disabled>③ Appeal account</button>
+      </div>
+      <div class="table-wrap"><table class="groups">
+        <thead><tr><th></th><th>Account</th><th>Suspend</th><th>Creative vi phạm</th><th>Tiến độ</th><th></th></tr></thead>
+        <tbody id="rows-suspended"></tbody>
       </table></div>
     </section>
 
-    <!-- CREATIVES -->
+    <!-- ② ACTIVE FLOW -->
+    <section id="tab-active" class="tab">
+      <p class="hint">Account vẫn hoạt động nhưng có creative bị báo vi phạm policy. Appeal sớm để tránh bị khoá account.</p>
+      <div class="toolbar">
+        <input type="search" id="actQ" placeholder="Tìm ID / tên / công ty">
+        <button class="btnCheckAll" data-group="active">Quét lại creative tất cả account</button>
+      </div>
+      <div class="toolbar actionbar">
+        <label class="check"><input type="checkbox" class="selAll" data-group="active"> Chọn tất cả</label>
+        <span class="sub selCount" data-group="active">0 account được chọn</span>
+        <span class="spacer"></span>
+        <button class="btnCheck" data-group="active" disabled>Kiểm tra lại</button>
+        <button class="btnBulk primary" data-group="active" disabled>Bulk appeal creative</button>
+      </div>
+      <div class="table-wrap"><table class="groups">
+        <thead><tr><th></th><th>Account</th><th>Trạng thái</th><th>Creative vi phạm</th><th>Tiến độ</th><th></th></tr></thead>
+        <tbody id="rows-active"></tbody>
+      </table></div>
+    </section>
+
+    <!-- ALL CREATIVES -->
     <section id="tab-creatives" class="tab">
       <div class="toolbar">
-        <label>Từ ngày <input type="date" id="crFrom"></label>
-        <label>Đến ngày <input type="date" id="crTo"></label>
-        <div class="quick">
-          <button data-cr-range="0">Hôm nay</button>
-          <button data-cr-range="7">7 ngày</button>
-          <button data-cr-range="">Tất cả</button>
-        </div>
+        <label>Phát hiện từ <input type="date" id="crFrom"></label>
+        <label>đến <input type="date" id="crTo"></label>
         <select id="crState">
           <option value="rejected">Đang bị từ chối</option>
           <option value="resolved">Đã được duyệt lại / xoá</option>
@@ -83,12 +110,8 @@
         </select>
         <input type="search" id="crQ" placeholder="Tìm ad / account / lý do">
         <span class="spacer"></span>
-        <button id="btnScanCr">Quét creative</button>
         <button id="btnExportCr">Xuất CSV</button>
-      </div>
-      <div class="toolbar appeal-bar">
-        <input type="text" id="appealReason" placeholder="Lý do appeal (để trống = dùng mẫu trong Cài đặt)">
-        <button id="btnAppeal" class="primary" disabled>Appeal đã chọn (0)</button>
+        <button id="btnAppealAds" class="primary" disabled>Appeal đã chọn (0)</button>
       </div>
       <div class="table-wrap"><table>
         <thead><tr><th><input type="checkbox" id="crAll"></th><th>Ad</th><th>Account</th><th>Campaign / Adgroup</th><th>Lý do vi phạm</th><th>Phát hiện</th><th>Appeal</th></tr></thead>
@@ -99,9 +122,17 @@
     <!-- LOG -->
     <section id="tab-log" class="tab">
       <div class="table-wrap"><table>
-        <thead><tr><th>Thời gian</th><th>Ad</th><th>Account</th><th>Loại</th><th>Kết quả</th></tr></thead>
+        <thead><tr><th>Thời gian</th><th>Ad</th><th>Account</th><th>Template</th><th>Loại</th><th>Kết quả</th></tr></thead>
         <tbody id="logRows"></tbody>
       </table></div>
+    </section>
+
+    <!-- TEMPLATES -->
+    <section id="tab-templates" class="tab">
+      <p class="hint">Biến dùng được: <code>{ad_name}</code> <code>{ad_id}</code> <code>{advertiser_id}</code> <code>{advertiser_name}</code> <code>{company}</code> <code>{reason}</code> (lý do vi phạm TikTok trả về).
+        Khi chọn “Tự chọn theo lý do”, hệ thống dùng template creative đầu tiên có <b>từ khoá</b> xuất hiện trong lý do vi phạm; không khớp thì dùng template mặc định. Nên viết bằng tiếng Anh.</p>
+      <div class="toolbar"><button id="btnNewTpl">+ Thêm template</button></div>
+      <div id="tplList" class="tpl-list"></div>
     </section>
 
     <!-- SETTINGS -->
@@ -110,10 +141,17 @@
         <label class="switch"><input type="checkbox" name="autoScan"> Tự động quét định kỳ</label>
         <label>Chu kỳ quét (phút) <input type="number" name="scanIntervalMinutes" min="5"></label>
         <label class="switch"><input type="checkbox" name="autoAppeal"> <b>Auto appeal</b> creative bị từ chối sau mỗi lần quét</label>
-        <label>Tối đa số appeal mỗi lần chạy <input type="number" name="maxAppealsPerRun" min="1"></label>
+        <label>Phạm vi auto appeal
+          <select name="autoAppealScope">
+            <option value="all">Tất cả account</option>
+            <option value="suspended">Chỉ account bị suspend</option>
+            <option value="active">Chỉ account đang chạy</option>
+          </select>
+        </label>
+        <label>Template mặc định (khi không khớp từ khoá) <select name="defaultTemplateId"></select></label>
+        <label>Tối đa số appeal mỗi lần auto chạy <input type="number" name="maxAppealsPerRun" min="1"></label>
         <label>Tối đa số lần appeal cho mỗi ad <input type="number" name="maxAppealsPerAd" min="1"></label>
-        <label>Mẫu lý do appeal <textarea name="appealReason" rows="4"></textarea></label>
-        <p class="hint">Khuyến nghị: chỉ appeal 1 lần cho mỗi ad. Appeal hàng loạt những ad thật sự vi phạm có thể khiến TikTok đánh giá account xấu hơn.</p>
+        <p class="hint">Khuyến nghị: chỉ appeal 1 lần cho mỗi ad. Appeal dồn dập những ad thật sự vi phạm có thể khiến TikTok đánh giá account xấu hơn.</p>
         <div><button class="primary" type="submit">Lưu cài đặt</button></div>
       </form>
       <h3>Lần quét gần đây</h3>
@@ -123,6 +161,41 @@
       </table></div>
     </section>
   </main>
+
+  <!-- MODAL: appeal creative -->
+  <dialog id="appealModal">
+    <form method="dialog" class="modal">
+      <h2 id="amTitle">Appeal creative</h2>
+      <label>Template
+        <select id="amTemplate"></select>
+      </label>
+      <textarea id="amText" rows="4" class="hidden" placeholder="Nội dung appeal tuỳ chỉnh (dùng được biến {ad_name}, {reason}…)"></textarea>
+      <label class="check"><input type="checkbox" id="amSkip" checked> Bỏ qua creative đã appeal / đang được xét</label>
+      <div id="amSummary" class="sub"></div>
+      <div class="table-wrap preview"><table>
+        <thead><tr><th>Ad</th><th>Account</th><th>Template</th><th>Nội dung</th></tr></thead>
+        <tbody id="amRows"></tbody>
+      </table></div>
+      <div class="modal-actions">
+        <button value="cancel">Huỷ</button>
+        <button id="amSubmit" class="primary" value="ok">Gửi appeal</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- MODAL: appeal account -->
+  <dialog id="accModal">
+    <form method="dialog" class="modal">
+      <h2>③ Appeal account bị suspend</h2>
+      <p class="hint">TikTok API không hỗ trợ appeal account. Copy nội dung dưới đây, mở Ads Manager của từng account và gửi appeal, sau đó bấm “Đánh dấu đã appeal”.</p>
+      <div id="accList" class="acc-list"></div>
+      <div class="modal-actions">
+        <button id="accCopyAll" type="button">Copy tất cả</button>
+        <button id="accMark" type="button" class="primary">Đánh dấu đã appeal</button>
+        <button value="cancel">Đóng</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast hidden"></div>
   <script src="app.js"></script>

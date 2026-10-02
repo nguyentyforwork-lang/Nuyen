@@ -9,7 +9,8 @@ loadEnv();
 const { createClient } = require('./src/tiktok');
 const { createMockClient } = require('./src/mock');
 const { createStore } = require('./src/store');
-const { createScanner, SUSPENDED } = require('./src/scanner');
+const { createScanner, SUSPENDED, appealState } = require('./src/scanner');
+const { render, accountVars, newId } = require('./src/templates');
 
 const MOCK = process.env.MOCK === '1';
 const TZ = process.env.TZ_DISPLAY || 'Asia/Ho_Chi_Minh';
@@ -64,6 +65,31 @@ function queryCreatives(q) {
   return rows.sort((a, b) => (b.detected_at || '').localeCompare(a.detected_at || ''));
 }
 
+// Gom creative vi phạm theo account cho 2 luồng: suspended | active
+function queryGroups(q) {
+  const type = q.get('type') === 'active' ? 'active' : 'suspended';
+  const from = q.get('from'), to = q.get('to');
+  const kw = (q.get('q') || '').toLowerCase();
+  const byAcc = {};
+  for (const c of Object.values(store.db.creatives)) {
+    if (c.state === 'rejected') (byAcc[c.advertiser_id] = byAcc[c.advertiser_id] || []).push(c);
+  }
+  const accountTpl = store.db.templates.find((t) => t.kind === 'account');
+  return Object.values(store.db.accounts)
+    .filter((a) => (type === 'suspended' ? a.suspended && (!(from || to) || inRange(a.suspended_at, from, to)) : !a.suspended && (byAcc[a.advertiser_id] || []).length))
+    .filter((a) => !kw || `${a.advertiser_id} ${a.name} ${a.company}`.toLowerCase().includes(kw))
+    .map((a) => {
+      const creatives = (byAcc[a.advertiser_id] || []).map((c) => ({ ...c, appeal_state: appealState(c) }));
+      const count = (st) => creatives.filter((c) => c.appeal_state === st).length;
+      return {
+        ...a, history: undefined, creatives,
+        summary: { total: creatives.length, none: count('none'), pending: count('pending'), sent: count('sent'), failed: count('failed') },
+        account_appeal_text: type === 'suspended' && accountTpl ? render(accountTpl.text, accountVars(a)) : undefined,
+      };
+    })
+    .sort((x, y) => (y.suspended_at || '').localeCompare(x.suspended_at || '') || y.summary.total - x.summary.total);
+}
+
 // ===== Lịch quét tự động =====
 let timer = null;
 let nextRunAt = null;
@@ -78,6 +104,11 @@ function schedule() {
     schedule();
   }, ms);
 }
+
+const planOpts = (b) => ({
+  advertiserIds: b.advertiser_ids, adIds: b.ad_ids, templateId: b.template_id || 'auto',
+  text: typeof b.text === 'string' && b.text.trim() ? b.text.trim() : undefined, skipAppealed: b.skip_appealed !== false,
+});
 
 // ===== HTTP =====
 function send(res, status, body, type = 'application/json; charset=utf-8', extra = {}) {
@@ -117,13 +148,16 @@ const routes = {
       accounts: Object.keys(store.db.accounts).length,
       suspended: Object.values(store.db.accounts).filter((a) => a.suspended).length,
       rejected: Object.values(store.db.creatives).filter((c) => c.state === 'rejected').length,
-      pendingAutoAppeal: scanner.autoAppealCandidates().length,
+      activeWithViolations: new Set(Object.values(store.db.creatives).filter((c) => c.state === 'rejected' && !(store.db.accounts[c.advertiser_id] || {}).suspended).map((c) => c.advertiser_id)).size,
+      pendingAutoAppeal: scanner.autoAppealPlan().length,
     },
+    job: scanner.job,
     lastScans: store.db.scans.slice(0, 10),
     suspendedStatuses: [...SUSPENDED],
   }),
   'GET /api/accounts': (req, q) => queryAccounts(q),
   'GET /api/creatives': (req, q) => queryCreatives(q),
+  'GET /api/groups': (req, q) => queryGroups(q),
   'GET /api/appeal-log': () => store.db.appealLog.slice(0, 500),
   'GET /api/settings': () => store.db.settings,
   'POST /api/settings': async (req) => {
@@ -134,7 +168,8 @@ const routes = {
     if ('scanIntervalMinutes' in body) s.scanIntervalMinutes = Math.max(5, Number(body.scanIntervalMinutes) || 60);
     if ('maxAppealsPerRun' in body) s.maxAppealsPerRun = Math.max(1, Number(body.maxAppealsPerRun) || 50);
     if ('maxAppealsPerAd' in body) s.maxAppealsPerAd = Math.max(1, Number(body.maxAppealsPerAd) || 1);
-    if (typeof body.appealReason === 'string' && body.appealReason.trim()) s.appealReason = body.appealReason.trim().slice(0, 1000);
+    if (['all', 'suspended', 'active'].includes(body.autoAppealScope)) s.autoAppealScope = body.autoAppealScope;
+    if (store.db.templates.some((t) => t.id === body.defaultTemplateId && t.kind === 'creative')) s.defaultTemplateId = body.defaultTemplateId;
     store.save();
     schedule();
     return s;
@@ -142,10 +177,38 @@ const routes = {
   'POST /api/scan/accounts': () => scanner.scanAccounts(),
   'POST /api/scan/creatives': async (req) => scanner.scanCreatives({ advertiserIds: (await readBody(req)).advertiser_ids }),
   'POST /api/scan/full': () => scanner.fullScan(),
-  'POST /api/appeal': async (req) => {
-    const body = await readBody(req);
-    if (!Array.isArray(body.ad_ids) || !body.ad_ids.length) throw Object.assign(new Error('Chưa chọn creative'), { status: 400 });
-    return scanner.appeal(body.ad_ids.map(String), { reason: body.reason });
+  // Body chung cho preview/bulk: { advertiser_ids?, ad_ids?, template_id: 'auto'|id, text?, skip_appealed }
+  'POST /api/appeal/preview': async (req) => scanner.buildAppealPlan(planOpts(await readBody(req))),
+  'POST /api/appeal/bulk': async (req) => scanner.startAppealJob(planOpts(await readBody(req))),
+  'GET /api/appeal/job': () => scanner.job,
+  // Appeal account phải làm tay trong Ads Manager — chỉ đánh dấu để theo dõi tiến độ
+  'POST /api/accounts/account-appealed': async (req) => {
+    const { advertiser_ids = [], value = true } = await readBody(req);
+    const at = value ? new Date().toISOString() : null;
+    for (const id of advertiser_ids) if (store.db.accounts[id]) store.db.accounts[id].account_appealed_at = at;
+    store.save();
+    return { ok: true, at };
+  },
+  'GET /api/templates': () => store.db.templates,
+  'POST /api/templates': async (req) => {
+    const b = await readBody(req);
+    if (!b.name || !b.text) throw Object.assign(new Error('Template cần có tên và nội dung'), { status: 400 });
+    const tpl = {
+      id: b.id || newId(), kind: b.kind === 'account' ? 'account' : 'creative', name: String(b.name).slice(0, 100),
+      keywords: (Array.isArray(b.keywords) ? b.keywords : String(b.keywords || '').split(',')).map((k) => String(k).trim()).filter(Boolean),
+      text: String(b.text).slice(0, 1000),
+    };
+    const i = store.db.templates.findIndex((t) => t.id === tpl.id);
+    if (i >= 0) store.db.templates[i] = tpl; else store.db.templates.push(tpl);
+    store.save();
+    return tpl;
+  },
+  'POST /api/templates/delete': async (req) => {
+    const { id } = await readBody(req);
+    if (id === store.db.settings.defaultTemplateId) throw Object.assign(new Error('Không xoá được template mặc định'), { status: 400 });
+    store.db.templates = store.db.templates.filter((t) => t.id !== id);
+    store.save();
+    return { ok: true };
   },
   'GET /api/export/accounts.csv': (req, q) => ({
     csv: toCsv(queryAccounts(q), [

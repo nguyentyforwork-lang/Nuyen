@@ -1,4 +1,7 @@
-// Logic quét account bị suspend, quét creative bị từ chối và gửi appeal.
+// Logic quét account bị suspend, kiểm tra creative vi phạm và gửi appeal.
+const crypto = require('crypto');
+const { render, matchTemplate, creativeVars } = require('./templates');
+
 const SUSPENDED = new Set(['STATUS_LIMIT', 'STATUS_DISABLE', 'STATUS_CONFIRM_FAIL', 'STATUS_CONFIRM_FAIL_END']);
 const REJECTED_RE = /AUDIT_DENY|REJECT|NOT_APPROVED|PARTIAL_AUDIT/;
 const APPEAL_PENDING_RE = /APPEALING|IN_REVIEW|PROCESSING|PENDING/i;
@@ -14,13 +17,29 @@ function rejectReasons(review) {
   }));
 }
 
-function createScanner({ client, store, env = process.env, log = console }) {
+const okAppeals = (c) => (c.appeals || []).filter((a) => a.ok);
+const isAppealPending = (c) => APPEAL_PENDING_RE.test(c.appeal_status || '');
+
+// Trạng thái appeal gộp của 1 creative: none | pending | failed | sent
+function appealState(c) {
+  if (isAppealPending(c)) return 'pending';
+  const last = (c.appeals || []).at(-1);
+  if (last && !last.ok) return 'failed';
+  if (/FAIL|REJECT/i.test(c.appeal_status || '')) return 'failed';
+  return okAppeals(c).length ? 'sent' : 'none';
+}
+
+function createScanner({ client, store, env = process.env, log = console, appealDelayMs = 300 }) {
   const lookbackDays = Number(env.CREATIVE_LOOKBACK_DAYS || 90);
   let running = null;
+  let job = null;
 
-  const exclusive = (name, fn) => async (...args) => {
+  const lock = (name) => {
     if (running) throw Object.assign(new Error(`Đang chạy "${running}", vui lòng đợi`), { status: 409 });
     running = name;
+  };
+  const exclusive = (name, fn) => async (...args) => {
+    lock(name);
     try { return await fn(...args); } finally { running = null; }
   };
 
@@ -69,6 +88,7 @@ function createScanner({ client, store, env = process.env, log = console }) {
         // Lần đầu thấy account đã bị suspend sẵn => không biết chính xác ngày, đánh dấu ước lượng
         acc.suspended_at_estimated = !prev;
         acc.reactivated_at = null;
+        acc.account_appealed_at = null;
         newlySuspended++;
       } else if (!suspended && prev && prev.suspended) {
         acc.suspended = false;
@@ -89,7 +109,7 @@ function createScanner({ client, store, env = process.env, log = console }) {
     const now = new Date().toISOString();
     const db = store.db;
     if (!Object.keys(db.accounts).length) await scanAccountsImpl();
-    const ids = advertiserIds && advertiserIds.length ? advertiserIds : Object.keys(db.accounts);
+    const ids = advertiserIds && advertiserIds.length ? advertiserIds.map(String) : Object.keys(db.accounts);
     const creationStart = lookbackDays > 0
       ? new Date(Date.now() - lookbackDays * 86400000).toISOString().replace('T', ' ').slice(0, 19)
       : undefined;
@@ -97,19 +117,24 @@ function createScanner({ client, store, env = process.env, log = console }) {
     let found = 0, newRejected = 0;
 
     for (const advId of ids) {
+      const account = db.accounts[advId];
       try {
         const ads = await client.getAds(advId, { creationStart });
-        const rejected = ads.filter((ad) => REJECTED_RE.test(ad.secondary_status || ''));
+        // Account bị suspend: secondary_status của ad bị che (ADVERTISER_ACCOUNT_PUNISH),
+        // nên phải hỏi review_info cho TẤT CẢ ad để biết ad nào thực sự vi phạm.
+        const deep = !!(account && account.suspended);
+        const candidates = deep ? ads : ads.filter((ad) => REJECTED_RE.test(ad.secondary_status || ''));
         let reviews = {};
-        if (rejected.length) {
-          try { reviews = await client.getAdReviewInfo(advId, rejected.map((a) => String(a.ad_id))); }
+        if (candidates.length) {
+          try { reviews = await client.getAdReviewInfo(advId, candidates.map((a) => String(a.ad_id))); }
           catch (err) { errors.push({ advertiser_id: advId, step: 'review_info', error: err.message }); }
         }
         const stillRejected = new Set();
-        for (const ad of rejected) {
+        for (const ad of candidates) {
           const adId = String(ad.ad_id);
           const review = reviews[adId] || {};
-          if (review.is_approved === true) continue;
+          const rejected = typeof review.is_approved === 'boolean' ? !review.is_approved : REJECTED_RE.test(ad.secondary_status || '');
+          if (!rejected) continue;
           stillRejected.add(adId);
           const prev = db.creatives[adId];
           if (!prev || prev.state !== 'rejected') newRejected++;
@@ -118,7 +143,7 @@ function createScanner({ client, store, env = process.env, log = console }) {
             ...(prev || {}),
             ad_id: adId,
             advertiser_id: advId,
-            advertiser_name: db.accounts[advId] ? db.accounts[advId].name : advId,
+            advertiser_name: account ? account.name : advId,
             ad_name: ad.ad_name,
             adgroup_id: String(ad.adgroup_id),
             adgroup_name: ad.adgroup_name,
@@ -132,8 +157,8 @@ function createScanner({ client, store, env = process.env, log = console }) {
             create_time: ad.create_time,
             modify_time: ad.modify_time,
             review_status: review.review_status,
-            appeal_status: review.appeal_status,
-            reject_reasons: rejectReasons(review),
+            appeal_status: review.appeal_status || (prev && prev.appeal_status),
+            reject_reasons: rejectReasons(review).length ? rejectReasons(review) : (prev && prev.reject_reasons) || [],
             state: 'rejected',
             detected_at: prev && prev.state === 'rejected' ? prev.detected_at : now,
             resolved_at: null,
@@ -148,6 +173,7 @@ function createScanner({ client, store, env = process.env, log = console }) {
             c.resolved_at = now;
           }
         }
+        if (account) account.creatives_checked_at = now;
       } catch (err) {
         errors.push({ advertiser_id: advId, step: 'ad_get', error: err.message });
       }
@@ -159,16 +185,41 @@ function createScanner({ client, store, env = process.env, log = console }) {
     return result;
   }
 
-  async function appealImpl(adIds, { reason, auto = false } = {}) {
+  // ===== Appeal =====
+
+  // Dựng danh sách appeal: mỗi creative 1 dòng với nội dung đã render từ template
+  function buildAppealPlan({ advertiserIds, adIds, templateId = 'auto', text, skipAppealed = true } = {}) {
     const db = store.db;
-    const appealReason = (reason || db.settings.appealReason || '').trim();
+    const { templates, settings } = db;
+    const advSet = advertiserIds && advertiserIds.length ? new Set(advertiserIds.map(String)) : null;
+    const adSet = adIds && adIds.length ? new Set(adIds.map(String)) : null;
+    if (!advSet && !adSet) throw Object.assign(new Error('Chưa chọn account hoặc creative'), { status: 400 });
+    const fixed = templateId !== 'auto' && !text ? templates.find((t) => t.id === templateId) : null;
+    if (templateId !== 'auto' && !text && !fixed) throw Object.assign(new Error('Không tìm thấy template'), { status: 400 });
+
+    const items = [], skipped = [];
+    for (const c of Object.values(db.creatives)) {
+      if (c.state !== 'rejected') continue;
+      if (adSet ? !adSet.has(c.ad_id) : !advSet.has(c.advertiser_id)) continue;
+      const st = appealState(c);
+      if (skipAppealed && (st === 'pending' || st === 'sent')) { skipped.push({ ad_id: c.ad_id, ad_name: c.ad_name, advertiser_id: c.advertiser_id, why: st === 'pending' ? 'Đang được xét appeal' : 'Đã appeal' }); continue; }
+      const tpl = text ? { id: 'custom', name: 'Tuỳ chỉnh', text } : fixed || matchTemplate(templates, (c.reject_reasons || []).map((r) => r.reason), settings.defaultTemplateId);
+      items.push({
+        ad_id: c.ad_id, ad_name: c.ad_name, advertiser_id: c.advertiser_id, advertiser_name: c.advertiser_name, adgroup_id: c.adgroup_id,
+        template_id: tpl.id, template_name: tpl.name, reason: render(tpl.text, creativeVars(c, db.accounts[c.advertiser_id])).slice(0, 1000),
+      });
+    }
+    return { items, skipped, accounts: new Set(items.map((i) => i.advertiser_id)).size };
+  }
+
+  async function runAppeals(items, { auto = false, onProgress = () => {} } = {}) {
+    const db = store.db;
     const results = [];
-    for (const adId of adIds) {
-      const c = db.creatives[adId];
-      if (!c) { results.push({ ad_id: adId, ok: false, error: 'Không tìm thấy creative' }); continue; }
-      const entry = { at: new Date().toISOString(), auto, reason: appealReason };
+    for (const it of items) {
+      const c = db.creatives[it.ad_id];
+      const entry = { at: new Date().toISOString(), auto, reason: it.reason, template_id: it.template_id };
       try {
-        await client.appealAdgroup({ advertiser_id: c.advertiser_id, adgroup_id: c.adgroup_id, ad_id: c.ad_id, appeal_reason: appealReason });
+        await client.appealAdgroup({ advertiser_id: c.advertiser_id, adgroup_id: c.adgroup_id, ad_id: c.ad_id, appeal_reason: it.reason });
         entry.ok = true;
         c.appeal_status = 'APPEALING';
       } catch (err) {
@@ -176,23 +227,47 @@ function createScanner({ client, store, env = process.env, log = console }) {
         entry.error = err.message;
       }
       c.appeals = [...(c.appeals || []), entry];
-      db.appealLog = [{ ad_id: adId, advertiser_id: c.advertiser_id, ad_name: c.ad_name, ...entry }, ...db.appealLog].slice(0, 2000);
-      results.push({ ad_id: adId, ...entry });
+      db.appealLog = [{ ad_id: c.ad_id, advertiser_id: c.advertiser_id, advertiser_name: c.advertiser_name, ad_name: c.ad_name, template_name: it.template_name, ...entry }, ...db.appealLog].slice(0, 5000);
+      results.push({ ad_id: c.ad_id, advertiser_id: c.advertiser_id, ok: entry.ok, error: entry.error });
       store.save();
-      await sleep(300);
+      onProgress(entry);
+      if (appealDelayMs) await sleep(appealDelayMs);
     }
     return { total: results.length, ok: results.filter((r) => r.ok).length, results };
   }
 
-  function autoAppealCandidates() {
-    const { settings, creatives } = store.db;
-    return Object.values(creatives)
-      .filter((c) => c.state === 'rejected')
-      .filter((c) => !APPEAL_PENDING_RE.test(c.appeal_status || ''))
-      .filter((c) => (c.appeals || []).filter((a) => a.ok).length < settings.maxAppealsPerAd)
+  // Bulk appeal chạy nền, trả về job để UI theo dõi tiến độ
+  function startAppealJob(planOpts) {
+    const plan = buildAppealPlan(planOpts);
+    if (!plan.items.length) throw Object.assign(new Error('Không có creative nào cần appeal'), { status: 400 });
+    lock('bulk appeal');
+    job = {
+      id: crypto.randomBytes(6).toString('hex'), status: 'running', startedAt: new Date().toISOString(),
+      total: plan.items.length, accounts: plan.accounts, skipped: plan.skipped.length, done: 0, ok: 0, failed: 0, errors: [],
+    };
+    const current = job;
+    runAppeals(plan.items, {
+      onProgress: (e) => { current.done++; e.ok ? current.ok++ : (current.failed++, current.errors.push(e.error)); },
+    })
+      .catch((err) => { current.errors.push(err.message); })
+      .finally(() => { current.status = 'done'; current.finishedAt = new Date().toISOString(); current.errors = current.errors.slice(0, 50); running = null; });
+    return current;
+  }
+
+  function autoAppealPlan() {
+    const { settings, creatives, accounts } = store.db;
+    const scope = settings.autoAppealScope || 'all';
+    const ids = Object.values(creatives)
+      .filter((c) => c.state === 'rejected' && !isAppealPending(c))
+      .filter((c) => okAppeals(c).length < settings.maxAppealsPerAd)
+      .filter((c) => {
+        const susp = !!(accounts[c.advertiser_id] && accounts[c.advertiser_id].suspended);
+        return scope === 'all' || (scope === 'suspended' ? susp : !susp);
+      })
       .sort((a, b) => a.detected_at.localeCompare(b.detected_at))
       .slice(0, settings.maxAppealsPerRun)
       .map((c) => c.ad_id);
+    return ids.length ? buildAppealPlan({ adIds: ids, templateId: 'auto', skipAppealed: false }).items : [];
   }
 
   async function fullScanImpl() {
@@ -200,8 +275,8 @@ function createScanner({ client, store, env = process.env, log = console }) {
     const creatives = await scanCreativesImpl();
     let appeals = null;
     if (store.db.settings.autoAppeal) {
-      const ids = autoAppealCandidates();
-      if (ids.length) appeals = await appealImpl(ids, { auto: true });
+      const items = autoAppealPlan();
+      if (items.length) appeals = await runAppeals(items, { auto: true });
     }
     log.info(`[scan] accounts=${accounts.total} suspended=${accounts.suspended} rejected=${creatives.rejected} appealed=${appeals ? appeals.ok : 0}`);
     return { accounts, creatives, appeals };
@@ -209,12 +284,14 @@ function createScanner({ client, store, env = process.env, log = console }) {
 
   return {
     scanAccounts: exclusive('quét account', scanAccountsImpl),
-    scanCreatives: exclusive('quét creative', scanCreativesImpl),
-    appeal: exclusive('appeal', appealImpl),
+    scanCreatives: exclusive('kiểm tra creative', scanCreativesImpl),
     fullScan: exclusive('quét toàn bộ', fullScanImpl),
-    autoAppealCandidates,
+    buildAppealPlan,
+    startAppealJob,
+    autoAppealPlan,
+    get job() { return job; },
     get running() { return running; },
   };
 }
 
-module.exports = { createScanner, SUSPENDED, REJECTED_RE };
+module.exports = { createScanner, SUSPENDED, REJECTED_RE, appealState };

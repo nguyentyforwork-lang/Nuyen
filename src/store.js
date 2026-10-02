@@ -1,21 +1,25 @@
 // Lưu trữ dạng file JSON (data/db.json). Đủ dùng cho vài nghìn account/creative.
 const fs = require('fs');
 const path = require('path');
+const { DEFAULT_TEMPLATES } = require('./templates');
 
 const DEFAULT_SETTINGS = {
   autoScan: true,
   scanIntervalMinutes: 60,
   autoAppeal: false,
-  appealReason: 'We have reviewed our ad and believe it complies with TikTok Advertising Policies. Please kindly re-review this ad. Thank you.',
+  autoAppealScope: 'all', // all | suspended | active
+  defaultTemplateId: 'creative-default',
   maxAppealsPerRun: 50,
   maxAppealsPerAd: 1,
 };
 
 function createStore(file = path.join(__dirname, '..', 'data', 'db.json')) {
-  let db = { accounts: {}, creatives: {}, appealLog: [], scans: [], settings: { ...DEFAULT_SETTINGS } };
+  let db = { accounts: {}, creatives: {}, appealLog: [], scans: [], settings: { ...DEFAULT_SETTINGS }, templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })) };
   if (fs.existsSync(file)) {
     const loaded = JSON.parse(fs.readFileSync(file, 'utf8'));
     db = { ...db, ...loaded, settings: { ...DEFAULT_SETTINGS, ...(loaded.settings || {}) } };
+    delete db.settings.appealReason;
+    if (!Array.isArray(db.templates) || !db.templates.length) db.templates = DEFAULT_TEMPLATES.map((t) => ({ ...t }));
   }
 
   function save() {
