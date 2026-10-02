@@ -238,14 +238,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       <summary class="sub">Điều kiện booster của quý đang chọn (sửa được)</summary>
       <div class="tw"><table id="bRules"></table></div>
       <div class="controls" style="margin-top:10px">
-        <label class="field" id="bT3wrap"><span>Công thức Tier 3</span>
-          <select id="bT3">
-            <option value="growth">2% × quý này + 1% × (quý này − quý trước)</option>
-            <option value="rate">2% × quý này + 1% × (R − 100%) × quý này</option>
-            <option value="spend">2% × quý này + 1% × (quý này − 2 × quý trước)</option>
-          </select>
-        </label>
-        <div class="field"><span>&nbsp;</span><button id="bResetRules" type="button">Khôi phục điều kiện gốc</button></div>
+        <button id="bResetRules" type="button">Khôi phục điều kiện gốc</button>
       </div>
     </details>
     <div class="tw"><table id="boosterTable"></table></div>
@@ -763,7 +756,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
   });
 
   // ---------- Booster ----------
-  // Rules per quarter. strict: R must be > r (else >=). bonus: extra % per 100% of growth above r (Tier 3 of Q2).
+  // Rules per quarter. strict: R must be > r (else >=). bonus: extra % on the spend increase over last quarter (Tier 3 of Q2).
   const BOOSTER_SETS = {
     q2: {
       label: 'Quý 2',
@@ -777,7 +770,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     },
   };
   const BKEY = 'cashback-booster-v3';
-  let booster = { level: 'customer', quarter: 'q3', t3mode: 'growth', excluded: null, sets: clone(BOOSTER_SETS), inputs: {} };
+  let booster = { level: 'customer', quarter: 'q3', excluded: null, sets: clone(BOOSTER_SETS), inputs: {} };
   try {
     const s = localStorage.getItem(BKEY) || localStorage.getItem('cashback-booster-v2') || localStorage.getItem('cashback-booster-v1');
     if (s) { const o = JSON.parse(s); delete o.rules; delete o.t3mode; booster = Object.assign(booster, o); }
@@ -819,10 +812,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
       if (hit) {
         amount = u.spend * hit.rate / 100;
         if (hit.bonus) {
-          const gap = R - hit.r / 100;   // growth above the Tier 3 threshold, as a fraction
-          amount += booster.t3mode === 'spend' ? hit.bonus / 100 * (u.spend - prev * (1 + hit.r / 100))
-            : booster.t3mode === 'rate' ? u.spend * hit.bonus / 100 * gap
-            : hit.bonus / 100 * (u.spend - prev);   // default: 2% × this quarter + 1% × (this quarter − last quarter)
+          amount += hit.bonus / 100 * (u.spend - prev);   // Q2 Tier 3: 2% × this quarter + 1% × (this quarter − last quarter)
         }
         rate = u.spend ? amount / u.spend * 100 : hit.rate;
       } else {
@@ -836,13 +826,11 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
 
   function renderBoosterRules() {
     $('bQuarter').value = booster.quarter;
-    $('bT3').value = booster.t3mode;
-    $('bT3wrap').hidden = !['game', 'app'].some(t => curSet()[t].some(r => r.bonus));
     const set = curSet();
     const inp = (type, i, f, v) => `<input type="number" step="any" id="br-${type}-${i}-${f}" data-bt="${type}" data-bi="${i}" data-bf="${f}" value="${v ?? 0}"><span class="pct">%</span>`;
     const row = (type, i, t) => `<tr><td>${type === 'game' ? 'Gaming' : 'Apps'}</td><td>${t.tier}</td>` +
       `<td>${t.strict ? '&gt;' : '≥'} ${inp(type, i, 'r', t.r)}</td><td>≥ ${inp(type, i, 'p', t.p)}</td><td>${inp(type, i, 'rate', t.rate)}</td>` +
-      `<td>${t.bonus != null ? '+ ' + inp(type, i, 'bonus', t.bonus) + ' <span class="sub">× (R − ' + t.r + '%)</span>' : '<span class="sub">–</span>'}</td></tr>`;
+      `<td>${t.bonus != null ? '+ ' + inp(type, i, 'bonus', t.bonus) + ' <span class="sub">× (quý này − quý trước)</span>' : '<span class="sub">–</span>'}</td></tr>`;
     $('bRules').innerHTML = `<thead><tr><th>Loại</th><th>Tier</th><th>QoQ Growth R</th><th>Smart+ P</th><th>Rebate</th><th>Bonus Tier 3</th></tr></thead><tbody>` +
       ['game', 'app'].map(type => set[type].map((t, i) => row(type, i, t)).join('')).join('') + '</tbody>';
   }
@@ -851,7 +839,6 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     curSet()[d.bt][+d.bi][d.bf] = parseFloat(e.target.value) || 0; saveBooster(); refreshBooster();
   });
   $('bQuarter').addEventListener('change', e => { booster.quarter = e.target.value; saveBooster(); renderBoosterRules(); refreshBooster(); });
-  $('bT3').addEventListener('change', e => { booster.t3mode = e.target.value; saveBooster(); refreshBooster(); });
   $('bResetRules').addEventListener('click', () => { booster.sets[booster.quarter] = clone(BOOSTER_SETS[booster.quarter]); saveBooster(); renderBoosterRules(); refreshBooster(); toast('Đã khôi phục điều kiện ' + curSet().label); });
 
   function renderBooster() {
