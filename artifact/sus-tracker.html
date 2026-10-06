@@ -94,9 +94,6 @@
   td.tot { font-weight: 600; }
   .spend-ids { display: grid; gap: 4px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
   #spendWrap { max-height: 70vh; overflow: auto; }
-  #spendWrap th.grp, #spendWrap td.grp { border-left: 1px solid var(--line); }
-  #spendWrap td.off { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
-  #spendWrap thead tr:nth-child(2) th { top: 33px; }
   #spendWrap th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
   @media (max-width: 760px) {
     .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -171,7 +168,7 @@
     <div class="spend-head">
       <div>
         <h2>Spend theo tháng</h2>
-        <p>Mỗi tháng có 3 cột: spend theo Ecomdy Data Center, cash spend theo TikTok (không tính ad credit) và ad credit theo TikTok. Cột Lệch = Spend DC − (cash + ad credit TikTok), tô vàng khi khác 0. Tính theo múi giờ và tiền tệ của từng ad account.</p>
+        <p>Spend không tính ad credit (cash spend = spend − voucher). Lấy từ Ecomdy Data Center; account không có ở đó thì lấy từ TikTok. Tính theo múi giờ và tiền tệ của từng ad account, kèm cột quy USD.</p>
       </div>
       <div class="spend-ctrl">
         <label>Từ tháng<input type="month" id="mFrom"></label>
@@ -187,7 +184,7 @@
     <div class="status" id="spendStatus">Dán ad account ID vào ô trên, hoặc bấm "Check trạng thái" để kéo các account đang sus trong file.</div>
     <div class="tablewrap" id="spendWrap" hidden>
       <table>
-        <thead><tr id="spendHead"></tr><tr id="spendHead2"></tr></thead>
+        <thead><tr id="spendHead"></tr></thead>
         <tbody id="spendBody"></tbody>
       </table>
     </div>
@@ -236,8 +233,8 @@ function syncSpendBtn(fromInput) {
   $('spendBtn').disabled = !mcp || !n || spendBusy;
   if (spendBusy || (spendData && fromInput !== true)) return;
   if (custom) setSpendStatus(`${custom.toLocaleString()} ad account ID đã nhập. Chọn khoảng tháng rồi bấm "Kéo spend".`);
-  else if (checked && !spendData) setSpendStatus(n ? `${n.toLocaleString()} account đang sus trong file. Chọn khoảng tháng rồi bấm "Kéo spend", hoặc dán ID vào ô trên để kéo account khác.` : 'Không có account đang sus nào trong file. Dán ad account ID vào ô trên để kéo.');
-  else if (!checked && !spendData) setSpendStatus('Dán ad account ID vào ô trên, hoặc bấm "Check trạng thái" để kéo các account đang sus trong file.');
+  else if (checked) setSpendStatus(n ? `${n.toLocaleString()} account đang sus trong file. Chọn khoảng tháng rồi bấm "Kéo spend", hoặc dán ID vào ô trên để kéo account khác.` : 'Không có account đang sus nào trong file. Dán ad account ID vào ô trên để kéo.');
+  else setSpendStatus('Dán ad account ID vào ô trên, hoặc bấm "Check trạng thái" để kéo các account đang sus trong file.');
 }
 function syncExportBtn() { $('exportBtn').disabled = isExample || !downloads; $('spendExportBtn').disabled = !downloads || !spendData; }
 
@@ -677,28 +674,37 @@ async function spendGroup(ids, month, store) {
 }
 function setSpendStatus(t, err) { $('spendStatus').textContent = t; $('spendStatus').className = 'status' + (err ? ' err' : ''); }
 
-// Every account is pulled from BOTH sources so the numbers can be compared side by side.
 // Data Center: one call per account covers the whole range (≤366 daily rows, so one page).
 const DC_SPEND_FIELDS = ['advertiser_id', 'stat_date', 'currency', 'spend', 'cash_spend', 'voucher_spend', 'spendUSD', 'cash_spendUSD', 'voucher_spendUSD'];
-const blank = () => ({ months: {}, currency: '', error: '', notes: [] });
-async function dcSpend(id, months, e) {
+async function dcSpend(id, months, store) {
   const start = months[0] + '-01', end = monthRange(months[months.length - 1])[1];
+  const e = (store[id] ||= { months: {}, notes: [] });
+  e.src = 'Data Center';
   const res = await dcList('/advertiser-daily-report', { advertiser_id: id, stat_date__gte: start, stat_date__lte: end }, DC_SPEND_FIELDS);
   const total = res.pagination?.total ?? res.data.length;
-  if (total > res.data.length) e.notes.push(`Data Center có ${total} dòng ngày nhưng chỉ trả ${res.data.length}, số Data Center có thể thiếu.`);
-  if (!res.data.length) e.notes.push('Data Center không có dòng spend nào trong kỳ (không chạy, chưa đồng bộ hoặc ngoài phạm vi quyền của bạn).');
+  if (total > res.data.length) e.notes.push(`Data Center có ${total} dòng ngày nhưng chỉ trả ${res.data.length}; số có thể thiếu.`);
+  if (!res.data.length) e.notes.push('Data Center không có dòng spend nào trong kỳ (không chạy hoặc chưa đồng bộ).');
+  let last = '';
   for (const d of res.data) {
-    const m = dDate(d.stat_date).slice(0, 7);
+    const day = dDate(d.stat_date), m = day.slice(0, 7);
     if (!months.includes(m)) continue;
-    const spendUSD = d.spendUSD != null ? num(d.spendUSD) : null;
-    const b = (e.months[m] ||= { spend: 0, spendUSD: 0, usdKnown: true });
-    b.spend += num(d.spend);
-    if (spendUSD == null) b.usdKnown = false; else b.spendUSD += spendUSD;
+    if (day > last) last = day;
+    const voucher = num(d.voucher_spend), spend = num(d.spend);
+    const cash = d.cash_spend != null ? num(d.cash_spend) : spend - voucher;
+    // USD of the cash part only: Data Center's own figure, else the account's spend→USD rate applied to cash.
+    const cashUSD = d.cash_spendUSD != null ? num(d.cash_spendUSD)
+      : d.currency === 'USD' ? cash
+      : (d.spendUSD != null && spend ? num(d.spendUSD) * cash / spend : (cash ? null : 0));
+    const b = (e.months[m] ||= { cash: 0, voucher: 0, spend: 0, cashUSD: 0, usdKnown: true });
+    b.cash += cash; b.voucher += voucher; b.spend += spend;
+    if (cashUSD == null) b.usdKnown = false; else b.cashUSD += cashUSD;
     e.currency ||= d.currency || '';
   }
+  e.lastDay = last;
+  return res.data.length;
 }
 
-// TikTok: up to 5 advertisers per report call, one call per month; a failed group is retried one id at a time.
+// TikTok fallback: up to 5 advertisers per report call, one call per month.
 async function spendCall(ids, start, end) {
   const env = await call('report_integrated_get', {
     report_type: 'BASIC', data_level: 'AUCTION_ADVERTISER', dimensions: ['advertiser_id'],
@@ -712,13 +718,13 @@ async function ttSpend(ids, month, store) {
   const [start, end] = monthRange(month);
   const res = await spendCall(ids, start, end);
   if (res.error && ids.length > 1) { for (const id of ids) await ttSpend([id], month, store); return; }
-  if (res.error) { const e = store[ids[0]].tt; if (!e.error) e.error = res.error; return; }
-  for (const id of ids) store[id].tt.ok = true;
+  if (res.error) { const e = (store[ids[0]] ||= { months: {}, notes: [] }); e.error = `TikTok tháng ${month}: ${res.error}`; return; }
   for (const it of res.list) {
     const m = it.metrics || {}, id = String(it.dimensions?.advertiser_id || m.advertiser_id);
-    const e = store[id]?.tt; if (!e) continue;
-    e.currency = m.currency || e.currency;
-    e.months[month] = { cash: num(m.cash_spend), voucher: num(m.voucher_spend) };
+    const e = (store[id] ||= { months: {}, notes: [] });
+    e.currency = m.currency || e.currency || '';
+    const cash = num(m.cash_spend);
+    e.months[month] = { cash, voucher: num(m.voucher_spend), spend: num(m.spend), cashUSD: e.currency === 'USD' ? cash : 0, usdKnown: e.currency === 'USD' };
   }
 }
 
@@ -728,42 +734,56 @@ $('spendBtn').addEventListener('click', async () => {
   if (!from || !to || from > to) return setSpendStatus('"Từ tháng" phải trước hoặc bằng "Đến tháng".', true);
   const months = monthList(from, to), ids = spendTargets(), store = {};
   if (!ids.length) return setSpendStatus('Chưa có ad account ID nào để kéo.', true);
-  const tasks = [];
-  for (const id of ids) { store[id] = { dc: blank(), tt: blank() }; tasks.push({ kind: 'dc', id }); }
-  for (let i = 0; i < ids.length; i += 5) for (const m of months) tasks.push({ kind: 'tt', ids: ids.slice(i, i + 5), m });
-  const total = tasks.length;
-  let done = 0, dcDown = '', ttDown = '';
+  const tasks = [], ttQueue = [];
+  for (const id of ids) {
+    store[id] = { months: {}, notes: [] };
+    if (dcAll?.[id]) tasks.push({ kind: 'dc', id });
+    else if (!dcAll) tasks.push({ kind: 'dc', id, probe: true }); // not checked yet: try Data Center first
+    else ttQueue.push(id);
+  }
+  const queueTikTok = (list, why) => {
+    for (const id of list) { store[id].src = 'TikTok'; if (why) store[id].notes.push(why); }
+    for (let i = 0; i < list.length; i += 5) for (const m of months) tasks.push({ kind: 'tt', ids: list.slice(i, i + 5), m });
+  };
+  queueTikTok(ttQueue, dcAll ? 'Không có trong Ecomdy Data Center, lấy spend từ TikTok.' : 'Không kết nối được Ecomdy Data Center, lấy spend từ TikTok.');
+  let done = 0, ttDown = '';
   spendBusy = true; syncSpendBtn(); $('spendBar').hidden = false;
   try {
     const worker = async () => {
       while (tasks.length) {
         const t = tasks.shift();
-        if (t.kind === 'dc' && !dcDown) {
-          try { await dcSpend(t.id, months, store[t.id].dc); }
-          catch (e) {
-            if (e.dc) store[t.id].dc.error = `Data Center lỗi: ${e.message}`;
-            else dcDown = mcpMessage(e, DC);
+        if (t.kind === 'dc') {
+          try {
+            const n = await dcSpend(t.id, months, store);
+            if (t.probe && !n) {
+              store[t.id] = { months: {}, notes: [] };
+              queueTikTok([t.id], 'Data Center không có dữ liệu spend cho account này (có thể ngoài phạm vi quyền của bạn), lấy từ TikTok.');
+            }
           }
-        } else if (t.kind === 'tt' && !ttDown) {
+          catch (e) {
+            store[t.id] = { months: {}, notes: [`Data Center lỗi khi kéo spend: ${e.dc ? e.message : mcpMessage(e, DC)}. Đã thử lấy từ TikTok.`] };
+            queueTikTok([t.id]);
+          }
+        } else if (!ttDown) {
           try { await ttSpend(t.ids, t.m, store); }
           catch (e) { ttDown = mcpMessage(e, SERVER); }
         }
         done++;
+        const total = done + tasks.length;
         $('spendBar').firstElementChild.style.width = `${Math.round((done / total) * 100)}%`;
-        setSpendStatus(`Đang kéo spend ${done.toLocaleString()} / ${total.toLocaleString()} lượt cho ${ids.length.toLocaleString()} account (Data Center + TikTok)…`);
+        setSpendStatus(`Đang kéo spend ${done.toLocaleString()} / ${total.toLocaleString()} lượt cho ${ids.length.toLocaleString()} account đang sus…`);
       }
     };
     await Promise.all([worker(), worker(), worker()]);
     for (const id of ids) {
-      if (dcDown) store[id].dc.error = dcDown;
-      if (ttDown) store[id].tt.error = ttDown;
+      const e = store[id];
+      if (e.src === 'TikTok' && ttDown) e.error = e.error || `Không kéo được từ TikTok: ${ttDown}`;
     }
     spendData = { months, ids, store };
-    const list = spendRows();
-    const diff = list.filter((r) => r.diff != null && Math.abs(r.diff) >= 0.01).length;
-    setSpendStatus(`Xong ${months[0]} → ${months[months.length - 1]} cho ${ids.length.toLocaleString()} account.`
-      + (diff ? ` ${diff} account có spend Data Center khác cash + ad credit TikTok (tô vàng).` : ' Spend Data Center khớp cash + ad credit TikTok ở các account có cả hai nguồn.')
-      + (dcDown ? ` ${dcDown}` : '') + (ttDown ? ` ${ttDown}` : '') + ' Xem cột Ghi chú để biết lỗi từng account.');
+    const errs = ids.filter((id) => store[id].error).length;
+    const dcN = ids.filter((id) => store[id].src === 'Data Center').length;
+    setSpendStatus(`Xong ${months[0]} → ${months[months.length - 1]} cho ${ids.length.toLocaleString()} account: ${dcN.toLocaleString()} lấy từ Ecomdy Data Center, ${(ids.length - dcN).toLocaleString()} từ TikTok.`
+      + (errs ? ` ${errs} account không kéo được (xem cột Ghi chú).` : '') + (ttDown ? ` ${ttDown}` : ''), errs === ids.length);
     renderSpend();
   } catch (e) {
     setSpendStatus(e?.code ? mcpMessage(e) : `Không kéo được spend: ${e?.message || e}`, true);
@@ -773,66 +793,43 @@ $('spendBtn').addEventListener('click', async () => {
 });
 
 const fmt = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const sumM = (e, months, k) => months.reduce((a, m) => a + (e.months[m]?.[k] || 0), 0);
 function spendRows() {
   const byId = Object.fromEntries(rows.map((r) => [r.advertiser_id, r]));
-  const { months } = spendData;
   return spendData.ids.map((id) => {
-    const { dc, tt } = spendData.store[id], d = dcAll?.[id];
+    const e = spendData.store[id] || { months: {}, notes: [] }, d = dcAll?.[id];
     const r = byId[id] || { name: d?.report?.advertiser_name || '', bc: d?.bcName || '', bc_id: d?.bc_id || '' };
-    const dcHas = !dc.error && Object.keys(dc.months).length > 0, ttHas = !tt.error && tt.ok;
-    // Data Center = total spend; TikTok = cash spend and ad credit (voucher) separately.
-    const per = months.map((m) => ({
-      dc: dc.error ? null : (dc.months[m]?.spend ?? 0),
-      tt: ttHas ? (tt.months[m]?.cash ?? 0) : null,
-      credit: ttHas ? (tt.months[m]?.voucher ?? 0) : null,
-    }));
-    const dcTotal = dc.error ? null : sumM(dc, months, 'spend');
-    const ttTotal = ttHas ? sumM(tt, months, 'cash') : null;
-    const credit = ttHas ? sumM(tt, months, 'voucher') : null;
-    const usdKnown = !dc.error && months.every((m) => !dc.months[m] || dc.months[m].usdKnown);
-    const notes = [...dc.notes];
-    if (dc.error) notes.push(dc.error);
-    if (tt.error) notes.push(`TikTok: ${tt.error}`);
-    if (!ttHas && !tt.error) notes.push('TikTok không trả số.');
-    const diff = dcTotal != null && ttTotal != null ? dcTotal - (ttTotal + credit) : null;
-    if (diff != null && Math.abs(diff) >= 0.01) notes.push(`Spend Data Center lệch ${fmt(diff)} so với cash + ad credit của TikTok.`);
-    if (dc.currency && tt.currency && dc.currency !== tt.currency) notes.push(`Tiền tệ khác nhau: Data Center ${dc.currency}, TikTok ${tt.currency}.`);
+    const per = spendData.months.map((m) => e.months[m]?.cash || 0);
+    const usdKnown = spendData.months.every((m) => !e.months[m] || e.months[m].usdKnown);
+    const notes = [...(e.notes || [])];
     if (!byId[id] && !isExample) notes.push('ID không có trong file.');
-    return { id, name: r.name || '', bc: r.bc || r.bc_id || '', sus_date: r.sus_date || '', currency: tt.currency || dc.currency || '', per,
-      dcTotal, ttTotal, credit, diff, totalUSD: usdKnown ? sumM(dc, months, 'spendUSD') : null, note: notes.join(' ') };
-  }).sort((a, b) => Math.max(b.dcTotal || 0, b.ttTotal || 0) - Math.max(a.dcTotal || 0, a.ttTotal || 0));
+    if (e.error) notes.push(e.error);
+    return { id, name: r.name || '', bc: r.bc || r.bc_id || '', sus_date: r.sus_date || '', currency: e.currency || '', per,
+      total: per.reduce((a, b) => a + b, 0),
+      totalUSD: usdKnown ? spendData.months.reduce((a, m) => a + (e.months[m]?.cashUSD || 0), 0) : null,
+      voucher: spendData.months.reduce((a, m) => a + (e.months[m]?.voucher || 0), 0),
+      src: e.src || '', note: notes.join(' '), error: e.error, lastDay: e.lastDay || '' };
+  }).sort((a, b) => (b.totalUSD ?? b.total) - (a.totalUSD ?? a.total));
 }
 function renderSpend() {
   const list = spendRows(), months = spendData.months;
-  const dash = '<span class="muted">—</span>';
-  const cell = (v, cls = '') => `<td class="num${cls}${v ? '' : ' zero'}">${v == null ? dash : (v ? fmt(v) : '0')}</td>`;
-  $('spendHead').innerHTML = '<th rowspan="2">Advertiser ID</th><th rowspan="2">Tên ad account</th><th rowspan="2">BC</th><th rowspan="2">Ngày sus</th><th rowspan="2">Tiền tệ</th>'
-    + months.map((m) => `<th colspan="3" class="num grp">${m}</th>`).join('')
-    + '<th colspan="4" class="num grp">Tổng kỳ</th><th rowspan="2" class="num">Spend USD (DC)</th><th rowspan="2">Ghi chú</th>';
-  $('spendHead2').innerHTML = months.map(() => '<th class="num grp">Spend DC</th><th class="num">Cash TikTok</th><th class="num">Ad credit TikTok</th>').join('')
-    + '<th class="num grp">Spend DC</th><th class="num">Cash TikTok</th><th class="num">Ad credit TikTok</th><th class="num">Lệch DC − (cash + credit)</th>';
+  $('spendHead').innerHTML = '<th>Advertiser ID</th><th>Tên ad account</th><th>BC</th><th>Ngày sus</th><th>Tiền tệ</th>'
+    + months.map((m) => `<th class="num">${m}</th>`).join('') + '<th class="num">Tổng</th><th class="num">Tổng USD</th><th>Nguồn</th><th>Ghi chú</th>';
   const totals = {};
   let usdAll = 0;
   for (const r of list) {
     if (r.totalUSD) usdAll += r.totalUSD;
-    const t = (totals[r.currency || '—'] ||= { n: 0, per: months.map(() => ({ dc: 0, tt: 0, credit: 0 })), dc: 0, tt: 0, credit: 0 });
-    t.n++;
-    r.per.forEach((p, i) => { t.per[i].dc += p.dc || 0; t.per[i].tt += p.tt || 0; t.per[i].credit += p.credit || 0; });
-    t.dc += r.dcTotal || 0; t.tt += r.ttTotal || 0; t.credit += r.credit || 0;
+    if (!r.total) continue;
+    const t = (totals[r.currency] ||= { n: 0, per: months.map(() => 0), total: 0 });
+    t.n++; r.per.forEach((v, i) => { t.per[i] += v; }); t.total += r.total;
   }
-  const totalRows = Object.entries(totals).map(([cur, t]) => `<tr class="total"><td colspan="4">Tổng · ${t.n} account</td><td>${esc(cur)}</td>`
-    + t.per.map((p) => `<td class="num grp">${fmt(p.dc)}</td><td class="num">${fmt(p.tt)}</td><td class="num">${fmt(p.credit)}</td>`).join('')
-    + `<td class="num grp">${fmt(t.dc)}</td><td class="num">${fmt(t.tt)}</td><td class="num">${fmt(t.credit)}</td><td class="num">${fmt(t.dc - t.tt - t.credit)}</td><td></td><td></td></tr>`).join('');
-  $('spendBody').innerHTML = totalRows
-    + `<tr class="total"><td colspan="${5 + months.length * 3 + 4}">Tổng spend quy USD theo Data Center</td><td class="num">${fmt(usdAll)}</td><td></td></tr>`
-    + list.map((r) => {
-      const off = r.diff != null && Math.abs(r.diff) >= 0.01;
-      return `<tr><td class="id">${esc(r.id)}</td><td class="name">${esc(r.name) || dash}</td><td>${esc(r.bc) || dash}</td><td class="date">${esc(r.sus_date) || dash}</td><td>${esc(r.currency) || dash}</td>`
-        + r.per.map((p) => cell(p.dc, ' grp') + cell(p.tt) + cell(p.credit)).join('')
-        + cell(r.dcTotal, ' grp tot') + cell(r.ttTotal, ' tot') + cell(r.credit) + `<td class="num${off ? ' off' : ''}">${r.diff == null ? dash : fmt(r.diff)}</td>`
-        + `<td class="num">${r.totalUSD == null ? dash : fmt(r.totalUSD)}</td><td class="note">${esc(r.note)}</td></tr>`;
-    }).join('');
+  const dash = '<span class="muted">—</span>';
+  $('spendBody').innerHTML = Object.entries(totals).map(([cur, t]) => `<tr class="total"><td colspan="4">Tổng · ${t.n} account có spend</td><td>${esc(cur) || dash}</td>`
+      + t.per.map((v) => `<td class="num">${fmt(v)}</td>`).join('') + `<td class="num">${fmt(t.total)}</td><td class="num">${cur === 'USD' ? fmt(t.total) : ''}</td><td></td><td></td></tr>`).join('')
+    + `<tr class="total"><td colspan="${5 + months.length + 1}">Tổng quy USD (các account có số USD)</td><td class="num">${fmt(usdAll)}</td><td></td><td></td></tr>`
+    + list.map((r) => `<tr><td class="id">${esc(r.id)}</td><td class="name">${esc(r.name) || dash}</td><td>${esc(r.bc) || dash}</td><td class="date">${esc(r.sus_date)}</td><td>${esc(r.currency) || dash}</td>`
+      + r.per.map((v) => `<td class="num${v ? '' : ' zero'}">${v ? fmt(v) : '0'}</td>`).join('')
+      + `<td class="num tot">${r.error && !r.total ? '<span class="pill p-na">Lỗi</span>' : fmt(r.total)}</td>`
+      + `<td class="num">${r.totalUSD == null ? dash : fmt(r.totalUSD)}</td><td>${esc(r.src) || dash}</td><td class="note">${esc(r.note)}</td></tr>`).join('');
   $('spendWrap').hidden = false;
 }
 
@@ -840,12 +837,11 @@ $('spendExportBtn').onclick = async () => {
   if (!spendData) return;
   const data = spendRows().map((r) => {
     const o = { 'Advertiser ID': r.id, 'Tên ad account': r.name, 'BC': r.bc, 'Ngày sus': r.sus_date, 'Tiền tệ': r.currency };
-    const v = (x) => (x == null ? '' : +x.toFixed(2));
-    spendData.months.forEach((m, i) => {
-      o[`${m} Spend Data Center`] = v(r.per[i].dc); o[`${m} Cash TikTok`] = v(r.per[i].tt); o[`${m} Ad credit TikTok`] = v(r.per[i].credit);
-    });
-    o['Tổng spend Data Center'] = v(r.dcTotal); o['Tổng cash TikTok'] = v(r.ttTotal); o['Tổng ad credit TikTok'] = v(r.credit);
-    o['Lệch DC − (cash + credit)'] = v(r.diff); o['Tổng USD (Data Center)'] = v(r.totalUSD); o['Ghi chú'] = r.note;
+    spendData.months.forEach((m, i) => { o[`${m} (không tính ad credit)`] = +r.per[i].toFixed(2); });
+    o['Tổng (không tính ad credit)'] = +r.total.toFixed(2);
+    o['Tổng USD'] = r.totalUSD == null ? '' : +r.totalUSD.toFixed(2);
+    o['Ad credit đã dùng (tham khảo)'] = +r.voucher.toFixed(2);
+    o['Nguồn'] = r.src; o['Ghi chú'] = r.note;
     return o;
   });
   await saveSheet(XLSX.utils.json_to_sheet(data), 'sus_spend', setSpendStatus);
