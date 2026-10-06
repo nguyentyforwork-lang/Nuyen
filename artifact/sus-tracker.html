@@ -80,6 +80,18 @@
   .foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--muted); }
   .pager { display: flex; gap: 6px; align-items: center; }
   .note { font-size: 12.5px; color: var(--muted); max-width: 90ch; }
+  .spend-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; justify-content: space-between; margin-bottom: 12px; }
+  .spend-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .spend-head p { margin: 2px 0 0; font-size: 13px; color: var(--muted); max-width: 70ch; }
+  .spend-ctrl { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  .spend-ctrl label { display: grid; gap: 4px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  input[type=month] { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.zero { color: var(--muted); }
+  tr.total td { font-weight: 700; border-bottom: 2px solid var(--line); }
+  td.tot { font-weight: 600; }
+  #spendWrap { max-height: 70vh; overflow: auto; }
+  #spendWrap th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
   @media (max-width: 760px) {
     .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tile:first-child { grid-column: span 2; }
@@ -148,6 +160,29 @@
     </div>
   </section>
 
+  <section class="panel" id="spendPanel">
+    <div class="spend-head">
+      <div>
+        <h2>Spend theo tháng · account đang sus</h2>
+        <p>Spend không tính ad credit (cash spend của TikTok = spend − voucher). Tính theo múi giờ và tiền tệ của từng ad account.</p>
+      </div>
+      <div class="spend-ctrl">
+        <label>Từ tháng<input type="month" id="mFrom"></label>
+        <label>Đến tháng<input type="month" id="mTo"></label>
+        <button class="primary" id="spendBtn" disabled>Kéo spend</button>
+        <button id="spendExportBtn" disabled>Tải Excel spend</button>
+      </div>
+    </div>
+    <div class="bar" id="spendBar" hidden><i></i></div>
+    <div class="status" id="spendStatus">Bấm "Check trạng thái" trước để biết account nào đang sus.</div>
+    <div class="tablewrap" id="spendWrap" hidden>
+      <table>
+        <thead><tr id="spendHead"></tr></thead>
+        <tbody id="spendBody"></tbody>
+      </table>
+    </div>
+  </section>
+
   <p class="note">Trạng thái lấy từ TikTok: <b>STATUS_LIMIT</b> = đang sus, <b>STATUS_ENABLE</b> = đã gỡ. TikTok không trả về ngày gỡ sus, nên "Ngày gỡ" là ngày trang này lần đầu thấy account hết sus (lưu chung cho mọi người dùng trang). Check thường xuyên để ngày này sát thực tế. Nếu file có sẵn cột ngày gỡ thì dùng cột đó. Account đã gỡ rồi bị sus lại vẫn tính là <b>đang sus</b>, gắn nhãn "sus lại" và giữ ngày gỡ lần trước.</p>
 </div>
 
@@ -175,6 +210,7 @@ const EXAMPLE = [
 let rows = EXAMPLE, isExample = true, view = [];
 let page = 0, sortKey = 'sus_date', sortDir = -1, tileFilter = '';
 let mcp = null, db = null, downloads = null;
+let checked = false, spendBusy = false, spendData = null;
 
 // ---------- capabilities (page works without them; features light up) ----------
 const use = (n) => (window.claude?.use ? window.claude.use(n) : Promise.resolve(null)).catch(() => null);
@@ -182,8 +218,13 @@ use('mcp').then((m) => { mcp = m; syncCheckBtn(); });
 use('db').then((d) => { db = d; });
 use('downloads').then((d) => { downloads = d; syncExportBtn(); });
 
-function syncCheckBtn() { $('checkBtn').disabled = isExample || !rows.length; }
-function syncExportBtn() { $('exportBtn').disabled = isExample || !downloads; }
+function syncCheckBtn() { $('checkBtn').disabled = isExample || !rows.length; syncSpendBtn(); }
+function syncSpendBtn() {
+  const n = isExample || !checked ? 0 : susIds().length;
+  $('spendBtn').disabled = !mcp || !n || spendBusy;
+  if (checked && !spendBusy && !spendData) setSpendStatus(n ? `${n.toLocaleString()} account đang sus. Chọn khoảng tháng rồi bấm "Kéo spend".` : 'Không có account đang sus nào để kéo spend.');
+}
+function syncExportBtn() { $('exportBtn').disabled = isExample || !downloads; $('spendExportBtn').disabled = !downloads || !spendData; }
 
 // ---------- helpers ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -238,7 +279,9 @@ async function loadFile(f) {
       name: '', bc: '', bc_id: '', status: '', statusLabel: 'Chưa check', unsus_date: '', unsus_seen: false,
     })).filter((r) => /^\d+$/.test(r.advertiser_id));
     rows.forEach((r) => { r.unsus_date = r.unsus_file; });
-    isExample = false;
+    isExample = false; checked = false; spendData = null; $('spendWrap').hidden = true;
+    setSpendStatus('Bấm "Check trạng thái" trước để biết account nào đang sus.');
+    setDefaultMonths();
     $('fileName').textContent = f.name;
     fillSelect('fAgency', rows.map((r) => r.agency));
     fillSelect('fBc', []);
@@ -393,7 +436,8 @@ $('checkBtn').addEventListener('click', async () => {
   } catch (e) {
     setStatus(mcpMessage(e), true);
   } finally {
-    setProgress(null); syncCheckBtn(); page = 0; render();
+    checked = true; spendData = null; $('spendWrap').hidden = true;
+    setProgress(null); syncCheckBtn(); syncExportBtn(); page = 0; render();
   }
 });
 
@@ -459,17 +503,135 @@ $('exportBtn').onclick = async () => {
     'Ngày sus': r.sus_date, 'Ngày gỡ': r.unsus_date, 'Ngày gỡ là ngày ghi nhận': r.unsus_seen ? 'x' : '', 'Sus lại': r.resus ? 'x' : '',
     'Trạng thái': r.statusLabel, 'Status (TikTok)': r.status,
   }));
-  const ws = XLSX.utils.json_to_sheet(data);
+  await saveSheet(XLSX.utils.json_to_sheet(data), 'sus_check', setStatus);
+};
+
+async function saveSheet(ws, base, onErr) {
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Result');
   const stamp = today();
   try {
-    await downloads.save({ filename: `sus_check_${stamp}.xlsx`, data: XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) });
+    await downloads.save({ filename: `${base}_${stamp}.xlsx`, data: XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) });
   } catch (e) {
     if (e?.code === 'rejected_extension' || e?.code === 'extension_not_enabled') {
-      try { await downloads.save({ filename: `sus_check_${stamp}.csv`, data: '﻿' + XLSX.utils.sheet_to_csv(ws) }); }
-      catch (e2) { if (e2?.code !== 'declined') setStatus('Không tải được file: ' + (e2?.message || e2), true); }
-    } else if (e?.code !== 'declined') setStatus('Không tải được file: ' + (e?.message || e), true);
+      try { await downloads.save({ filename: `${base}_${stamp}.csv`, data: '﻿' + XLSX.utils.sheet_to_csv(ws) }); }
+      catch (e2) { if (e2?.code !== 'declined') onErr('Không tải được file: ' + (e2?.message || e2), true); }
+    } else if (e?.code !== 'declined') onErr('Không tải được file: ' + (e?.message || e), true);
   }
+}
+
+// ---------- monthly spend for accounts that are suspended now ----------
+function susIds() { return [...new Set(rows.filter((r) => bucket(r) === 'sus').map((r) => r.advertiser_id))]; }
+const ym = (d) => d.slice(0, 7);
+function addMonths(m, n) { const [y, mo] = m.split('-').map(Number); return new Date(Date.UTC(y, mo - 1 + n, 1)).toISOString().slice(0, 7); }
+function setDefaultMonths() {
+  const dates = rows.map((r) => r.sus_date).filter((d) => /^\d{4}-\d{2}/.test(d)).sort();
+  const now = ym(today());
+  let from = dates.length ? addMonths(ym(dates[0]), -3) : addMonths(now, -5);
+  if (from < addMonths(now, -11)) from = addMonths(now, -11);
+  $('mFrom').value = from; $('mTo').value = now;
+}
+function monthList(from, to) { const out = []; for (let m = from; m <= to && out.length < 12; m = addMonths(m, 1)) out.push(m); return out; }
+function monthRange(m) {
+  const end = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).toISOString().slice(0, 10);
+  const t = today();
+  return [m + '-01', end < t ? end : t];
+}
+const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+
+// Up to 5 advertisers per report call; a failed group is retried one id at a time.
+async function spendCall(ids, start, end) {
+  const env = await call('report_integrated_get', {
+    report_type: 'BASIC', data_level: 'AUCTION_ADVERTISER', dimensions: ['advertiser_id'],
+    advertiser_ids: ids, metrics: ['spend', 'cash_spend', 'voucher_spend'],
+    start_date: start, end_date: end, page_size: 100,
+  });
+  if (env?.code !== 0) return { error: env?.message || `Lỗi ${env?.code}` };
+  return { list: env.data?.list || [] };
+}
+async function spendGroup(ids, month, store) {
+  const [start, end] = monthRange(month);
+  const res = await spendCall(ids, start, end);
+  if (res.error && ids.length > 1) { for (const id of ids) await spendGroup([id], month, store); return; }
+  if (res.error) { (store[ids[0]] ||= { months: {} }).error = res.error; return; }
+  for (const it of res.list) {
+    const m = it.metrics || {}, id = String(it.dimensions?.advertiser_id || m.advertiser_id);
+    const e = (store[id] ||= { months: {} });
+    e.currency = m.currency || e.currency || '';
+    e.months[month] = { cash: num(m.cash_spend), voucher: num(m.voucher_spend), spend: num(m.spend) };
+  }
+}
+function setSpendStatus(t, err) { $('spendStatus').textContent = t; $('spendStatus').className = 'status' + (err ? ' err' : ''); }
+
+$('spendBtn').addEventListener('click', async () => {
+  const from = $('mFrom').value, to = $('mTo').value;
+  if (!from || !to || from > to) return setSpendStatus('"Từ tháng" phải trước hoặc bằng "Đến tháng".', true);
+  const months = monthList(from, to), ids = susIds(), groups = [];
+  for (let i = 0; i < ids.length; i += 5) for (const m of months) groups.push([ids.slice(i, i + 5), m]);
+  const total = groups.length, store = {};
+  let done = 0;
+  spendBusy = true; syncSpendBtn(); $('spendBar').hidden = false;
+  try {
+    const worker = async () => {
+      while (groups.length) {
+        const [g, m] = groups.shift();
+        await spendGroup(g, m, store);
+        done++;
+        $('spendBar').firstElementChild.style.width = `${Math.round((done / total) * 100)}%`;
+        setSpendStatus(`Đang kéo spend ${done.toLocaleString()} / ${total.toLocaleString()} lượt (${ids.length} account × ${months.length} tháng)…`);
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    spendData = { months, ids, store };
+    const errs = ids.filter((id) => store[id]?.error).length;
+    setSpendStatus(`Xong ${months[0]} → ${months[months.length - 1]} cho ${ids.length.toLocaleString()} account đang sus.` + (errs ? ` ${errs} account báo lỗi (xem cột Tổng).` : ''));
+    renderSpend();
+  } catch (e) {
+    setSpendStatus(mcpMessage(e), true);
+  } finally {
+    spendBusy = false; $('spendBar').hidden = true; syncSpendBtn(); syncExportBtn();
+  }
+});
+
+const fmt = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function spendRows() {
+  const byId = Object.fromEntries(rows.map((r) => [r.advertiser_id, r]));
+  return spendData.ids.map((id) => {
+    const e = spendData.store[id] || { months: {} }, r = byId[id] || {};
+    const per = spendData.months.map((m) => e.months[m]?.cash || 0);
+    return { id, name: r.name || '', bc: r.bc || r.bc_id || '', sus_date: r.sus_date || '', currency: e.currency || '', per,
+      total: per.reduce((a, b) => a + b, 0), voucher: spendData.months.reduce((a, m) => a + (e.months[m]?.voucher || 0), 0), error: e.error };
+  }).sort((a, b) => b.total - a.total);
+}
+function renderSpend() {
+  const list = spendRows(), months = spendData.months;
+  $('spendHead').innerHTML = '<th>Advertiser ID</th><th>Tên ad account</th><th>BC</th><th>Ngày sus</th><th>Tiền tệ</th>'
+    + months.map((m) => `<th class="num">${m}</th>`).join('') + '<th class="num">Tổng</th>';
+  const totals = {};
+  for (const r of list) {
+    if (!r.total) continue;
+    const t = (totals[r.currency] ||= { n: 0, per: months.map(() => 0), total: 0 });
+    t.n++; r.per.forEach((v, i) => { t.per[i] += v; }); t.total += r.total;
+  }
+  const dash = '<span class="muted">—</span>';
+  $('spendBody').innerHTML = Object.entries(totals).map(([cur, t]) => `<tr class="total"><td colspan="4">Tổng · ${t.n} account có spend</td><td>${esc(cur)}</td>`
+      + t.per.map((v) => `<td class="num">${fmt(v)}</td>`).join('') + `<td class="num">${fmt(t.total)}</td></tr>`).join('')
+    + list.map((r) => `<tr><td class="id">${esc(r.id)}</td><td class="name">${esc(r.name) || dash}</td><td>${esc(r.bc) || dash}</td><td class="date">${esc(r.sus_date)}</td><td>${esc(r.currency) || dash}</td>`
+      + r.per.map((v) => `<td class="num${v ? '' : ' zero'}">${v ? fmt(v) : '0'}</td>`).join('')
+      + `<td class="num tot">${r.error ? `<span class="pill p-na" title="${esc(r.error)}">Lỗi</span>` : fmt(r.total)}</td></tr>`).join('');
+  $('spendWrap').hidden = false;
+}
+
+$('spendExportBtn').onclick = async () => {
+  if (!spendData) return;
+  const data = spendRows().map((r) => {
+    const o = { 'Advertiser ID': r.id, 'Tên ad account': r.name, 'BC': r.bc, 'Ngày sus': r.sus_date, 'Tiền tệ': r.currency };
+    spendData.months.forEach((m, i) => { o[`${m} (không tính ad credit)`] = +r.per[i].toFixed(2); });
+    o['Tổng (không tính ad credit)'] = +r.total.toFixed(2);
+    o['Ad credit đã dùng (tham khảo)'] = +r.voucher.toFixed(2);
+    if (r.error) o['Lỗi'] = r.error;
+    return o;
+  });
+  await saveSheet(XLSX.utils.json_to_sheet(data), 'sus_spend', setSpendStatus);
 };
 
 render();
