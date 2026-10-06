@@ -148,7 +148,7 @@
     </div>
   </section>
 
-  <p class="note">Trạng thái lấy từ TikTok: <b>STATUS_LIMIT</b> = đang sus, <b>STATUS_ENABLE</b> = đã gỡ. TikTok không trả về ngày gỡ sus, nên "Ngày gỡ" là ngày trang này lần đầu thấy account hết sus (lưu chung cho mọi người dùng trang). Check thường xuyên để ngày này sát thực tế. Nếu file có sẵn cột ngày gỡ thì dùng cột đó.</p>
+  <p class="note">Trạng thái lấy từ TikTok: <b>STATUS_LIMIT</b> = đang sus, <b>STATUS_ENABLE</b> = đã gỡ. TikTok không trả về ngày gỡ sus, nên "Ngày gỡ" là ngày trang này lần đầu thấy account hết sus (lưu chung cho mọi người dùng trang). Check thường xuyên để ngày này sát thực tế. Nếu file có sẵn cột ngày gỡ thì dùng cột đó. Account đã gỡ rồi bị sus lại vẫn tính là <b>đang sus</b>, gắn nhãn "sus lại" và giữ ngày gỡ lần trước.</p>
 </div>
 
 <script>
@@ -361,9 +361,11 @@ $('checkBtn').addEventListener('click', async () => {
     for (const [id, x] of Object.entries(out)) {
       if (!x.status) continue;
       const k = shardOf(id), s = (shards[k] ||= {}), h = s[id];
-      if (x.status === 'STATUS_LIMIT') { if (h) { delete s[id]; dirty.add(k); } }
-      else if (!h) { s[id] = t; dirty.add(k); }
-      x.unsus_seen = x.status === 'STATUS_LIMIT' ? '' : s[id];
+      // History entry: {u: date first seen un-suspended} or, once suspended again, {r: that earlier date}.
+      if (x.status === 'STATUS_LIMIT') { if (h?.u) { s[id] = { r: h.u }; dirty.add(k); } }
+      else if (!h?.u) { s[id] = { u: t }; dirty.add(k); }
+      x.unsus_seen = s[id]?.u || '';
+      x.prev_unsus = x.status === 'STATUS_LIMIT' ? (s[id]?.r || '') : '';
     }
     const saved = await saveHistory(shards, dirty);
 
@@ -375,8 +377,12 @@ $('checkBtn').addEventListener('click', async () => {
       r.bc = x.bc_id ? (bcNames[x.bc_id] || '') : '';
       r.status = x.status || '';
       r.statusLabel = x.status ? (STATUS_TEXT[x.status] || x.status) : (x.error || 'Không có dữ liệu');
-      r.unsus_seen = !r.unsus_file && Boolean(x.unsus_seen);
-      r.unsus_date = r.unsus_file || x.unsus_seen || '';
+      // Sus -> gỡ -> sus lại: the current TikTok status wins, so it counts as đang sus.
+      const susNow = x.status === 'STATUS_LIMIT';
+      r.resus = susNow && Boolean(r.unsus_file || x.prev_unsus);
+      if (r.resus) r.statusLabel = 'Đang sus · sus lại';
+      r.unsus_seen = !r.unsus_file && Boolean(susNow ? x.prev_unsus : x.unsus_seen);
+      r.unsus_date = r.unsus_file || (susNow ? x.prev_unsus : x.unsus_seen) || '';
       if (x.status) ok++; else if (x.error === 'Không có quyền') noPerm++;
     }
     fillSelect('fBc', rows.map((r) => r.bc || r.bc_id));
@@ -426,7 +432,7 @@ function render() {
     <td>${r.bc ? esc(r.bc) + `<span class="sub">${esc(r.bc_id)}</span>` : (r.bc_id ? `<span class="sub">${esc(r.bc_id)}</span>` : dash)}</td>
     <td>${esc(r.agency) || dash}</td>
     <td class="date">${esc(r.sus_date) || dash}</td>
-    <td class="date">${r.unsus_date ? esc(r.unsus_date) + (r.unsus_seen ? ' <span class="seen">ghi nhận</span>' : '') : dash}</td>
+    <td class="date">${r.unsus_date ? esc(r.unsus_date) + (r.resus ? ' <span class="seen">lần gỡ trước</span>' : r.unsus_seen ? ' <span class="seen">ghi nhận</span>' : '') : dash}</td>
     <td><span class="pill ${pill[bucket(r)]}">${esc(r.statusLabel)}</span></td>
   </tr>`).join('') || `<tr><td colspan="${COLS.length}" class="muted">Không có dòng nào khớp bộ lọc.</td></tr>`;
   $('pageInfo').textContent = `${view.length.toLocaleString()} dòng · trang ${page + 1}/${pages}`;
@@ -450,7 +456,7 @@ $('exportBtn').onclick = async () => {
   applyFilters();
   const data = view.map((r) => ({
     'Advertiser ID': r.advertiser_id, 'Tên ad account': r.name, 'BC': r.bc, 'BC ID': r.bc_id, 'Agency': r.agency,
-    'Ngày sus': r.sus_date, 'Ngày gỡ': r.unsus_date, 'Ngày gỡ là ngày ghi nhận': r.unsus_seen ? 'x' : '',
+    'Ngày sus': r.sus_date, 'Ngày gỡ': r.unsus_date, 'Ngày gỡ là ngày ghi nhận': r.unsus_seen ? 'x' : '', 'Sus lại': r.resus ? 'x' : '',
     'Trạng thái': r.statusLabel, 'Status (TikTok)': r.status,
   }));
   const ws = XLSX.utils.json_to_sheet(data);
