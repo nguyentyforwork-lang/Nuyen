@@ -68,6 +68,8 @@
   td.id { font-family: var(--f-mono); font-size: 12.5px; }
   td.date { font-variant-numeric: tabular-nums; }
   td.name { white-space: normal; min-width: 180px; }
+  td.note { white-space: normal; min-width: 260px; max-width: 420px; font-size: 12px; color: var(--warn); }
+  .chk { display: flex !important; flex-direction: row; align-items: center; gap: 6px; text-transform: none !important; letter-spacing: 0 !important; font-size: 13px !important; font-weight: 500 !important; color: var(--fg) !important; padding-bottom: 8px; }
   .sub { display: block; font-size: 11.5px; color: var(--muted); font-family: var(--f-mono); }
   .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
   .p-sus { color: var(--sus); background: var(--sus-soft); }
@@ -90,8 +92,8 @@
   td.zero { color: var(--muted); }
   tr.total td { font-weight: 700; border-bottom: 2px solid var(--line); }
   td.tot { font-weight: 600; }
-  #spendWrap { max-height: 70vh; overflow: auto; }
-  #spendWrap th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  #spendWrap, #missingWrap { max-height: 70vh; overflow: auto; }
+  #spendWrap th, #missingWrap th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
   @media (max-width: 760px) {
     .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tile:first-child { grid-column: span 2; }
@@ -104,7 +106,7 @@
 <div class="wrap">
   <header>
     <h1>Ecomdy Sus Tracker</h1>
-    <p>Thả file suspension list vào, trang sẽ tra từng advertiser_id qua TikTok để lấy tên ad account, BC và trạng thái hiện tại.</p>
+    <p>Thả file suspension list vào, trang tra từng advertiser_id trong Ecomdy Data Center (bù và đối chiếu bằng TikTok) để lấy tên ad account, BC và trạng thái hiện tại. Dòng nào lỗi hoặc lệch nguồn đều có ghi chú.</p>
   </header>
 
   <section class="panel">
@@ -136,6 +138,7 @@
     <label>Agency<select id="fAgency"><option value="">Tất cả</option></select></label>
     <label>Sus từ<input type="date" id="fFrom"></label>
     <label>Đến<input type="date" id="fTo"></label>
+    <label class="chk"><input type="checkbox" id="fNote"> Chỉ dòng có ghi chú</label>
     <div class="actions">
       <button id="resetBtn">Xoá lọc</button>
       <button id="exportBtn" disabled>Tải Excel</button>
@@ -160,11 +163,27 @@
     </div>
   </section>
 
+  <section class="panel" id="missingPanel" hidden>
+    <div class="spend-head">
+      <div>
+        <h2>Đang sus trong Data Center nhưng không có trong file · <span id="missingCount">0</span></h2>
+        <p>Các account Ecomdy Data Center đang ghi STATUS_LIMIT (trong phạm vi quyền của bạn) mà file upload không có. Ngày vào sus nguồn WEBHOOK là mốc thật của TikTok; SYNC_SCRIPT chỉ là lúc hệ thống quét ra.</p>
+      </div>
+      <div class="spend-ctrl"><button id="missingExportBtn" disabled>Tải Excel danh sách thiếu</button></div>
+    </div>
+    <div class="tablewrap" id="missingWrap">
+      <table>
+        <thead><tr><th>Advertiser ID</th><th>Tên ad account</th><th>BC</th><th>Ngày vào sus</th><th>Nguồn ngày</th><th>Lý do</th></tr></thead>
+        <tbody id="missingBody"></tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="panel" id="spendPanel">
     <div class="spend-head">
       <div>
         <h2>Spend theo tháng · account đang sus</h2>
-        <p>Spend không tính ad credit (cash spend của TikTok = spend − voucher). Tính theo múi giờ và tiền tệ của từng ad account.</p>
+        <p>Spend không tính ad credit (cash spend = spend − voucher). Lấy từ Ecomdy Data Center; account không có ở đó thì lấy từ TikTok. Tính theo múi giờ và tiền tệ của từng ad account, kèm cột quy USD.</p>
       </div>
       <div class="spend-ctrl">
         <label>Từ tháng<input type="month" id="mFrom"></label>
@@ -183,7 +202,7 @@
     </div>
   </section>
 
-  <p class="note">Trạng thái lấy từ TikTok: <b>STATUS_LIMIT</b> = đang sus, <b>STATUS_ENABLE</b> = đã gỡ. TikTok không trả về ngày gỡ sus, nên "Ngày gỡ" là ngày trang này lần đầu thấy account hết sus (lưu chung cho mọi người dùng trang). Check thường xuyên để ngày này sát thực tế. Nếu file có sẵn cột ngày gỡ thì dùng cột đó. Account đã gỡ rồi bị sus lại vẫn tính là <b>đang sus</b>, gắn nhãn "sus lại" và giữ ngày gỡ lần trước.</p>
+  <p class="note">Nguồn chính là Ecomdy Data Center; TikTok dùng để bù account ngoài Data Center và đối chiếu trạng thái (lệch thì ghi chú, vẫn theo Data Center). <b>STATUS_LIMIT</b> = đang sus, <b>STATUS_ENABLE</b> = đã gỡ. TikTok không trả về ngày gỡ sus, nên "Ngày gỡ" là ngày trang này lần đầu thấy account hết sus (lưu chung cho mọi người dùng trang). Check thường xuyên để ngày này sát thực tế. Nếu file có sẵn cột ngày gỡ thì dùng cột đó. Account đã gỡ rồi bị sus lại vẫn tính là <b>đang sus</b>, gắn nhãn "sus lại" và giữ ngày gỡ lần trước.</p>
 </div>
 
 <script>
@@ -199,7 +218,7 @@ const STATUS_TEXT = {
 };
 const COLS = [
   ['advertiser_id', 'Advertiser ID'], ['name', 'Tên ad account'], ['bc', 'BC'], ['agency', 'Agency'],
-  ['sus_date', 'Ngày sus'], ['unsus_date', 'Ngày gỡ'], ['statusLabel', 'Trạng thái'],
+  ['sus_date', 'Ngày sus'], ['unsus_date', 'Ngày gỡ'], ['statusLabel', 'Trạng thái'], ['src', 'Nguồn'], ['note', 'Ghi chú'],
 ];
 const EXAMPLE = [
   { advertiser_id: '7600000000000000001', name: 'Shop A_Account 1', bc: 'Client BC A', bc_id: '7200000000000000001', agency: 'Ecomdy Media Ltd', sus_date: '2026-07-02', unsus_date: '', unsus_seen: false, status: 'STATUS_LIMIT', statusLabel: 'Đang sus' },
@@ -210,7 +229,7 @@ const EXAMPLE = [
 let rows = EXAMPLE, isExample = true, view = [];
 let page = 0, sortKey = 'sus_date', sortDir = -1, tileFilter = '';
 let mcp = null, db = null, downloads = null;
-let checked = false, spendBusy = false, spendData = null;
+let checked = false, spendBusy = false, spendData = null, dcAll = null, dcMissing = null;
 
 // ---------- capabilities (page works without them; features light up) ----------
 const use = (n) => (window.claude?.use ? window.claude.use(n) : Promise.resolve(null)).catch(() => null);
@@ -279,7 +298,7 @@ async function loadFile(f) {
       name: '', bc: '', bc_id: '', status: '', statusLabel: 'Chưa check', unsus_date: '', unsus_seen: false,
     })).filter((r) => /^\d+$/.test(r.advertiser_id));
     rows.forEach((r) => { r.unsus_date = r.unsus_file; });
-    isExample = false; checked = false; spendData = null; $('spendWrap').hidden = true;
+    isExample = false; checked = false; spendData = null; $('spendWrap').hidden = true; dcMissing = null; renderMissing();
     setSpendStatus('Bấm "Check trạng thái" trước để biết account nào đang sus.');
     setDefaultMonths();
     $('fileName').textContent = f.name;
@@ -299,35 +318,70 @@ function fillSelect(id, values) {
   if (uniq.includes(cur)) sel.value = cur;
 }
 
-// ---------- TikTok via connector ----------
-function mcpMessage(e) {
+// ---------- connectors ----------
+function mcpMessage(e, server = SERVER) {
   switch (e?.code) {
-    case 'server_not_connected': return `Chưa kết nối ${SERVER}. Thêm nó trong claude.ai → Settings → Connectors rồi tải lại trang.`;
-    case 'needs_reauth': return `${SERVER} cần đăng nhập lại: vào claude.ai → Settings → Connectors để kết nối lại.`;
-    case 'not_in_manifest': return `Bạn chưa cho phép trang này dùng ${SERVER}. Mở menu Permissions của trang để bật.`;
-    case 'selection_required': return `Bạn có nhiều kết nối ${SERVER}; hãy chọn một khi trang hỏi.`;
-    case 'blocked_by_policy': case 'approval_required': return `Tổ chức của bạn đang chặn công cụ này của ${SERVER}.`;
-    case 'server_unavailable': return `${SERVER} đang không phản hồi. Thử lại sau ít phút.`;
-    default: return `${SERVER} báo lỗi: ${e?.message || e}`;
+    case 'server_not_connected': return `Chưa kết nối ${server}. Thêm nó trong claude.ai → Settings → Connectors rồi tải lại trang.`;
+    case 'needs_reauth': return `${server} cần đăng nhập lại: vào claude.ai → Settings → Connectors để kết nối lại.`;
+    case 'not_in_manifest': return `Bạn chưa cho phép trang này dùng ${server}. Mở menu Permissions của trang để bật.`;
+    case 'selection_required': return `Bạn có nhiều kết nối ${server}; hãy chọn một khi trang hỏi.`;
+    case 'blocked_by_policy': case 'approval_required': return `Tổ chức của bạn đang chặn công cụ này của ${server}.`;
+    case 'server_unavailable': return `${server} đang không phản hồi. Thử lại sau ít phút.`;
+    default: return `${server} báo lỗi: ${e?.message || e}`;
   }
 }
 
-// Returns the TikTok envelope {code, message, data}, whether the connector resolved or rejected with it.
-async function call(tool, input) {
+// Returns the tool's JSON answer, whether the connector resolved or rejected with it (tool_error).
+async function callServer(server, tool, input) {
   for (let attempt = 0; ; attempt++) {
     try {
-      const res = await mcp.callTool(SERVER, tool, input, { cache: false });
+      const res = await mcp.callTool(server, tool, input, { cache: false });
       return typeof res.payload === 'string' ? JSON.parse(res.payload) : res.payload;
     } catch (e) {
       if (e?.code === 'tool_error') {
         const p = e.result?.payload ?? e.result?.content?.[0]?.text ?? e.message;
-        try { return typeof p === 'string' ? JSON.parse(p) : p; } catch { return { code: -1, message: String(p) }; }
+        try { return typeof p === 'string' ? JSON.parse(p) : p; } catch { return { code: -1, error: String(p), message: String(p) }; }
       }
       if (e?.retryable && attempt === 0) { await sleep((e.retryAfterMs || 1500) + Math.random() * 500); continue; }
       throw e;
     }
   }
 }
+const call = (tool, input) => callServer(SERVER, tool, input);
+
+// ---------- Ecomdy Data Center ----------
+const DC = 'Ecomdy Data Center';
+const DC_FIELDS = ['_id', 'report.advertiser_name', 'report.currency', 'bc_id', 'bcName', 'buId', 'status', 'statusSource', 'statusUpdatedAt', 'suspendedAt', 'suspensionReason'];
+async function dcList(endpoint, filters, fields, page = 1) {
+  const p = await callServer(DC, 'list', { endpoint, filters, fields, limit: 1000, page });
+  if (!p || p.error || !Array.isArray(p.data)) {
+    const err = new Error(String(p?.error || p?.message || 'Data Center trả về dữ liệu không đọc được')); err.dc = true; throw err;
+  }
+  return p;
+}
+// Every advertiser the viewer can see. Data Center paging is not stable across pages, so the id space
+// is split by prefix until each slice fits in one page of ≤1000.
+async function fetchDcAdvertisers(onStep) {
+  const map = {}, warnings = [];
+  const queue = [''];
+  let calls = 0;
+  while (queue.length) {
+    const pre = queue.shift();
+    const filters = pre
+      ? { _id__gte: pre, _id__lt: pre.slice(0, -1) + String.fromCharCode(pre.charCodeAt(pre.length - 1) + 1) }
+      : { _id__ne: '0' };
+    const res = await dcList('/advertiser', filters, DC_FIELDS);
+    onStep?.(++calls);
+    const total = res.pagination?.total ?? res.data.length;
+    if (total > res.data.length) {
+      if (pre.length < 18) { for (const d of '0123456789') queue.push(pre + d); continue; }
+      warnings.push(`Nhóm ID bắt đầu bằng ${pre} có ${total} account, chỉ lấy được ${res.data.length}.`);
+    }
+    for (const x of res.data) map[String(x._id)] = x;
+  }
+  return { map, warnings };
+}
+const dDate = (s) => (s ? String(s).slice(0, 10) : '');
 
 async function fetchBcNames() {
   const names = {};
@@ -387,18 +441,69 @@ async function saveHistory(shards, dirty) {
 }
 
 $('checkBtn').addEventListener('click', async () => {
-  if (!mcp) return setStatus(`Trang chưa được dùng ${SERVER}. Hãy mở trang trong claude.ai và cho phép kết nối khi được hỏi.`, true);
+  if (!mcp) return setStatus('Trang chưa được dùng connector. Hãy mở trang trong claude.ai và cho phép kết nối khi được hỏi.', true);
   const ids = [...new Set(rows.map((r) => r.advertiser_id))];
-  const out = {};
+  const fileIds = new Set(ids);
+  const tt = {}, out = {};
+  const sourceIssues = [];
   $('checkBtn').disabled = true; setProgress(0);
   try {
-    setStatus('Đang lấy danh sách BC…');
-    const bcNames = await fetchBcNames();
-    for (let i = 0; i < ids.length; i += 100) {
-      setStatus(`Đang tra ${Math.min(i + 100, ids.length).toLocaleString()} / ${ids.length.toLocaleString()} account…`);
-      await fetchBatch(ids.slice(i, i + 100), out);
-      setProgress(Math.min(1, (i + 100) / ids.length));
+    // 1. Ecomdy Data Center: primary source.
+    let dcMap = null;
+    setStatus('Đang lấy danh sách account từ Ecomdy Data Center…');
+    try {
+      const r = await fetchDcAdvertisers((n) => setStatus(`Đang lấy danh sách account từ Ecomdy Data Center (lượt ${n})…`));
+      dcMap = r.map; sourceIssues.push(...r.warnings);
+    } catch (e) {
+      sourceIssues.push(e.dc ? `Ecomdy Data Center báo lỗi: ${e.message}` : mcpMessage(e, DC));
     }
+    dcAll = dcMap;
+    setProgress(0.15);
+
+    // 2. TikTok: fills accounts outside Data Center and cross-checks the status.
+    let bcNames = {}, ttOk = true;
+    try {
+      setStatus('Đang lấy danh sách BC từ TikTok…');
+      bcNames = await fetchBcNames();
+      for (let i = 0; i < ids.length; i += 100) {
+        setStatus(`Đang đối chiếu với TikTok ${Math.min(i + 100, ids.length).toLocaleString()} / ${ids.length.toLocaleString()} account…`);
+        await fetchBatch(ids.slice(i, i + 100), tt);
+        setProgress(0.15 + 0.8 * Math.min(1, (i + 100) / ids.length));
+      }
+    } catch (e) {
+      ttOk = false; sourceIssues.push(mcpMessage(e, SERVER));
+    }
+    if (!dcMap && !ttOk) throw new Error(sourceIssues.join(' '));
+
+    // 3. Merge: Data Center wins; every gap or disagreement becomes a note on the row.
+    for (const id of ids) {
+      const d = dcMap?.[id], t = tt[id] || {}, notes = [];
+      const o = { notes, src: '' };
+      if (d) {
+        o.src = 'Data Center';
+        o.name = d.report?.advertiser_name || t.name || '';
+        o.bc_id = String(d.bc_id || t.bc_id || '');
+        o.bc = d.bcName || bcNames[o.bc_id] || '';
+        o.status = d.status || '';
+        o.dc_sus = dDate(d.suspendedAt);
+        if (!d.status) {
+          if (t.status) { o.status = t.status; o.src = 'Data Center + TikTok'; notes.push('Data Center chưa có trạng thái, lấy trạng thái từ TikTok.'); }
+          else notes.push('Data Center chưa có trạng thái' + (t.error ? `; TikTok: ${t.error}.` : '.'));
+        } else if (t.status && t.status !== d.status) {
+          notes.push(`Lệch trạng thái: Data Center = ${STATUS_TEXT[d.status] || d.status} (cập nhật ${dDate(d.statusUpdatedAt) || '?'}, ${d.statusSource || 'không rõ nguồn'}), TikTok hiện tại = ${STATUS_TEXT[t.status] || t.status}.`);
+        }
+      } else {
+        o.name = t.name || ''; o.bc_id = t.bc_id || ''; o.bc = o.bc_id ? (bcNames[o.bc_id] || '') : ''; o.status = t.status || '';
+        if (t.status) o.src = 'TikTok';
+        notes.push(dcMap ? 'Không có trong Ecomdy Data Center (ngoài phạm vi quyền của bạn hoặc chưa đồng bộ).' : 'Không lấy được từ Ecomdy Data Center.');
+        if (!t.status) notes.push(ttOk ? `TikTok: ${t.error || 'không có dữ liệu'}${t.detail ? ` (${t.detail})` : ''}.` : 'Không lấy được từ TikTok.');
+        else notes.push('Đã lấy từ TikTok thay thế.');
+      }
+      o.error = !o.status ? 'Không tra được' : '';
+      out[id] = o;
+    }
+    setProgress(0.97);
+
     setStatus('Đang cập nhật lịch sử ngày gỡ…');
     const shards = await loadHistory(), dirty = new Set(), t = today();
     for (const [id, x] of Object.entries(out)) {
@@ -412,29 +517,43 @@ $('checkBtn').addEventListener('click', async () => {
     }
     const saved = await saveHistory(shards, dirty);
 
-    let ok = 0, noPerm = 0;
+    const seen = {};
+    rows.forEach((r) => { seen[r.advertiser_id] = (seen[r.advertiser_id] || 0) + 1; });
+    let ok = 0, noData = 0, fromDc = 0, mismatch = 0;
     for (const r of rows) {
-      const x = out[r.advertiser_id] || {};
+      const x = out[r.advertiser_id] || { notes: [] };
       r.name = x.name || '';
       r.bc_id = x.bc_id || '';
-      r.bc = x.bc_id ? (bcNames[x.bc_id] || '') : '';
+      r.bc = x.bc || '';
+      r.src = x.src || '';
+      r.notes = [...x.notes];
+      if (seen[r.advertiser_id] > 1) r.notes.push(`ID này xuất hiện ${seen[r.advertiser_id]} lần trong file.`);
+      if (x.dc_sus && r.sus_date && x.dc_sus !== r.sus_date && x.status === 'STATUS_LIMIT') r.notes.push(`Data Center ghi ngày vào sus ${x.dc_sus}, file ghi ${r.sus_date}.`);
+      r.note = r.notes.join(' ');
       r.status = x.status || '';
       r.statusLabel = x.status ? (STATUS_TEXT[x.status] || x.status) : (x.error || 'Không có dữ liệu');
-      // Sus -> gỡ -> sus lại: the current TikTok status wins, so it counts as đang sus.
+      if (x.src.startsWith('Data Center')) fromDc++;
+      if (r.note.includes('Lệch trạng thái')) mismatch++;
+      // Sus -> gỡ -> sus lại: the current status wins, so it counts as đang sus.
       const susNow = x.status === 'STATUS_LIMIT';
       r.resus = susNow && Boolean(r.unsus_file || x.prev_unsus);
       if (r.resus) r.statusLabel = 'Đang sus · sus lại';
       r.unsus_seen = !r.unsus_file && Boolean(susNow ? x.prev_unsus : x.unsus_seen);
       r.unsus_date = r.unsus_file || (susNow ? x.prev_unsus : x.unsus_seen) || '';
-      if (x.status) ok++; else if (x.error === 'Không có quyền') noPerm++;
+      if (x.status) ok++; else noData++;
     }
+    dcMissing = dcMap ? Object.values(dcMap).filter((d) => d.status === 'STATUS_LIMIT' && !fileIds.has(String(d._id))) : null;
+    renderMissing();
     fillSelect('fBc', rows.map((r) => r.bc || r.bc_id));
-    let msg = `Xong lúc ${new Date().toLocaleTimeString('vi-VN')}. ${ok.toLocaleString()} / ${rows.length.toLocaleString()} dòng có dữ liệu.`;
-    if (noPerm) msg += ` ${noPerm.toLocaleString()} dòng tài khoản TikTok đang kết nối không có quyền xem; kết nối bằng tài khoản có quyền với các BC này để tra nốt.`;
+    let msg = `Xong lúc ${new Date().toLocaleTimeString('vi-VN')}. ${ok.toLocaleString()} / ${rows.length.toLocaleString()} dòng có dữ liệu (${fromDc.toLocaleString()} từ Ecomdy Data Center, ${(ok - fromDc).toLocaleString()} từ TikTok).`;
+    if (noData) msg += ` ${noData.toLocaleString()} dòng không tra được ở cả hai nguồn.`;
+    if (mismatch) msg += ` ${mismatch.toLocaleString()} dòng lệch trạng thái giữa Data Center và TikTok.`;
+    if (sourceIssues.length) msg += ' ' + sourceIssues.join(' ');
     if (!saved) msg += ' Không lưu được lịch sử ngày gỡ lần này.';
+    msg += ' Xem cột Ghi chú để biết lỗi từng dòng.';
     setStatus(msg, ok === 0);
   } catch (e) {
-    setStatus(mcpMessage(e), true);
+    setStatus(e?.code ? mcpMessage(e) : `Không tra được: ${e?.message || e}`, true);
   } finally {
     checked = true; spendData = null; $('spendWrap').hidden = true;
     setProgress(null); syncCheckBtn(); syncExportBtn(); page = 0; render();
@@ -452,6 +571,7 @@ function applyFilters() {
     if (ag && r.agency !== ag) return false;
     if (from && r.sus_date < from) return false;
     if (to && r.sus_date > to) return false;
+    if ($('fNote').checked && !r.note) return false;
     return true;
   });
   view.sort((a, b) => String(a[sortKey]).localeCompare(String(b[sortKey])) * sortDir);
@@ -478,6 +598,8 @@ function render() {
     <td class="date">${esc(r.sus_date) || dash}</td>
     <td class="date">${r.unsus_date ? esc(r.unsus_date) + (r.resus ? ' <span class="seen">lần gỡ trước</span>' : r.unsus_seen ? ' <span class="seen">ghi nhận</span>' : '') : dash}</td>
     <td><span class="pill ${pill[bucket(r)]}">${esc(r.statusLabel)}</span></td>
+    <td>${esc(r.src) || dash}</td>
+    <td class="note">${esc(r.note || '')}</td>
   </tr>`).join('') || `<tr><td colspan="${COLS.length}" class="muted">Không có dòng nào khớp bộ lọc.</td></tr>`;
   $('pageInfo').textContent = `${view.length.toLocaleString()} dòng · trang ${page + 1}/${pages}`;
   $('prev').disabled = page === 0; $('next').disabled = page >= pages - 1;
@@ -491,17 +613,17 @@ $('tiles').addEventListener('click', (e) => {
   const t = e.target.closest('.tile'); if (!t) return;
   tileFilter = t.dataset.k; page = 0; render();
 });
-['q', 'fBc', 'fAgency', 'fFrom', 'fTo', 'pageSize'].forEach((id) => $(id).addEventListener('input', () => { page = 0; render(); }));
+['q', 'fBc', 'fAgency', 'fFrom', 'fTo', 'fNote', 'pageSize'].forEach((id) => $(id).addEventListener('input', () => { page = 0; render(); }));
 $('prev').onclick = () => { page--; render(); };
 $('next').onclick = () => { page++; render(); };
-$('resetBtn').onclick = () => { ['q', 'fBc', 'fAgency', 'fFrom', 'fTo'].forEach((id) => { $(id).value = ''; }); tileFilter = ''; page = 0; render(); };
+$('resetBtn').onclick = () => { ['q', 'fBc', 'fAgency', 'fFrom', 'fTo'].forEach((id) => { $(id).value = ''; }); $('fNote').checked = false; tileFilter = ''; page = 0; render(); };
 
 $('exportBtn').onclick = async () => {
   applyFilters();
   const data = view.map((r) => ({
     'Advertiser ID': r.advertiser_id, 'Tên ad account': r.name, 'BC': r.bc, 'BC ID': r.bc_id, 'Agency': r.agency,
     'Ngày sus': r.sus_date, 'Ngày gỡ': r.unsus_date, 'Ngày gỡ là ngày ghi nhận': r.unsus_seen ? 'x' : '', 'Sus lại': r.resus ? 'x' : '',
-    'Trạng thái': r.statusLabel, 'Status (TikTok)': r.status,
+    'Trạng thái': r.statusLabel, 'Status': r.status, 'Nguồn': r.src || '', 'Ghi chú': r.note || '',
   }));
   await saveSheet(XLSX.utils.json_to_sheet(data), 'sus_check', setStatus);
 };
@@ -562,31 +684,106 @@ async function spendGroup(ids, month, store) {
 }
 function setSpendStatus(t, err) { $('spendStatus').textContent = t; $('spendStatus').className = 'status' + (err ? ' err' : ''); }
 
+// Data Center: one call per account covers the whole range (≤366 daily rows, so one page).
+const DC_SPEND_FIELDS = ['advertiser_id', 'stat_date', 'currency', 'spend', 'cash_spend', 'voucher_spend', 'spendUSD', 'cash_spendUSD', 'voucher_spendUSD'];
+async function dcSpend(id, months, store) {
+  const start = months[0] + '-01', end = monthRange(months[months.length - 1])[1];
+  const e = (store[id] ||= { months: {}, notes: [] });
+  e.src = 'Data Center';
+  const res = await dcList('/advertiser-daily-report', { advertiser_id: id, stat_date__gte: start, stat_date__lte: end }, DC_SPEND_FIELDS);
+  const total = res.pagination?.total ?? res.data.length;
+  if (total > res.data.length) e.notes.push(`Data Center có ${total} dòng ngày nhưng chỉ trả ${res.data.length}; số có thể thiếu.`);
+  if (!res.data.length) e.notes.push('Data Center không có dòng spend nào trong kỳ (không chạy hoặc chưa đồng bộ).');
+  let last = '';
+  for (const d of res.data) {
+    const day = dDate(d.stat_date), m = day.slice(0, 7);
+    if (!months.includes(m)) continue;
+    if (day > last) last = day;
+    const voucher = num(d.voucher_spend), spend = num(d.spend);
+    const cash = d.cash_spend != null ? num(d.cash_spend) : spend - voucher;
+    const cashUSD = d.cash_spendUSD != null ? num(d.cash_spendUSD) : (d.spendUSD != null ? num(d.spendUSD) - num(d.voucher_spendUSD) : null);
+    const b = (e.months[m] ||= { cash: 0, voucher: 0, spend: 0, cashUSD: 0, usdKnown: true });
+    b.cash += cash; b.voucher += voucher; b.spend += spend;
+    if (cashUSD == null) b.usdKnown = false; else b.cashUSD += cashUSD;
+    e.currency ||= d.currency || '';
+  }
+  e.lastDay = last;
+}
+
+// TikTok fallback: up to 5 advertisers per report call, one call per month.
+async function spendCall(ids, start, end) {
+  const env = await call('report_integrated_get', {
+    report_type: 'BASIC', data_level: 'AUCTION_ADVERTISER', dimensions: ['advertiser_id'],
+    advertiser_ids: ids, metrics: ['spend', 'cash_spend', 'voucher_spend'],
+    start_date: start, end_date: end, page_size: 100,
+  });
+  if (env?.code !== 0) return { error: env?.message || env?.error || `Lỗi ${env?.code}` };
+  return { list: env.data?.list || [] };
+}
+async function ttSpend(ids, month, store) {
+  const [start, end] = monthRange(month);
+  const res = await spendCall(ids, start, end);
+  if (res.error && ids.length > 1) { for (const id of ids) await ttSpend([id], month, store); return; }
+  if (res.error) { const e = (store[ids[0]] ||= { months: {}, notes: [] }); e.error = `TikTok tháng ${month}: ${res.error}`; return; }
+  for (const it of res.list) {
+    const m = it.metrics || {}, id = String(it.dimensions?.advertiser_id || m.advertiser_id);
+    const e = (store[id] ||= { months: {}, notes: [] });
+    e.currency = m.currency || e.currency || '';
+    const cash = num(m.cash_spend);
+    e.months[month] = { cash, voucher: num(m.voucher_spend), spend: num(m.spend), cashUSD: e.currency === 'USD' ? cash : 0, usdKnown: e.currency === 'USD' };
+  }
+}
+
 $('spendBtn').addEventListener('click', async () => {
   const from = $('mFrom').value, to = $('mTo').value;
   if (!from || !to || from > to) return setSpendStatus('"Từ tháng" phải trước hoặc bằng "Đến tháng".', true);
-  const months = monthList(from, to), ids = susIds(), groups = [];
-  for (let i = 0; i < ids.length; i += 5) for (const m of months) groups.push([ids.slice(i, i + 5), m]);
-  const total = groups.length, store = {};
-  let done = 0;
+  const months = monthList(from, to), ids = susIds(), store = {};
+  const tasks = [], ttQueue = [];
+  for (const id of ids) {
+    store[id] = { months: {}, notes: [] };
+    if (dcAll?.[id]) tasks.push({ kind: 'dc', id });
+    else ttQueue.push(id);
+  }
+  const queueTikTok = (list, why) => {
+    for (const id of list) { store[id].src = 'TikTok'; if (why) store[id].notes.push(why); }
+    for (let i = 0; i < list.length; i += 5) for (const m of months) tasks.push({ kind: 'tt', ids: list.slice(i, i + 5), m });
+  };
+  queueTikTok(ttQueue, dcAll ? 'Không có trong Ecomdy Data Center, lấy spend từ TikTok.' : 'Không kết nối được Ecomdy Data Center, lấy spend từ TikTok.');
+  let done = 0, ttDown = '';
   spendBusy = true; syncSpendBtn(); $('spendBar').hidden = false;
   try {
     const worker = async () => {
-      while (groups.length) {
-        const [g, m] = groups.shift();
-        await spendGroup(g, m, store);
+      while (tasks.length) {
+        const t = tasks.shift();
+        if (t.kind === 'dc') {
+          try { await dcSpend(t.id, months, store); }
+          catch (e) {
+            store[t.id] = { months: {}, notes: [`Data Center lỗi khi kéo spend: ${e.dc ? e.message : mcpMessage(e, DC)}. Đã thử lấy từ TikTok.`] };
+            queueTikTok([t.id]);
+          }
+        } else if (!ttDown) {
+          try { await ttSpend(t.ids, t.m, store); }
+          catch (e) { ttDown = mcpMessage(e, SERVER); }
+        }
         done++;
+        const total = done + tasks.length;
         $('spendBar').firstElementChild.style.width = `${Math.round((done / total) * 100)}%`;
-        setSpendStatus(`Đang kéo spend ${done.toLocaleString()} / ${total.toLocaleString()} lượt (${ids.length} account × ${months.length} tháng)…`);
+        setSpendStatus(`Đang kéo spend ${done.toLocaleString()} / ${total.toLocaleString()} lượt cho ${ids.length.toLocaleString()} account đang sus…`);
       }
     };
     await Promise.all([worker(), worker(), worker()]);
+    for (const id of ids) {
+      const e = store[id];
+      if (e.src === 'TikTok' && ttDown) e.error = e.error || `Không kéo được từ TikTok: ${ttDown}`;
+    }
     spendData = { months, ids, store };
-    const errs = ids.filter((id) => store[id]?.error).length;
-    setSpendStatus(`Xong ${months[0]} → ${months[months.length - 1]} cho ${ids.length.toLocaleString()} account đang sus.` + (errs ? ` ${errs} account báo lỗi (xem cột Tổng).` : ''));
+    const errs = ids.filter((id) => store[id].error).length;
+    const dcN = ids.filter((id) => store[id].src === 'Data Center').length;
+    setSpendStatus(`Xong ${months[0]} → ${months[months.length - 1]} cho ${ids.length.toLocaleString()} account đang sus: ${dcN.toLocaleString()} lấy từ Ecomdy Data Center, ${(ids.length - dcN).toLocaleString()} từ TikTok.`
+      + (errs ? ` ${errs} account không kéo được (xem cột Ghi chú).` : '') + (ttDown ? ` ${ttDown}` : ''), errs === ids.length);
     renderSpend();
   } catch (e) {
-    setSpendStatus(mcpMessage(e), true);
+    setSpendStatus(e?.code ? mcpMessage(e) : `Không kéo được spend: ${e?.message || e}`, true);
   } finally {
     spendBusy = false; $('spendBar').hidden = true; syncSpendBtn(); syncExportBtn();
   }
@@ -596,28 +793,38 @@ const fmt = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximum
 function spendRows() {
   const byId = Object.fromEntries(rows.map((r) => [r.advertiser_id, r]));
   return spendData.ids.map((id) => {
-    const e = spendData.store[id] || { months: {} }, r = byId[id] || {};
+    const e = spendData.store[id] || { months: {}, notes: [] }, r = byId[id] || {};
     const per = spendData.months.map((m) => e.months[m]?.cash || 0);
+    const usdKnown = spendData.months.every((m) => !e.months[m] || e.months[m].usdKnown);
+    const notes = [...(e.notes || [])];
+    if (e.error) notes.push(e.error);
     return { id, name: r.name || '', bc: r.bc || r.bc_id || '', sus_date: r.sus_date || '', currency: e.currency || '', per,
-      total: per.reduce((a, b) => a + b, 0), voucher: spendData.months.reduce((a, m) => a + (e.months[m]?.voucher || 0), 0), error: e.error };
-  }).sort((a, b) => b.total - a.total);
+      total: per.reduce((a, b) => a + b, 0),
+      totalUSD: usdKnown ? spendData.months.reduce((a, m) => a + (e.months[m]?.cashUSD || 0), 0) : null,
+      voucher: spendData.months.reduce((a, m) => a + (e.months[m]?.voucher || 0), 0),
+      src: e.src || '', note: notes.join(' '), error: e.error, lastDay: e.lastDay || '' };
+  }).sort((a, b) => (b.totalUSD ?? b.total) - (a.totalUSD ?? a.total));
 }
 function renderSpend() {
   const list = spendRows(), months = spendData.months;
   $('spendHead').innerHTML = '<th>Advertiser ID</th><th>Tên ad account</th><th>BC</th><th>Ngày sus</th><th>Tiền tệ</th>'
-    + months.map((m) => `<th class="num">${m}</th>`).join('') + '<th class="num">Tổng</th>';
+    + months.map((m) => `<th class="num">${m}</th>`).join('') + '<th class="num">Tổng</th><th class="num">Tổng USD</th><th>Nguồn</th><th>Ghi chú</th>';
   const totals = {};
+  let usdAll = 0;
   for (const r of list) {
+    if (r.totalUSD) usdAll += r.totalUSD;
     if (!r.total) continue;
     const t = (totals[r.currency] ||= { n: 0, per: months.map(() => 0), total: 0 });
     t.n++; r.per.forEach((v, i) => { t.per[i] += v; }); t.total += r.total;
   }
   const dash = '<span class="muted">—</span>';
-  $('spendBody').innerHTML = Object.entries(totals).map(([cur, t]) => `<tr class="total"><td colspan="4">Tổng · ${t.n} account có spend</td><td>${esc(cur)}</td>`
-      + t.per.map((v) => `<td class="num">${fmt(v)}</td>`).join('') + `<td class="num">${fmt(t.total)}</td></tr>`).join('')
+  $('spendBody').innerHTML = Object.entries(totals).map(([cur, t]) => `<tr class="total"><td colspan="4">Tổng · ${t.n} account có spend</td><td>${esc(cur) || dash}</td>`
+      + t.per.map((v) => `<td class="num">${fmt(v)}</td>`).join('') + `<td class="num">${fmt(t.total)}</td><td class="num">${cur === 'USD' ? fmt(t.total) : ''}</td><td></td><td></td></tr>`).join('')
+    + `<tr class="total"><td colspan="${5 + months.length + 1}">Tổng quy USD (các account có số USD)</td><td class="num">${fmt(usdAll)}</td><td></td><td></td></tr>`
     + list.map((r) => `<tr><td class="id">${esc(r.id)}</td><td class="name">${esc(r.name) || dash}</td><td>${esc(r.bc) || dash}</td><td class="date">${esc(r.sus_date)}</td><td>${esc(r.currency) || dash}</td>`
       + r.per.map((v) => `<td class="num${v ? '' : ' zero'}">${v ? fmt(v) : '0'}</td>`).join('')
-      + `<td class="num tot">${r.error ? `<span class="pill p-na" title="${esc(r.error)}">Lỗi</span>` : fmt(r.total)}</td></tr>`).join('');
+      + `<td class="num tot">${r.error && !r.total ? '<span class="pill p-na">Lỗi</span>' : fmt(r.total)}</td>`
+      + `<td class="num">${r.totalUSD == null ? dash : fmt(r.totalUSD)}</td><td>${esc(r.src) || dash}</td><td class="note">${esc(r.note)}</td></tr>`).join('');
   $('spendWrap').hidden = false;
 }
 
@@ -627,11 +834,34 @@ $('spendExportBtn').onclick = async () => {
     const o = { 'Advertiser ID': r.id, 'Tên ad account': r.name, 'BC': r.bc, 'Ngày sus': r.sus_date, 'Tiền tệ': r.currency };
     spendData.months.forEach((m, i) => { o[`${m} (không tính ad credit)`] = +r.per[i].toFixed(2); });
     o['Tổng (không tính ad credit)'] = +r.total.toFixed(2);
+    o['Tổng USD'] = r.totalUSD == null ? '' : +r.totalUSD.toFixed(2);
     o['Ad credit đã dùng (tham khảo)'] = +r.voucher.toFixed(2);
-    if (r.error) o['Lỗi'] = r.error;
+    o['Nguồn'] = r.src; o['Ghi chú'] = r.note;
     return o;
   });
   await saveSheet(XLSX.utils.json_to_sheet(data), 'sus_spend', setSpendStatus);
+};
+
+// ---------- accounts suspended in Data Center but missing from the file ----------
+function renderMissing() {
+  const panel = $('missingPanel');
+  if (!dcMissing) { panel.hidden = true; return; }
+  panel.hidden = false;
+  $('missingCount').textContent = dcMissing.length.toLocaleString();
+  const list = [...dcMissing].sort((a, b) => String(b.suspendedAt || '').localeCompare(String(a.suspendedAt || '')));
+  const dash = '<span class="muted">—</span>';
+  $('missingBody').innerHTML = list.map((d) => `<tr><td class="id">${esc(d._id)}</td><td class="name">${esc(d.report?.advertiser_name) || dash}</td>`
+    + `<td>${esc(d.bcName) || dash}<span class="sub">${esc(d.bc_id)}</span></td><td class="date">${esc(dDate(d.suspendedAt)) || dash}</td>`
+    + `<td>${esc(d.statusSource) || dash}</td><td class="note">${esc(String(d.suspensionReason || '').replace(/\s+/g, ' '))}</td></tr>`).join('')
+    || `<tr><td colspan="6" class="muted">Không có account nào: mọi account đang sus trong Data Center đều có trong file.</td></tr>`;
+  $('missingExportBtn').disabled = !downloads || !list.length;
+}
+$('missingExportBtn').onclick = async () => {
+  const data = (dcMissing || []).map((d) => ({
+    'Advertiser ID': d._id, 'Tên ad account': d.report?.advertiser_name || '', 'BC': d.bcName || '', 'BC ID': d.bc_id || '',
+    'Ngày vào sus (Data Center)': dDate(d.suspendedAt), 'Nguồn ngày sus': d.statusSource || '', 'Lý do': String(d.suspensionReason || '').replace(/\s+/g, ' '),
+  }));
+  await saveSheet(XLSX.utils.json_to_sheet(data), 'sus_thieu_trong_file', setStatus);
 };
 
 render();

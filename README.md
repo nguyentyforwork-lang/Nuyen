@@ -34,4 +34,4 @@ Mở http://localhost:3000.
 
 ## Bản web trên claude.ai
 
-`artifact/sus-tracker.html` là bản chạy trên claude.ai (https://claude.ai/artifact/SPWy62soL2pxHWzwEqJioY). Bản này không cần server: nó tra TikTok qua connector **TikTok MCP** của người đang xem, và lưu "ngày gỡ (ghi nhận)" chung cho mọi người dùng trang.
+`artifact/sus-tracker.html` là bản chạy trên claude.ai (https://claude.ai/artifact/SPWy62soL2pxHWzwEqJioY). Bản này không cần server. Nguồn chính là connector **Ecomdy Data Center** (trạng thái, tên, BC, spend theo ngày); connector **TikTok MCP** dùng để bù account ngoài phạm vi Data Center và đối chiếu trạng thái. Mỗi dòng có cột Nguồn và Ghi chú lỗi. Trang lưu "ngày gỡ (ghi nhận)" chung cho mọi người dùng trang.
