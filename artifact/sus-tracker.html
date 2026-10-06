@@ -808,7 +808,7 @@ function spendRows() {
       totalUSD: usdKnown ? spendData.months.reduce((a, m) => a + (e.months[m]?.cashUSD || 0), 0) : null,
       voucher: spendData.months.reduce((a, m) => a + (e.months[m]?.voucher || 0), 0),
       src: e.src || '', note: notes.join(' '), error: e.error, lastDay: e.lastDay || '' };
-  }).sort((a, b) => (b.totalUSD ?? b.total) - (a.totalUSD ?? a.total));
+  }); // keep the order the IDs were given (pasted list, or file order)
 }
 function renderSpend() {
   const list = spendRows(), months = spendData.months;
