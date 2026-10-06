@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suspension Checker</title>
+<script src="vendor/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280; --border: #e3e6eb;
+    --accent: #2563eb; --sus: #dc2626; --sus-bg: #fde8e8; --ok: #15803d; --ok-bg: #dcfce7;
+    --other: #a16207; --other-bg: #fef3c7; --err-bg: #eef0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1b1f27; --text: #e6e8ec; --muted: #9aa1ad; --border: #2c323d;
+      --accent: #60a5fa; --sus: #f87171; --sus-bg: #3b1717; --ok: #4ade80; --ok-bg: #12301d;
+      --other: #fbbf24; --other-bg: #3a2c0b; --err-bg: #262b34;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  input, select, textarea, button { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; }
+  input[type=file] { padding: 5px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .grow { flex: 1 1 220px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer; }
+  .stat.active { outline: 2px solid var(--accent); }
+  .stat b { display: block; font-size: 22px; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card); cursor: pointer; user-select: none; }
+  td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .b-sus { color: var(--sus); background: var(--sus-bg); }
+  .b-ok { color: var(--ok); background: var(--ok-bg); }
+  .b-other { color: var(--other); background: var(--other-bg); }
+  .b-na { color: var(--muted); background: var(--err-bg); font-weight: 500; }
+  .muted { color: var(--muted); }
+  .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 10px; }
+  .progress { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 10px; display: none; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .msg { margin-top: 8px; font-size: 13px; }
+  .msg.err { color: var(--sus); }
+  textarea { width: 100%; min-height: 38px; resize: vertical; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Suspension Checker</h1>
+  <p class="sub">Upload file suspension list (.xlsx/.csv) → tra cứu tên ad account, BC và trạng thái hiện tại (đang sus / đã gỡ) qua TikTok Business API.</p>
+
+  <div class="card">
+    <div class="row">
+      <label class="grow">1. File suspension list
+        <input type="file" id="file" accept=".xlsx,.xls,.csv">
+      </label>
+      <label class="grow">2. TikTok Access Token <span id="tokenHint"></span>
+        <input type="password" id="token" placeholder="Access-Token của agency/BC có quyền với các account" autocomplete="off">
+      </label>
+      <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="remember"> Nhớ token</label>
+      <button class="primary" id="checkBtn" disabled>3. Check trạng thái</button>
+    </div>
+    <div class="progress" id="progress"><div></div></div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="row">
+      <label class="grow" style="flex-basis:320px">Tìm ID / tên account (nhiều ID cách nhau bởi dấu phẩy, khoảng trắng hoặc xuống dòng)
+        <textarea id="q" rows="1" placeholder="7544667472331472913, 7654956414537416724 …"></textarea>
+      </label>
+      <label>Trạng thái
+        <select id="fStatus">
+          <option value="">Tất cả</option>
+          <option value="sus">Đang sus</option>
+          <option value="ok">Đã gỡ (Approved)</option>
+          <option value="other">Trạng thái khác</option>
+          <option value="na">Chưa check / lỗi</option>
+        </select>
+      </label>
+      <label>BC
+        <select id="fBc"><option value="">Tất cả</option></select>
+      </label>
+      <label>Agency
+        <select id="fAgency"><option value="">Tất cả</option></select>
+      </label>
+      <label>Sus từ ngày <input type="date" id="fFrom"></label>
+      <label>đến ngày <input type="date" id="fTo"></label>
+      <button id="resetBtn">Xoá lọc</button>
+      <button id="exportBtn" disabled>Xuất Excel</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tablewrap">
+      <table>
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"><tr><td class="muted">Chưa có dữ liệu — hãy upload file.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <span class="muted" id="pageInfo"></span>
+      <select id="pageSize"><option>50</option><option selected>100</option><option>500</option></select>
+      <button id="prev">‹</button><button id="next">›</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const STATUS_TEXT = {
+  STATUS_LIMIT: 'Đang sus', STATUS_ENABLE: 'Approved (đã gỡ)', STATUS_DISABLE: 'Disabled',
+  STATUS_PENDING_CONFIRM: 'Pending review', STATUS_PENDING_VERIFIED: 'Pending verify',
+  STATUS_CONFIRM_FAIL: 'Review failed', STATUS_CONFIRM_FAIL_END: 'Review failed',
+  STATUS_PENDING_CONFIRM_MODIFY: 'Pending modify review', STATUS_CONFIRM_MODIFY_FAIL: 'Modify review failed',
+  STATUS_WAIT_FOR_BPM_AUDIT: 'Waiting audit', STATUS_WAIT_FOR_PUBLIC_AUTH: 'Waiting auth',
+  STATUS_SELF_SERVICE_UNAUDITED: 'Unaudited', STATUS_CONTRACT_PENDING: 'Contract pending',
+};
+const COLS = [
+  ['advertiser_id', 'Advertiser ID'], ['name', 'Tên ad account'], ['bc', 'BC'],
+  ['agency', 'Agency'], ['sus_date', 'Ngày sus'], ['unsus_date', 'Ngày gỡ'], ['statusLabel', 'Trạng thái'],
+];
+
+let rows = [];        // merged data
+let view = [];        // filtered
+let page = 0, sortKey = 'sus_date', sortDir = -1, statFilter = '';
+
+// ---------- helpers ----------
+function normKey(k) { return String(k).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function findCol(keys, ...patterns) {
+  for (const p of patterns) { const k = keys.find((k) => p.test(normKey(k))); if (k) return k; }
+  return null;
+}
+function toDate(v) {
+  if (v === '' || v == null) return '';
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number') { const d = XLSX.SSF.parse_date_code(v); return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`; }
+  const s = String(v).trim();
+  const m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  const m2 = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/); // dd/mm/yyyy
+  if (m2) return `${m2[3]}-${m2[2].padStart(2,'0')}-${m2[1].padStart(2,'0')}`;
+  return s;
+}
+function bucket(r) {
+  if (!r.status) return 'na';
+  if (r.status === 'STATUS_LIMIT') return 'sus';
+  if (r.status === 'STATUS_ENABLE') return 'ok';
+  return 'other';
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function setMsg(t, err) { $('msg').textContent = t; $('msg').className = 'msg' + (err ? ' err' : ''); }
+
+// ---------- file load ----------
+$('file').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
+    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: true });
+    if (!json.length) throw new Error('File trống');
+    const keys = Object.keys(json[0]);
+    const kId = findCol(keys, /^advertiserid$/, /advertiser/, /^adid$/, /accountid/);
+    const kSus = findCol(keys, /punishbegin/, /suspen.*(date|time)/, /begin/, /start/);
+    const kUnsus = findCol(keys, /punishend/, /unpunish/, /unsus/, /release/, /recover/, /lift/, /end(time|date)/);
+    const kAgency = findCol(keys, /agentaccountname/, /agency/, /agent.*name/);
+    if (!kId) throw new Error('Không tìm thấy cột advertiser_id trong file');
+    rows = json.map((r) => ({
+      advertiser_id: String(r[kId]).trim(),
+      agency: kAgency ? String(r[kAgency]).trim() : '',
+      sus_date: kSus ? toDate(r[kSus]) : '',
+      unsus_file: kUnsus ? toDate(r[kUnsus]) : '',
+      name: '', bc: '', status: '', statusLabel: 'Chưa check', unsus_date: '',
+    })).filter((r) => /^\d+$/.test(r.advertiser_id));
+    rows.forEach((r) => { r.unsus_date = r.unsus_file; });
+    fillSelect('fAgency', rows.map((r) => r.agency));
+    fillSelect('fBc', []);
+    $('checkBtn').disabled = false; $('exportBtn').disabled = false;
+    setMsg(`Đã đọc ${rows.length} dòng (${new Set(rows.map((r) => r.advertiser_id)).size} account). Cột ID: "${kId}", ngày sus: "${kSus || '—'}"${kUnsus ? `, ngày gỡ: "${kUnsus}"` : ''}. Bấm "Check trạng thái" để tra cứu.`);
+    page = 0; render();
+  } catch (err) { setMsg('Lỗi đọc file: ' + err.message, true); }
+});
+
+function fillSelect(id, values) {
+  const sel = $(id), cur = sel.value;
+  const uniq = [...new Set(values.filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Tất cả</option>' + uniq.map((v) => `<option>${esc(v)}</option>`).join('');
+  if (uniq.includes(cur)) sel.value = cur;
+}
+
+// ---------- lookup ----------
+$('checkBtn').addEventListener('click', async () => {
+  const token = $('token').value.trim();
+  if (!token && !serverToken) return setMsg('Hãy nhập TikTok Access Token.', true);
+  try { $('remember').checked ? localStorage.setItem('tt_token', token) : localStorage.removeItem('tt_token'); } catch {}
+  const ids = [...new Set(rows.map((r) => r.advertiser_id))];
+  const CHUNK = 500, results = {};
+  $('checkBtn').disabled = true; $('progress').style.display = 'block';
+  try {
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      setMsg(`Đang check ${Math.min(i + CHUNK, ids.length)}/${ids.length} account…`);
+      const res = await fetch('/api/lookup', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: ids.slice(i, i + CHUNK), token }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || res.statusText);
+      Object.assign(results, body.results);
+      $('progress').firstElementChild.style.width = `${Math.min(100, ((i + CHUNK) / ids.length) * 100)}%`;
+    }
+    let errors = 0;
+    for (const r of rows) {
+      const x = results[r.advertiser_id] || {};
+      r.name = x.name || '';
+      r.bc = x.owner_bc_id ? (x.bc_name ? `${x.bc_name} (${x.owner_bc_id})` : x.owner_bc_id) : '';
+      r.status = x.status || '';
+      r.statusLabel = x.status ? (STATUS_TEXT[x.status] || x.status) : (x.error || 'Không có dữ liệu');
+      if (!x.status) errors++;
+      r.unsus_date = r.unsus_file || (x.status && x.status !== 'STATUS_LIMIT' && x.unsuspended_seen ? `${x.unsuspended_seen} (ghi nhận)` : '');
+    }
+    fillSelect('fBc', rows.map((r) => r.bc));
+    setMsg(`Xong. ${rows.length - errors}/${rows.length} dòng có dữ liệu.` + (errors ? ` ${errors} dòng lỗi (xem cột Trạng thái).` : ''), errors === rows.length);
+  } catch (err) {
+    setMsg('Lỗi khi check: ' + err.message, true);
+  } finally {
+    $('checkBtn').disabled = false; $('progress').style.display = 'none';
+    page = 0; render();
+  }
+});
+
+// ---------- filtering / rendering ----------
+function applyFilters() {
+  const ids = $('q').value.split(/[\s,;]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const st = $('fStatus').value || statFilter, bc = $('fBc').value, ag = $('fAgency').value;
+  const from = $('fFrom').value, to = $('fTo').value;
+  view = rows.filter((r) => {
+    if (ids.length && !ids.some((q) => r.advertiser_id.includes(q) || r.name.toLowerCase().includes(q))) return false;
+    if (st && bucket(r) !== st) return false;
+    if (bc && r.bc !== bc) return false;
+    if (ag && r.agency !== ag) return false;
+    if (from && r.sus_date < from) return false;
+    if (to && r.sus_date > to) return false;
+    return true;
+  });
+  view.sort((a, b) => String(a[sortKey]).localeCompare(String(b[sortKey])) * sortDir);
+}
+
+function renderStats() {
+  const c = { all: rows.length, sus: 0, ok: 0, other: 0, na: 0 };
+  rows.forEach((r) => c[bucket(r)]++);
+  const tiles = [['', 'Tổng', c.all], ['sus', 'Đang sus', c.sus], ['ok', 'Đã gỡ (Approved)', c.ok], ['other', 'Trạng thái khác', c.other], ['na', 'Chưa check / lỗi', c.na]];
+  $('stats').innerHTML = tiles.map(([k, l, n]) => `<div class="stat ${statFilter === k && rows.length ? 'active' : ''}" data-k="${k}"><b>${n.toLocaleString()}</b><span>${l}</span></div>`).join('');
+}
+$('stats').addEventListener('click', (e) => {
+  const t = e.target.closest('.stat'); if (!t) return;
+  statFilter = t.dataset.k; $('fStatus').value = ''; page = 0; render();
+});
+
+function render() {
+  applyFilters(); renderStats();
+  $('thead').innerHTML = COLS.map(([k, l]) => `<th data-k="${k}">${l}${sortKey === k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('');
+  const size = +$('pageSize').value, pages = Math.max(1, Math.ceil(view.length / size));
+  page = Math.min(page, pages - 1);
+  const slice = view.slice(page * size, page * size + size);
+  const cls = { sus: 'b-sus', ok: 'b-ok', other: 'b-other', na: 'b-na' };
+  $('tbody').innerHTML = slice.length ? slice.map((r) => `<tr>
+    <td class="mono">${esc(r.advertiser_id)}</td><td>${esc(r.name) || '<span class="muted">—</span>'}</td>
+    <td>${esc(r.bc) || '<span class="muted">—</span>'}</td><td>${esc(r.agency)}</td>
+    <td>${esc(r.sus_date)}</td><td>${esc(r.unsus_date) || '<span class="muted">—</span>'}</td>
+    <td><span class="badge ${cls[bucket(r)]}">${esc(r.statusLabel)}</span></td></tr>`).join('')
+    : `<tr><td colspan="${COLS.length}" class="muted">${rows.length ? 'Không có dòng nào khớp bộ lọc.' : 'Chưa có dữ liệu — hãy upload file.'}</td></tr>`;
+  $('pageInfo').textContent = `${view.length.toLocaleString()} dòng · trang ${page + 1}/${pages}`;
+}
+
+$('thead').addEventListener('click', (e) => {
+  const k = e.target.closest('th')?.dataset.k; if (!k) return;
+  sortDir = sortKey === k ? -sortDir : 1; sortKey = k; render();
+});
+['q', 'fStatus', 'fBc', 'fAgency', 'fFrom', 'fTo', 'pageSize'].forEach((id) =>
+  $(id).addEventListener('input', () => { if (id === 'fStatus') statFilter = ''; page = 0; render(); }));
+$('prev').onclick = () => { page = Math.max(0, page - 1); render(); };
+$('next').onclick = () => { page++; render(); };
+$('resetBtn').onclick = () => { ['q', 'fStatus', 'fBc', 'fAgency', 'fFrom', 'fTo'].forEach((id) => ($(id).value = '')); statFilter = ''; page = 0; render(); };
+
+$('exportBtn').onclick = () => {
+  applyFilters();
+  const data = view.map((r) => ({
+    'Advertiser ID': r.advertiser_id, 'Tên ad account': r.name, 'BC': r.bc, 'Agency': r.agency,
+    'Ngày sus': r.sus_date, 'Ngày gỡ': r.unsus_date, 'Trạng thái': r.statusLabel, 'Status (API)': r.status,
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Result');
+  XLSX.writeFile(wb, `suspension_check_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+
+// ---------- init ----------
+let serverToken = false;
+try { const t = localStorage.getItem('tt_token'); if (t) { $('token').value = t; $('remember').checked = true; } } catch {}
+fetch('/api/config').then((r) => r.json()).then((c) => {
+  serverToken = c.hasServerToken;
+  if (serverToken) { $('tokenHint').textContent = '(server đã có token — có thể để trống)'; }
+}).catch(() => {});
+render();
+</script>
+</body>
+</html>

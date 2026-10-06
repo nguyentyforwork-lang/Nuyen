@@ -1,0 +1,14 @@
+{
+  "name": "nuyen-suspension-checker",
+  "version": "1.0.0",
+  "description": "Upload a TikTok suspension list (.xlsx) and look up ad account name, Business Center and current status",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
