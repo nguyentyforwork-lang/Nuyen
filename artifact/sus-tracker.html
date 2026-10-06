@@ -92,8 +92,8 @@
   td.zero { color: var(--muted); }
   tr.total td { font-weight: 700; border-bottom: 2px solid var(--line); }
   td.tot { font-weight: 600; }
-  #spendWrap, #missingWrap { max-height: 70vh; overflow: auto; }
-  #spendWrap th, #missingWrap th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  #spendWrap { max-height: 70vh; overflow: auto; }
+  #spendWrap th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
   @media (max-width: 760px) {
     .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .tile:first-child { grid-column: span 2; }
@@ -163,22 +163,6 @@
     </div>
   </section>
 
-  <section class="panel" id="missingPanel" hidden>
-    <div class="spend-head">
-      <div>
-        <h2>Đang sus trong Data Center nhưng không có trong file · <span id="missingCount">0</span></h2>
-        <p>Các account Ecomdy Data Center đang ghi STATUS_LIMIT (trong phạm vi quyền của bạn) mà file upload không có. Ngày vào sus nguồn WEBHOOK là mốc thật của TikTok; SYNC_SCRIPT chỉ là lúc hệ thống quét ra.</p>
-      </div>
-      <div class="spend-ctrl"><button id="missingExportBtn" disabled>Tải Excel danh sách thiếu</button></div>
-    </div>
-    <div class="tablewrap" id="missingWrap">
-      <table>
-        <thead><tr><th>Advertiser ID</th><th>Tên ad account</th><th>BC</th><th>Ngày vào sus</th><th>Nguồn ngày</th><th>Lý do</th></tr></thead>
-        <tbody id="missingBody"></tbody>
-      </table>
-    </div>
-  </section>
-
   <section class="panel" id="spendPanel">
     <div class="spend-head">
       <div>
@@ -229,7 +213,7 @@ const EXAMPLE = [
 let rows = EXAMPLE, isExample = true, view = [];
 let page = 0, sortKey = 'sus_date', sortDir = -1, tileFilter = '';
 let mcp = null, db = null, downloads = null;
-let checked = false, spendBusy = false, spendData = null, dcAll = null, dcMissing = null;
+let checked = false, spendBusy = false, spendData = null, dcAll = null;
 
 // ---------- capabilities (page works without them; features light up) ----------
 const use = (n) => (window.claude?.use ? window.claude.use(n) : Promise.resolve(null)).catch(() => null);
@@ -298,7 +282,7 @@ async function loadFile(f) {
       name: '', bc: '', bc_id: '', status: '', statusLabel: 'Chưa check', unsus_date: '', unsus_seen: false,
     })).filter((r) => /^\d+$/.test(r.advertiser_id));
     rows.forEach((r) => { r.unsus_date = r.unsus_file; });
-    isExample = false; checked = false; spendData = null; $('spendWrap').hidden = true; dcMissing = null; renderMissing();
+    isExample = false; checked = false; spendData = null; $('spendWrap').hidden = true;
     setSpendStatus('Bấm "Check trạng thái" trước để biết account nào đang sus.');
     setDefaultMonths();
     $('fileName').textContent = f.name;
@@ -443,7 +427,6 @@ async function saveHistory(shards, dirty) {
 $('checkBtn').addEventListener('click', async () => {
   if (!mcp) return setStatus('Trang chưa được dùng connector. Hãy mở trang trong claude.ai và cho phép kết nối khi được hỏi.', true);
   const ids = [...new Set(rows.map((r) => r.advertiser_id))];
-  const fileIds = new Set(ids);
   const tt = {}, out = {};
   const sourceIssues = [];
   $('checkBtn').disabled = true; setProgress(0);
@@ -542,8 +525,6 @@ $('checkBtn').addEventListener('click', async () => {
       r.unsus_date = r.unsus_file || (susNow ? x.prev_unsus : x.unsus_seen) || '';
       if (x.status) ok++; else noData++;
     }
-    dcMissing = dcMap ? Object.values(dcMap).filter((d) => d.status === 'STATUS_LIMIT' && !fileIds.has(String(d._id))) : null;
-    renderMissing();
     fillSelect('fBc', rows.map((r) => r.bc || r.bc_id));
     let msg = `Xong lúc ${new Date().toLocaleTimeString('vi-VN')}. ${ok.toLocaleString()} / ${rows.length.toLocaleString()} dòng có dữ liệu (${fromDc.toLocaleString()} từ Ecomdy Data Center, ${(ok - fromDc).toLocaleString()} từ TikTok).`;
     if (noData) msg += ` ${noData.toLocaleString()} dòng không tra được ở cả hai nguồn.`;
@@ -840,28 +821,6 @@ $('spendExportBtn').onclick = async () => {
     return o;
   });
   await saveSheet(XLSX.utils.json_to_sheet(data), 'sus_spend', setSpendStatus);
-};
-
-// ---------- accounts suspended in Data Center but missing from the file ----------
-function renderMissing() {
-  const panel = $('missingPanel');
-  if (!dcMissing) { panel.hidden = true; return; }
-  panel.hidden = false;
-  $('missingCount').textContent = dcMissing.length.toLocaleString();
-  const list = [...dcMissing].sort((a, b) => String(b.suspendedAt || '').localeCompare(String(a.suspendedAt || '')));
-  const dash = '<span class="muted">—</span>';
-  $('missingBody').innerHTML = list.map((d) => `<tr><td class="id">${esc(d._id)}</td><td class="name">${esc(d.report?.advertiser_name) || dash}</td>`
-    + `<td>${esc(d.bcName) || dash}<span class="sub">${esc(d.bc_id)}</span></td><td class="date">${esc(dDate(d.suspendedAt)) || dash}</td>`
-    + `<td>${esc(d.statusSource) || dash}</td><td class="note">${esc(String(d.suspensionReason || '').replace(/\s+/g, ' '))}</td></tr>`).join('')
-    || `<tr><td colspan="6" class="muted">Không có account nào: mọi account đang sus trong Data Center đều có trong file.</td></tr>`;
-  $('missingExportBtn').disabled = !downloads || !list.length;
-}
-$('missingExportBtn').onclick = async () => {
-  const data = (dcMissing || []).map((d) => ({
-    'Advertiser ID': d._id, 'Tên ad account': d.report?.advertiser_name || '', 'BC': d.bcName || '', 'BC ID': d.bc_id || '',
-    'Ngày vào sus (Data Center)': dDate(d.suspendedAt), 'Nguồn ngày sus': d.statusSource || '', 'Lý do': String(d.suspensionReason || '').replace(/\s+/g, ' '),
-  }));
-  await saveSheet(XLSX.utils.json_to_sheet(data), 'sus_thieu_trong_file', setStatus);
 };
 
 render();
