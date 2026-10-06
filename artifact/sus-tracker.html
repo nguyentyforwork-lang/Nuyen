@@ -1,0 +1,470 @@
+<title>Ecomdy Sus Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  /* Layout: one working column — load bar, summary tiles, filter strip, results table. */
+  :root {
+    --bg: #f3f5f7; --surface: #ffffff; --fg: #17202b; --muted: #5d6b7a; --line: #dfe4ea;
+    --accent: #0f6f78; --accent-fg: #ffffff; --accent-soft: #e1f0f1;
+    --sus: #b4232f; --sus-soft: #fbe6e7; --ok: #1d7a43; --ok-soft: #e0f3e7;
+    --warn: #8a5a00; --warn-soft: #fbefd5; --na-soft: #eceff3;
+    --f-ui: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #11161c; --surface: #19212a; --fg: #e5eaf0; --muted: #94a2b2; --line: #2a3542;
+    --accent: #4fb8c1; --accent-fg: #0b1418; --accent-soft: #16343a;
+    --sus: #f08a92; --sus-soft: #3a1c21; --ok: #6fd39a; --ok-soft: #173222;
+    --warn: #e9b65a; --warn-soft: #362a12; --na-soft: #232c37; color-scheme: dark;
+  } }
+  :root[data-theme="dark"] {
+    --bg: #11161c; --surface: #19212a; --fg: #e5eaf0; --muted: #94a2b2; --line: #2a3542;
+    --accent: #4fb8c1; --accent-fg: #0b1418; --accent-soft: #16343a;
+    --sus: #f08a92; --sus-soft: #3a1c21; --ok: #6fd39a; --ok-soft: #173222;
+    --warn: #e9b65a; --warn-soft: #362a12; --na-soft: #232c37; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-ui); }
+  .wrap { max-width: 1240px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 48px; display: grid; gap: 16px; }
+  header h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; text-wrap: balance; }
+  header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+  .load { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
+  .drop { border: 1.5px dashed var(--line); border-radius: 8px; padding: 14px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop strong { font-weight: 600; }
+  .drop .hint { color: var(--muted); font-size: 13px; }
+  #file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  button, select, input[type=date], textarea { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 7px 11px; }
+  button { cursor: pointer; font-weight: 500; }
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, .drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); padding: 9px 18px; }
+  button:disabled { opacity: .45; cursor: default; }
+  .status { margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 1.5em; }
+  .status.err { color: var(--sus); }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+  .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+  .tile { text-align: left; display: grid; gap: 2px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+  .tile b { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .tile span { font-size: 12px; color: var(--muted); letter-spacing: .02em; }
+  .tile[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .tile.t-sus b { color: var(--sus); } .tile.t-ok b { color: var(--ok); } .tile.t-other b { color: var(--warn); }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  .filters label { display: grid; gap: 4px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; min-width: 0; }
+  .filters .q { flex: 1 1 280px; }
+  .filters select { max-width: 260px; }
+  textarea { width: 100%; resize: vertical; min-height: 38px; font-family: var(--f-mono); font-size: 13px; text-transform: none; }
+  .filters .actions { display: flex; gap: 8px; margin-left: auto; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  th button { all: unset; cursor: pointer; }
+  th button:focus-visible { outline: 2px solid var(--accent); }
+  td.id { font-family: var(--f-mono); font-size: 12.5px; }
+  td.date { font-variant-numeric: tabular-nums; }
+  td.name { white-space: normal; min-width: 180px; }
+  .sub { display: block; font-size: 11.5px; color: var(--muted); font-family: var(--f-mono); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .p-sus { color: var(--sus); background: var(--sus-soft); }
+  .p-ok { color: var(--ok); background: var(--ok-soft); }
+  .p-other { color: var(--warn); background: var(--warn-soft); }
+  .p-na { color: var(--muted); background: var(--na-soft); font-weight: 500; }
+  .seen { color: var(--muted); font-size: 11.5px; }
+  .muted { color: var(--muted); }
+  .example-tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); padding: 2px 8px; border-radius: 4px; margin-bottom: 10px; }
+  .foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .pager { display: flex; gap: 6px; align-items: center; }
+  .note { font-size: 12.5px; color: var(--muted); max-width: 90ch; }
+  @media (max-width: 760px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tile:first-child { grid-column: span 2; }
+    .load { grid-template-columns: 1fr; }
+    .filters .actions { margin-left: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Ecomdy Sus Tracker</h1>
+    <p>Thả file suspension list vào, trang sẽ tra từng advertiser_id qua TikTok để lấy tên ad account, BC và trạng thái hiện tại.</p>
+  </header>
+
+  <section class="panel">
+    <div class="load">
+      <label class="drop" id="drop" tabindex="0" for="file">
+        <input type="file" id="file" accept=".xlsx,.xls,.csv">
+        <strong id="fileName">Chọn file .xlsx / .csv</strong>
+        <span class="hint">hoặc kéo thả vào đây · cần cột <code>advertiser_id</code>, nên có <code>latest_punish_begin_time</code></span>
+      </label>
+      <button class="primary" id="checkBtn" disabled>Check trạng thái</button>
+    </div>
+    <div class="bar" id="bar" hidden><i></i></div>
+    <div class="status" id="status">Chưa có file.</div>
+  </section>
+
+  <div class="tiles" id="tiles">
+    <button class="tile" data-k="" aria-pressed="true"><b id="n-all">0</b><span>Tổng account</span></button>
+    <button class="tile t-sus" data-k="sus" aria-pressed="false"><b id="n-sus">0</b><span>Đang sus</span></button>
+    <button class="tile t-ok" data-k="ok" aria-pressed="false"><b id="n-ok">0</b><span>Đã gỡ · Approved</span></button>
+    <button class="tile t-other" data-k="other" aria-pressed="false"><b id="n-other">0</b><span>Trạng thái khác</span></button>
+    <button class="tile" data-k="na" aria-pressed="false"><b id="n-na">0</b><span>Chưa check / không có quyền</span></button>
+  </div>
+
+  <section class="panel filters">
+    <label class="q">Tìm ID hoặc tên (dán nhiều ID được)
+      <textarea id="q" rows="1" placeholder="7544667472331472913, 7654956414537416724"></textarea>
+    </label>
+    <label>BC<select id="fBc"><option value="">Tất cả</option></select></label>
+    <label>Agency<select id="fAgency"><option value="">Tất cả</option></select></label>
+    <label>Sus từ<input type="date" id="fFrom"></label>
+    <label>Đến<input type="date" id="fTo"></label>
+    <div class="actions">
+      <button id="resetBtn">Xoá lọc</button>
+      <button id="exportBtn" disabled>Tải Excel</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div id="exampleTag" class="example-tag">Dữ liệu ví dụ</div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="foot">
+      <span id="pageInfo"></span>
+      <div class="pager">
+        <select id="pageSize" aria-label="Số dòng mỗi trang"><option>50</option><option selected>100</option><option>500</option></select>
+        <button id="prev" aria-label="Trang trước">‹</button>
+        <button id="next" aria-label="Trang sau">›</button>
+      </div>
+    </div>
+  </section>
+
+  <p class="note">Trạng thái lấy từ TikTok: <b>STATUS_LIMIT</b> = đang sus, <b>STATUS_ENABLE</b> = đã gỡ. TikTok không trả về ngày gỡ sus, nên "Ngày gỡ" là ngày trang này lần đầu thấy account hết sus (lưu chung cho mọi người dùng trang). Check thường xuyên để ngày này sát thực tế. Nếu file có sẵn cột ngày gỡ thì dùng cột đó.</p>
+</div>
+
+<script>
+const SERVER = 'TikTok MCP';
+const $ = (id) => document.getElementById(id);
+const STATUS_TEXT = {
+  STATUS_LIMIT: 'Đang sus', STATUS_ENABLE: 'Approved', STATUS_DISABLE: 'Disabled',
+  STATUS_PENDING_CONFIRM: 'Chờ duyệt', STATUS_PENDING_VERIFIED: 'Chờ xác minh',
+  STATUS_CONFIRM_FAIL: 'Duyệt thất bại', STATUS_CONFIRM_FAIL_END: 'Duyệt thất bại',
+  STATUS_PENDING_CONFIRM_MODIFY: 'Chờ duyệt sửa đổi', STATUS_CONFIRM_MODIFY_FAIL: 'Sửa đổi bị từ chối',
+  STATUS_WAIT_FOR_BPM_AUDIT: 'Chờ audit', STATUS_WAIT_FOR_PUBLIC_AUTH: 'Chờ xác thực',
+  STATUS_SELF_SERVICE_UNAUDITED: 'Chưa audit', STATUS_CONTRACT_PENDING: 'Chờ hợp đồng',
+};
+const COLS = [
+  ['advertiser_id', 'Advertiser ID'], ['name', 'Tên ad account'], ['bc', 'BC'], ['agency', 'Agency'],
+  ['sus_date', 'Ngày sus'], ['unsus_date', 'Ngày gỡ'], ['statusLabel', 'Trạng thái'],
+];
+const EXAMPLE = [
+  { advertiser_id: '7600000000000000001', name: 'Shop A_Account 1', bc: 'Client BC A', bc_id: '7200000000000000001', agency: 'Ecomdy Media Ltd', sus_date: '2026-07-02', unsus_date: '', unsus_seen: false, status: 'STATUS_LIMIT', statusLabel: 'Đang sus' },
+  { advertiser_id: '7600000000000000002', name: 'Shop B_Account 3', bc: 'Client BC B', bc_id: '7200000000000000002', agency: 'Ecomdy Media Ltd (VN)', sus_date: '2026-07-26', unsus_date: '2026-08-04', unsus_seen: true, status: 'STATUS_ENABLE', statusLabel: 'Approved' },
+  { advertiser_id: '7600000000000000003', name: '', bc: '', bc_id: '', agency: 'Ecomdy Media Ltd (VN)', sus_date: '2026-09-17', unsus_date: '', unsus_seen: false, status: '', statusLabel: 'Không có quyền' },
+];
+
+let rows = EXAMPLE, isExample = true, view = [];
+let page = 0, sortKey = 'sus_date', sortDir = -1, tileFilter = '';
+let mcp = null, db = null, downloads = null;
+
+// ---------- capabilities (page works without them; features light up) ----------
+const use = (n) => (window.claude?.use ? window.claude.use(n) : Promise.resolve(null)).catch(() => null);
+use('mcp').then((m) => { mcp = m; syncCheckBtn(); });
+use('db').then((d) => { db = d; });
+use('downloads').then((d) => { downloads = d; syncExportBtn(); });
+
+function syncCheckBtn() { $('checkBtn').disabled = isExample || !rows.length; }
+function syncExportBtn() { $('exportBtn').disabled = isExample || !downloads; }
+
+// ---------- helpers ----------
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const normKey = (k) => String(k).toLowerCase().replace(/[^a-z0-9]/g, '');
+const today = () => new Date().toISOString().slice(0, 10);
+function findCol(keys, ...pats) { for (const p of pats) { const k = keys.find((k) => p.test(normKey(k))); if (k) return k; } return null; }
+function toDate(v) {
+  if (v === '' || v == null) return '';
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number') { const d = XLSX.SSF.parse_date_code(v); return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`; }
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return s;
+}
+function bucket(r) {
+  if (!r.status) return 'na';
+  if (r.status === 'STATUS_LIMIT') return 'sus';
+  if (r.status === 'STATUS_ENABLE') return 'ok';
+  return 'other';
+}
+function setStatus(t, err) { $('status').textContent = t; $('status').className = 'status' + (err ? ' err' : ''); }
+function setProgress(p) { $('bar').hidden = p == null; if (p != null) $('bar').firstElementChild.style.width = `${Math.round(p * 100)}%`; }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---------- file ----------
+const drop = $('drop');
+drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } });
+['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+$('file').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) loadFile(f); });
+
+async function loadFile(f) {
+  try {
+    const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
+    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '', raw: true });
+    if (!json.length) throw new Error('sheet đầu tiên không có dòng nào.');
+    const keys = Object.keys(json[0]);
+    const kId = findCol(keys, /^advertiserid$/, /advertiser/, /^adid$/, /accountid$/);
+    const kSus = findCol(keys, /punishbegin/, /suspen.*(date|time)/, /begin/, /start/);
+    const kUnsus = findCol(keys, /punishend/, /unpunish/, /unsus/, /release/, /recover/, /lift/, /end(time|date)/);
+    const kAgency = findCol(keys, /agentaccountname/, /agency/, /agent.*name/);
+    if (!kId) throw new Error('không thấy cột advertiser_id.');
+    rows = json.map((r) => ({
+      advertiser_id: String(r[kId]).trim(),
+      agency: kAgency ? String(r[kAgency]).trim() : '',
+      sus_date: kSus ? toDate(r[kSus]) : '',
+      unsus_file: kUnsus ? toDate(r[kUnsus]) : '',
+      name: '', bc: '', bc_id: '', status: '', statusLabel: 'Chưa check', unsus_date: '', unsus_seen: false,
+    })).filter((r) => /^\d+$/.test(r.advertiser_id));
+    rows.forEach((r) => { r.unsus_date = r.unsus_file; });
+    isExample = false;
+    $('fileName').textContent = f.name;
+    fillSelect('fAgency', rows.map((r) => r.agency));
+    fillSelect('fBc', []);
+    syncCheckBtn(); syncExportBtn();
+    const uniq = new Set(rows.map((r) => r.advertiser_id)).size;
+    setStatus(`Đã đọc ${rows.length.toLocaleString()} dòng, ${uniq.toLocaleString()} account. Bấm "Check trạng thái" để tra trên TikTok.`);
+    page = 0; render();
+  } catch (err) { setStatus('Không đọc được file: ' + err.message, true); }
+}
+
+function fillSelect(id, values) {
+  const sel = $(id), cur = sel.value;
+  const uniq = [...new Set(values.filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Tất cả</option>' + uniq.map((v) => `<option>${esc(v)}</option>`).join('');
+  if (uniq.includes(cur)) sel.value = cur;
+}
+
+// ---------- TikTok via connector ----------
+function mcpMessage(e) {
+  switch (e?.code) {
+    case 'server_not_connected': return `Chưa kết nối ${SERVER}. Thêm nó trong claude.ai → Settings → Connectors rồi tải lại trang.`;
+    case 'needs_reauth': return `${SERVER} cần đăng nhập lại: vào claude.ai → Settings → Connectors để kết nối lại.`;
+    case 'not_in_manifest': return `Bạn chưa cho phép trang này dùng ${SERVER}. Mở menu Permissions của trang để bật.`;
+    case 'selection_required': return `Bạn có nhiều kết nối ${SERVER}; hãy chọn một khi trang hỏi.`;
+    case 'blocked_by_policy': case 'approval_required': return `Tổ chức của bạn đang chặn công cụ này của ${SERVER}.`;
+    case 'server_unavailable': return `${SERVER} đang không phản hồi. Thử lại sau ít phút.`;
+    default: return `${SERVER} báo lỗi: ${e?.message || e}`;
+  }
+}
+
+// Returns the TikTok envelope {code, message, data}, whether the connector resolved or rejected with it.
+async function call(tool, input) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await mcp.callTool(SERVER, tool, input, { cache: false });
+      return typeof res.payload === 'string' ? JSON.parse(res.payload) : res.payload;
+    } catch (e) {
+      if (e?.code === 'tool_error') {
+        const p = e.result?.payload ?? e.result?.content?.[0]?.text ?? e.message;
+        try { return typeof p === 'string' ? JSON.parse(p) : p; } catch { return { code: -1, message: String(p) }; }
+      }
+      if (e?.retryable && attempt === 0) { await sleep((e.retryAfterMs || 1500) + Math.random() * 500); continue; }
+      throw e;
+    }
+  }
+}
+
+async function fetchBcNames() {
+  const names = {};
+  for (let page = 1; page <= 20; page++) {
+    const env = await call('bc_get', { page, page_size: 50 });
+    if (env?.code !== 0) break;
+    for (const it of env.data?.list || []) if (it.bc_info?.bc_id) names[String(it.bc_info.bc_id)] = it.bc_info.name || '';
+    if (page >= (env.data?.page_info?.total_page || 1)) break;
+  }
+  return names;
+}
+
+// One batch of ≤100 ids; ids the token cannot read (code 40001 lists them) are marked and the rest retried.
+async function fetchBatch(ids, out) {
+  let pending = ids;
+  for (let i = 0; i < 6 && pending.length; i++) {
+    const env = await call('advertiser_info_get', { advertiser_ids: pending, fields: ['advertiser_id', 'name', 'status', 'owner_bc_id'] });
+    if (env?.code === 0) {
+      const got = new Set();
+      for (const a of env.data?.list || []) {
+        const id = String(a.advertiser_id); got.add(id);
+        out[id] = { name: a.name || '', status: a.status || '', bc_id: a.owner_bc_id ? String(a.owner_bc_id) : '' };
+      }
+      pending.forEach((id) => { if (!got.has(id)) out[id] = { error: 'Không tìm thấy' }; });
+      return;
+    }
+    if (env?.code === 40100 || env?.code === 40133) { await sleep(2000 * (i + 1)); continue; }
+    const bad = new Set(String(env?.message || '').match(/\d{15,20}/g) || []);
+    if (env?.code === 40001 && bad.size) {
+      pending.forEach((id) => { if (bad.has(id)) out[id] = { error: 'Không có quyền' }; });
+      pending = pending.filter((id) => !bad.has(id));
+      continue;
+    }
+    pending.forEach((id) => { out[id] = { error: `Lỗi ${env?.code ?? ''}`.trim(), detail: env?.message }; });
+    return;
+  }
+  pending.forEach((id) => { if (!out[id]) out[id] = { error: 'Hết lượt thử' }; });
+}
+
+// ---------- shared "first seen un-suspended" history, sharded by the id's last two digits ----------
+const shardOf = (id) => 'h' + id.slice(-2);
+async function loadHistory() {
+  const map = {};
+  if (!db) return map;
+  try {
+    const snap = await db.collection('history').limit(1000).get();
+    snap.docs.forEach((d) => { map[d.id] = { ...(d.data()?.m || {}) }; });
+  } catch { /* history is optional */ }
+  return map;
+}
+async function saveHistory(shards, dirty) {
+  if (!db || !dirty.size) return true;
+  try {
+    for (const k of dirty) await db.collection('history').doc(k).set({ m: shards[k] });
+    return true;
+  } catch { return false; }
+}
+
+$('checkBtn').addEventListener('click', async () => {
+  if (!mcp) return setStatus(`Trang chưa được dùng ${SERVER}. Hãy mở trang trong claude.ai và cho phép kết nối khi được hỏi.`, true);
+  const ids = [...new Set(rows.map((r) => r.advertiser_id))];
+  const out = {};
+  $('checkBtn').disabled = true; setProgress(0);
+  try {
+    setStatus('Đang lấy danh sách BC…');
+    const bcNames = await fetchBcNames();
+    for (let i = 0; i < ids.length; i += 100) {
+      setStatus(`Đang tra ${Math.min(i + 100, ids.length).toLocaleString()} / ${ids.length.toLocaleString()} account…`);
+      await fetchBatch(ids.slice(i, i + 100), out);
+      setProgress(Math.min(1, (i + 100) / ids.length));
+    }
+    setStatus('Đang cập nhật lịch sử ngày gỡ…');
+    const shards = await loadHistory(), dirty = new Set(), t = today();
+    for (const [id, x] of Object.entries(out)) {
+      if (!x.status) continue;
+      const k = shardOf(id), s = (shards[k] ||= {}), h = s[id];
+      if (x.status === 'STATUS_LIMIT') { if (h) { delete s[id]; dirty.add(k); } }
+      else if (!h) { s[id] = t; dirty.add(k); }
+      x.unsus_seen = x.status === 'STATUS_LIMIT' ? '' : s[id];
+    }
+    const saved = await saveHistory(shards, dirty);
+
+    let ok = 0, noPerm = 0;
+    for (const r of rows) {
+      const x = out[r.advertiser_id] || {};
+      r.name = x.name || '';
+      r.bc_id = x.bc_id || '';
+      r.bc = x.bc_id ? (bcNames[x.bc_id] || '') : '';
+      r.status = x.status || '';
+      r.statusLabel = x.status ? (STATUS_TEXT[x.status] || x.status) : (x.error || 'Không có dữ liệu');
+      r.unsus_seen = !r.unsus_file && Boolean(x.unsus_seen);
+      r.unsus_date = r.unsus_file || x.unsus_seen || '';
+      if (x.status) ok++; else if (x.error === 'Không có quyền') noPerm++;
+    }
+    fillSelect('fBc', rows.map((r) => r.bc || r.bc_id));
+    let msg = `Xong lúc ${new Date().toLocaleTimeString('vi-VN')}. ${ok.toLocaleString()} / ${rows.length.toLocaleString()} dòng có dữ liệu.`;
+    if (noPerm) msg += ` ${noPerm.toLocaleString()} dòng tài khoản TikTok đang kết nối không có quyền xem; kết nối bằng tài khoản có quyền với các BC này để tra nốt.`;
+    if (!saved) msg += ' Không lưu được lịch sử ngày gỡ lần này.';
+    setStatus(msg, ok === 0);
+  } catch (e) {
+    setStatus(mcpMessage(e), true);
+  } finally {
+    setProgress(null); syncCheckBtn(); page = 0; render();
+  }
+});
+
+// ---------- filter / render ----------
+function applyFilters() {
+  const qs = $('q').value.split(/[\s,;]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const bc = $('fBc').value, ag = $('fAgency').value, from = $('fFrom').value, to = $('fTo').value;
+  view = rows.filter((r) => {
+    if (qs.length && !qs.some((q) => r.advertiser_id.includes(q) || r.name.toLowerCase().includes(q))) return false;
+    if (tileFilter && bucket(r) !== tileFilter) return false;
+    if (bc && (r.bc || r.bc_id) !== bc) return false;
+    if (ag && r.agency !== ag) return false;
+    if (from && r.sus_date < from) return false;
+    if (to && r.sus_date > to) return false;
+    return true;
+  });
+  view.sort((a, b) => String(a[sortKey]).localeCompare(String(b[sortKey])) * sortDir);
+}
+
+function render() {
+  applyFilters();
+  const c = { all: rows.length, sus: 0, ok: 0, other: 0, na: 0 };
+  rows.forEach((r) => c[bucket(r)]++);
+  for (const k in c) $('n-' + k).textContent = c[k].toLocaleString();
+  document.querySelectorAll('.tile').forEach((t) => t.setAttribute('aria-pressed', String(t.dataset.k === tileFilter)));
+  $('exampleTag').hidden = !isExample;
+
+  $('thead').innerHTML = COLS.map(([k, l]) => `<th><button data-k="${k}">${l}${sortKey === k ? (sortDir > 0 ? ' ↑' : ' ↓') : ''}</button></th>`).join('');
+  const size = +$('pageSize').value, pages = Math.max(1, Math.ceil(view.length / size));
+  page = Math.min(page, pages - 1);
+  const pill = { sus: 'p-sus', ok: 'p-ok', other: 'p-other', na: 'p-na' };
+  const dash = '<span class="muted">—</span>';
+  $('tbody').innerHTML = view.slice(page * size, page * size + size).map((r) => `<tr>
+    <td class="id">${esc(r.advertiser_id)}</td>
+    <td class="name">${esc(r.name) || dash}</td>
+    <td>${r.bc ? esc(r.bc) + `<span class="sub">${esc(r.bc_id)}</span>` : (r.bc_id ? `<span class="sub">${esc(r.bc_id)}</span>` : dash)}</td>
+    <td>${esc(r.agency) || dash}</td>
+    <td class="date">${esc(r.sus_date) || dash}</td>
+    <td class="date">${r.unsus_date ? esc(r.unsus_date) + (r.unsus_seen ? ' <span class="seen">ghi nhận</span>' : '') : dash}</td>
+    <td><span class="pill ${pill[bucket(r)]}">${esc(r.statusLabel)}</span></td>
+  </tr>`).join('') || `<tr><td colspan="${COLS.length}" class="muted">Không có dòng nào khớp bộ lọc.</td></tr>`;
+  $('pageInfo').textContent = `${view.length.toLocaleString()} dòng · trang ${page + 1}/${pages}`;
+  $('prev').disabled = page === 0; $('next').disabled = page >= pages - 1;
+}
+
+$('thead').addEventListener('click', (e) => {
+  const k = e.target.closest('button')?.dataset.k; if (!k) return;
+  sortDir = sortKey === k ? -sortDir : 1; sortKey = k; render();
+});
+$('tiles').addEventListener('click', (e) => {
+  const t = e.target.closest('.tile'); if (!t) return;
+  tileFilter = t.dataset.k; page = 0; render();
+});
+['q', 'fBc', 'fAgency', 'fFrom', 'fTo', 'pageSize'].forEach((id) => $(id).addEventListener('input', () => { page = 0; render(); }));
+$('prev').onclick = () => { page--; render(); };
+$('next').onclick = () => { page++; render(); };
+$('resetBtn').onclick = () => { ['q', 'fBc', 'fAgency', 'fFrom', 'fTo'].forEach((id) => { $(id).value = ''; }); tileFilter = ''; page = 0; render(); };
+
+$('exportBtn').onclick = async () => {
+  applyFilters();
+  const data = view.map((r) => ({
+    'Advertiser ID': r.advertiser_id, 'Tên ad account': r.name, 'BC': r.bc, 'BC ID': r.bc_id, 'Agency': r.agency,
+    'Ngày sus': r.sus_date, 'Ngày gỡ': r.unsus_date, 'Ngày gỡ là ngày ghi nhận': r.unsus_seen ? 'x' : '',
+    'Trạng thái': r.statusLabel, 'Status (TikTok)': r.status,
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Result');
+  const stamp = today();
+  try {
+    await downloads.save({ filename: `sus_check_${stamp}.xlsx`, data: XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) });
+  } catch (e) {
+    if (e?.code === 'rejected_extension' || e?.code === 'extension_not_enabled') {
+      try { await downloads.save({ filename: `sus_check_${stamp}.csv`, data: '﻿' + XLSX.utils.sheet_to_csv(ws) }); }
+      catch (e2) { if (e2?.code !== 'declined') setStatus('Không tải được file: ' + (e2?.message || e2), true); }
+    } else if (e?.code !== 'declined') setStatus('Không tải được file: ' + (e?.message || e), true);
+  }
+};
+
+render();
+</script>

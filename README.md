@@ -31,3 +31,7 @@ Mở http://localhost:3000.
 
 - TikTok API không trả về ngày gỡ sus, nên "Ngày gỡ (ghi nhận)" chỉ là ngày tool phát hiện. Check định kỳ (vd. mỗi ngày) để ngày ghi nhận sát thực tế. Lịch sử lưu ở `data/history.json`.
 - Mỗi lần gọi `/advertiser/info/` tra tối đa 100 ID; file ~4.300 dòng mất khoảng 1 phút.
+
+## Bản web trên claude.ai
+
+`artifact/sus-tracker.html` là bản chạy trên claude.ai (https://claude.ai/artifact/SPWy62soL2pxHWzwEqJioY). Bản này không cần server: nó tra TikTok qua connector **TikTok MCP** của người đang xem, và lưu "ngày gỡ (ghi nhận)" chung cho mọi người dùng trang.
