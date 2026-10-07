@@ -160,6 +160,13 @@ a.applink:hover .nm { text-decoration: underline; }
 .run:disabled { opacity: 0.5; cursor: not-allowed; }
 .rp-note { font-size: 12px; color: var(--muted); }
 .progress-line { font-size: 12px; color: var(--fg-2); text-align: right; min-height: 18px; padding-top: 8px; }
+.gbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 12px 10px; }
+.gchip { display: inline-flex; gap: 6px; align-items: baseline; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+.gchip:hover { border-color: var(--accent); }
+.gchip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.gchip .gm { color: var(--muted); font-size: 12px; }
+.gchip.on .gm, .gchip.on .r-good, .gchip.on .r-bad { color: inherit; }
+.gtag { font-size: 12px; color: var(--fg-2); }
 .placeholder { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 36px 16px; text-align: center; color: var(--muted); margin-top: 12px; }
 .section-h { font-size: 13px; font-weight: 700; color: var(--fg-2); margin: 14px 0 6px; }
 .empty { padding: 28px 14px; color: var(--muted); text-align: center; white-space: normal; }
@@ -248,7 +255,7 @@ const state = {
   preset: 'today', start: '', end: '',
   lvl2: LS.get('bcat.lvl2', 'account'),
   sort: LS.get('bcat.sort', { key: 'spend', dir: 'desc' }),
-  panel: null, opts: LS.get('bcat.opts', { overview: true, detail: false }), ran: null, lastKey: '',
+  panel: null, appGenre: null, opts: LS.get('bcat.opts', { overview: true, detail: false }), ran: null, lastKey: '',
   open: new Map(), accounts: [], queue: [], phase: null, paused: false, refresh: false, run: 0,
 };
 let mcp = null;
@@ -406,6 +413,24 @@ async function summarize(accounts) {
       queueRender();
     }
   }
+}
+
+// ---------- app genre (auto, from the app name; first matching rule wins) ----------
+const GENRES = [
+  ['Game Tools', /skin|rbx|robux|rbux|\bfps\b|booster|diamond|\bfff?\b|mod menu|sensi/i],
+  ['Short Drama', /drama|reels\b|shorts?\b|series|episode/i],
+  ['AI Learn', /learn|tutor|homework|study|math|solver|quiz|language|english|translat|\bgpt\b|chatbot|ai chat/i],
+  ['AI Photo', /photo|camera|selfie|face|beauty|retouch|enhanc|\bart\b|picture|\bpics?\b|collage|background|cutout|headshot|avatar/i],
+  ['Music', /music|mp3|ringtone|song|radio/i],
+  ['Video Player / TV', (n) => /\bTV|TV\b/.test(n) || /iptv|player|movie|stream|video/i.test(n)],
+  ['Utilities', /caller|blocker|call|sms|vpn|clean|battery|scan|\bqr\b|file|wifi|keyboard|launcher|weather|flashlight|pdf|recorder|tracker|lock|phone/i],
+  ['Prank / Fun', /prank|tricky|fun|joke|simulator/i],
+];
+const GENRE_OTHER = 'Khác';
+function genreOf(appId) {
+  const name = model?.apps.get(appId)?.name || '';
+  const hit = GENRES.find(([, t]) => (typeof t === 'function' ? t(name) : t.test(name)));
+  return hit ? hit[0] : GENRE_OTHER;
 }
 
 const appIdOf = (v) => (v && v !== '-' && String(v) !== '0' ? String(v) : null);
@@ -700,15 +725,25 @@ function renderPanel(st) {
         return row([`<td class="l meta">${esc(bcName(a.bc))}</td>`, `<td class="l"><span class="nm">${esc(a.name)}</span> <span class="meta">${esc(a.id)}</span></td>`, `<td class="l">${apps}</td>`, `<td class="num">${money(a.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
       }).join('') + '</tbody></table>';
   } else {
-    const byApp = st.apps;
-    const list = [...byApp].sort((a, b) => b[1].spend - a[1].spend);
-    html = `<h4>App đang chạy (${list.length})</h4>${loadingApps ? `<div class="note">Đã tải ${doneN}/${withSpend.length} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}<table><thead><tr><th class="l">App</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
+    // Genre totals over every running app; the chips filter the list below.
+    const genres = new Map();
+    for (const [id, e] of st.apps) {
+      const g = genreOf(id);
+      const t = genres.get(g) || { spend: 0, rev: 0, n: 0 };
+      t.spend += e.spend; t.rev += e.rev; t.n++; genres.set(g, t);
+    }
+    if (state.appGenre && !genres.has(state.appGenre)) state.appGenre = null;
+    const all = { spend: sum([...genres.values()], (e) => e.spend), rev: sum([...genres.values()], (e) => e.rev), n: st.apps.size };
+    const chip = (key, label, e) => { const r = roas(e.rev, e.spend); return `<button type="button" class="gchip ${state.appGenre === key ? 'on' : ''}" data-genre="${esc(key ?? '')}">${esc(label)} <span class="gm">${money(e.spend)} · <span class="${rcls(r)}">${pct(r)}</span> · ${e.n} app</span></button>`; };
+    const gbar = `<div class="gbar">${chip(null, 'Tất cả', all)}${[...genres].sort((a, b) => b[1].spend - a[1].spend).map(([g, e]) => chip(g, g, e)).join('')}</div>`;
+    const list = [...st.apps].filter(([id]) => !state.appGenre || genreOf(id) === state.appGenre).sort((a, b) => b[1].spend - a[1].spend);
+    html = `<h4>App đang chạy (${list.length}${state.appGenre ? ' · ' + esc(state.appGenre) : ''})</h4>${loadingApps ? `<div class="note">Đã tải ${doneN}/${withSpend.length} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}${gbar}<table><thead><tr><th class="l">App</th><th class="l">Genre</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
       (list.map(([id, e]) => {
         const a = model.apps.get(id) || {};
         const names = [...e.accs].map((x) => model.accounts.get(x)?.name || x);
         const r = roas(e.rev, e.spend);
-        return row([`<td class="l"><div class="namecell">${appLink(id, true)}<span class="meta">${esc(a.platform || '')}</span></div></td>`, `<td class="l" title="${esc(names.join('\n'))}">${e.accs.size} account <span class="meta">${esc(names.slice(0, 2).join(', '))}${names.length > 2 ? '…' : ''}</span></td>`, `<td class="num">${money(e.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
-      }).join('') || '<tr><td colspan="4" class="empty">Chưa có app nào.</td></tr>') + '</tbody></table>';
+        return row([`<td class="l"><div class="namecell">${appLink(id, true)}<span class="meta">${esc(a.platform || '')}</span></div></td>`, `<td class="l gtag">${esc(genreOf(id))}</td>`, `<td class="l" title="${esc(names.join('\n'))}">${e.accs.size} account <span class="meta">${esc(names.slice(0, 2).join(', '))}${names.length > 2 ? '…' : ''}</span></td>`, `<td class="num">${money(e.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
+      }).join('') || '<tr><td colspan="5" class="empty">Chưa có app nào.</td></tr>') + '</tbody></table>';
   }
   el.innerHTML = `<div class="panel">${html}</div>`;
 }
@@ -910,6 +945,12 @@ function initControls() {
   }));
   $('#runBtn').disabled = !state.opts.overview && !state.opts.detail;
   $('#runBtn').addEventListener('click', () => load());
+  $('#panel').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-genre]');
+    if (!c) return;
+    state.appGenre = c.dataset.genre || null;
+    render();
+  });
   $('#summary').addEventListener('click', (e) => {
     const c = e.target.closest('[data-panel]');
     if (!c) return;
