@@ -167,6 +167,10 @@ a.applink:hover .nm { text-decoration: underline; }
 .gchip .gm { color: var(--muted); font-size: 12px; }
 .gchip.on .gm, .gchip.on .r-good, .gchip.on .r-bad { color: inherit; }
 .gtag { font-size: 12px; color: var(--fg-2); }
+.gsel { font-size: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 2px 4px; max-width: 180px; }
+.gsel.manual { border-color: var(--accent); }
+.gsel.other { border-color: var(--warn); color: var(--warn); }
+.gnew { font-size: 12px; border: 1px solid var(--accent); border-radius: 6px; padding: 2px 6px; width: 150px; background: var(--bg); }
 .placeholder { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 36px 16px; text-align: center; color: var(--muted); margin-top: 12px; }
 .section-h { font-size: 13px; font-weight: 700; color: var(--fg-2); margin: 14px 0 6px; }
 .empty { padding: 28px 14px; color: var(--muted); text-align: center; white-space: normal; }
@@ -255,7 +259,7 @@ const state = {
   preset: 'today', start: '', end: '',
   lvl2: LS.get('bcat.lvl2', 'account'),
   sort: LS.get('bcat.sort', { key: 'spend', dir: 'desc' }),
-  panel: null, appGenre: null, opts: LS.get('bcat.opts', { overview: true, detail: false }), ran: null, lastKey: '',
+  panel: null, appGenre: null, genres: LS.get('bcat.genres', {}), opts: LS.get('bcat.opts', { overview: true, detail: false }), ran: null, lastKey: '',
   open: new Map(), accounts: [], queue: [], phase: null, paused: false, refresh: false, run: 0,
 };
 let mcp = null;
@@ -427,10 +431,43 @@ const GENRES = [
   ['Prank / Fun', /prank|tricky|fun|joke|simulator/i],
 ];
 const GENRE_OTHER = 'Khác';
-function genreOf(appId) {
+function autoGenre(appId) {
   const name = model?.apps.get(appId)?.name || '';
   const hit = GENRES.find(([, t]) => (typeof t === 'function' ? t(name) : t.test(name)));
   return hit ? hit[0] : GENRE_OTHER;
+}
+// A genre picked by hand wins over the automatic one; picks are shared through the page's db.
+function genreOf(appId) { return state.genres[appId] || autoGenre(appId); }
+function genreSelect(appId) {
+  const cur = genreOf(appId), manual = !!state.genres[appId];
+  const names = [...new Set([...GENRES.map(([g]) => g), ...Object.values(state.genres), GENRE_OTHER])];
+  const opts = names.map((g) => `<option value="${esc(g)}" ${g === cur ? 'selected' : ''}>${esc(g)}</option>`).join('');
+  const cls = manual ? 'manual' : cur === GENRE_OTHER ? 'other' : '';
+  return `<select class="gsel ${cls}" data-app="${esc(appId)}" aria-label="Genre" title="${manual ? 'Genre chọn tay' : 'Genre tự gán theo tên app'}">${opts}<option value="__new">+ Genre mới…</option>${manual ? '<option value="__auto">↺ Tự động</option>' : ''}</select>`;
+}
+let db = null;
+async function setGenre(appId, genre) {
+  const name = model?.apps.get(appId)?.name || '';
+  if (genre === '__auto') delete state.genres[appId]; else state.genres[appId] = genre;
+  LS.set('bcat.genres', state.genres);
+  render();
+  if (!db) return;
+  try {
+    const ref = db.collection('appGenres').doc(appId);
+    if (genre === '__auto') await ref.delete(); else await ref.set({ genre, name, at: Date.now() });
+  } catch (e) {
+    notice(e?.code === 'invalid_argument' ? 'Bạn chỉ có quyền xem trang, genre vừa chọn chỉ lưu trên máy bạn.' : 'Chưa lưu được genre, thử lại sau.', true);
+  }
+}
+function watchGenres() {
+  if (!db) return;
+  db.collection('appGenres').limit(1000).onSnapshot((snap) => {
+    const map = {};
+    for (const d of snap.docs) { const g = d.data()?.genre; if (g) map[d.id] = String(g); }
+    state.genres = map;
+    LS.set('bcat.genres', map);
+    queueRender();
+  }, () => { /* keep the local copy */ });
 }
 
 const appIdOf = (v) => (v && v !== '-' && String(v) !== '0' ? String(v) : null);
@@ -742,7 +779,7 @@ function renderPanel(st) {
         const a = model.apps.get(id) || {};
         const names = [...e.accs].map((x) => model.accounts.get(x)?.name || x);
         const r = roas(e.rev, e.spend);
-        return row([`<td class="l"><div class="namecell">${appLink(id, true)}<span class="meta">${esc(a.platform || '')}</span></div></td>`, `<td class="l gtag">${esc(genreOf(id))}</td>`, `<td class="l" title="${esc(names.join('\n'))}">${e.accs.size} account <span class="meta">${esc(names.slice(0, 2).join(', '))}${names.length > 2 ? '…' : ''}</span></td>`, `<td class="num">${money(e.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
+        return row([`<td class="l"><div class="namecell">${appLink(id, true)}<span class="meta">${esc(a.platform || '')}</span></div></td>`, `<td class="l">${genreSelect(id)}</td>`, `<td class="l" title="${esc(names.join('\n'))}">${e.accs.size} account <span class="meta">${esc(names.slice(0, 2).join(', '))}${names.length > 2 ? '…' : ''}</span></td>`, `<td class="num">${money(e.spend)}</td>`, `<td class="num ${rcls(r)}">${pct(r)}</td>`]);
       }).join('') || '<tr><td colspan="5" class="empty">Chưa có app nào.</td></tr>') + '</tbody></table>';
   }
   el.innerHTML = `<div class="panel">${html}</div>`;
@@ -945,6 +982,27 @@ function initControls() {
   }));
   $('#runBtn').disabled = !state.opts.overview && !state.opts.detail;
   $('#runBtn').addEventListener('click', () => load());
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest('select.gsel');
+    if (!sel) return;
+    if (sel.value === '__new') {
+      const inp = document.createElement('input');
+      inp.className = 'gnew'; inp.placeholder = 'Tên genre rồi Enter'; inp.dataset.app = sel.dataset.app;
+      sel.replaceWith(inp); inp.focus();
+      return;
+    }
+    setGenre(sel.dataset.app, sel.value);
+  });
+  document.addEventListener('keydown', (e) => {
+    const inp = e.target.closest?.('input.gnew');
+    if (!inp) return;
+    if (e.key === 'Enter' && inp.value.trim()) setGenre(inp.dataset.app, inp.value.trim().slice(0, 40));
+    if (e.key === 'Escape') render();
+  });
+  document.addEventListener('focusout', (e) => {
+    const inp = e.target.closest?.('input.gnew');
+    if (inp && !inp.value.trim()) setTimeout(render, 0);
+  });
   $('#panel').addEventListener('click', (e) => {
     const c = e.target.closest('[data-genre]');
     if (!c) return;
@@ -989,6 +1047,7 @@ async function boot() {
   initControls();
   initBcPicker();
   render();
+  window.claude?.use?.('db').then((d) => { db = d; watchGenres(); }).catch(() => {});
   mcp = window.claude?.use ? await window.claude.use('mcp') : null;
   if (!mcp) {
     $('#bcBtn').textContent = 'BC: không khả dụng';
