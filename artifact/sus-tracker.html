@@ -168,7 +168,7 @@
     <div class="spend-head">
       <div>
         <h2>Spend theo tháng</h2>
-        <p>Spend không tính ad credit (cash spend = spend − voucher). Lấy từ Ecomdy Data Center; account không có ở đó thì lấy từ TikTok. Tính theo múi giờ và tiền tệ của từng ad account, kèm cột quy USD.</p>
+        <p>Cash spend theo TikTok, không tính ad credit. Tính theo múi giờ và tiền tệ của từng ad account; cột Tổng USD chỉ có với account tiền USD.</p>
       </div>
       <div class="spend-ctrl">
         <label>Từ tháng<input type="month" id="mFrom"></label>
@@ -734,18 +734,14 @@ $('spendBtn').addEventListener('click', async () => {
   if (!from || !to || from > to) return setSpendStatus('"Từ tháng" phải trước hoặc bằng "Đến tháng".', true);
   const months = monthList(from, to), ids = spendTargets(), store = {};
   if (!ids.length) return setSpendStatus('Chưa có ad account ID nào để kéo.', true);
+  // Spend comes from TikTok only (cash spend, ad credit excluded).
   const tasks = [], ttQueue = [];
-  for (const id of ids) {
-    store[id] = { months: {}, notes: [] };
-    if (dcAll?.[id]) tasks.push({ kind: 'dc', id });
-    else if (!dcAll) tasks.push({ kind: 'dc', id, probe: true }); // not checked yet: try Data Center first
-    else ttQueue.push(id);
-  }
+  for (const id of ids) { store[id] = { months: {}, notes: [] }; ttQueue.push(id); }
   const queueTikTok = (list, why) => {
     for (const id of list) { store[id].src = 'TikTok'; if (why) store[id].notes.push(why); }
     for (let i = 0; i < list.length; i += 5) for (const m of months) tasks.push({ kind: 'tt', ids: list.slice(i, i + 5), m });
   };
-  queueTikTok(ttQueue, dcAll ? 'Không có trong Ecomdy Data Center, lấy spend từ TikTok.' : 'Không kết nối được Ecomdy Data Center, lấy spend từ TikTok.');
+  queueTikTok(ttQueue);
   let done = 0, ttDown = '';
   spendBusy = true; syncSpendBtn(); $('spendBar').hidden = false;
   try {
@@ -781,8 +777,7 @@ $('spendBtn').addEventListener('click', async () => {
     }
     spendData = { months, ids, store };
     const errs = ids.filter((id) => store[id].error).length;
-    const dcN = ids.filter((id) => store[id].src === 'Data Center').length;
-    setSpendStatus(`Xong ${months[0]} → ${months[months.length - 1]} cho ${ids.length.toLocaleString()} account: ${dcN.toLocaleString()} lấy từ Ecomdy Data Center, ${(ids.length - dcN).toLocaleString()} từ TikTok.`
+    setSpendStatus(`Xong ${months[0]} → ${months[months.length - 1]} cho ${ids.length.toLocaleString()} account, kéo từ TikTok.`
       + (errs ? ` ${errs} account không kéo được (xem cột Ghi chú).` : '') + (ttDown ? ` ${ttDown}` : ''), errs === ids.length);
     renderSpend();
   } catch (e) {
