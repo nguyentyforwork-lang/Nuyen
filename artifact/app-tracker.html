@@ -288,7 +288,8 @@ function todayIn(tz) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 function addDays(ymd, n) { const [y, m, d] = ymd.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10); }
-function rangeFor(tz) {
+// Overview reports allow up to 365 days; Detail uses daily breakdowns, which TikTok caps at 30 days.
+function rangeFor(tz, maxDays = 365) {
   const t = todayIn(tz);
   if (state.preset === 'today') return { start: t, end: t };
   if (state.preset === 'yesterday') { const y = addDays(t, -1); return { start: y, end: y }; }
@@ -298,7 +299,7 @@ function rangeFor(tz) {
   let { start, end } = state;
   if (!start || !end) return { start: t, end: t };
   if (start > end) [start, end] = [end, start];
-  if ((Date.parse(end) - Date.parse(start)) / 864e5 > 29) start = addDays(end, -29);
+  if ((Date.parse(end) - Date.parse(start)) / 864e5 > maxDays - 1) start = addDays(end, -(maxDays - 1));
   return { start, end };
 }
 
@@ -472,8 +473,7 @@ function watchGenres() {
 
 const appIdOf = (v) => (v && v !== '-' && String(v) !== '0' ? String(v) : null);
 // Overview needs only: Event Manager apps + ad-level spend with the app each ad promotes.
-async function fetchLite(adv) {
-  const range = rangeFor(adv.tz);
+async function fetchLite(adv, range = rangeFor(adv.tz)) {
   const fx = FX[adv.cur] ?? 1;
   const m = (v) => num(v) * fx;
   const base = { advertiser_id: adv.id, start_date: range.start, end_date: range.end };
@@ -486,11 +486,13 @@ async function fetchLite(adv) {
 }
 
 async function fetchAccount(adv) {
-  const range = rangeFor(adv.tz);
+  const range = rangeFor(adv.tz, 30);
   const fx = FX[adv.cur] ?? 1;
   const m = (v) => num(v) * fx;
   const base = { advertiser_id: adv.id, start_date: range.start, end_date: range.end };
-  const lite = adv.lite || await fetchLite(adv);
+  const full = rangeFor(adv.tz);
+  const sameRange = full.start === range.start && full.end === range.end;
+  const lite = adv.lite && sameRange ? adv.lite : await fetchLite(adv, range);
   const [campDaily, agDaily, geo, adGeo] = await Promise.all([
     report({ ...base, data_level: 'AUCTION_CAMPAIGN', dimensions: ['campaign_id', 'stat_time_day'], metrics: ['spend', REV, 'campaign_name'] }),
     report({ ...base, data_level: 'AUCTION_ADGROUP', dimensions: ['adgroup_id', 'stat_time_day'], metrics: ['spend', 'campaign_id'] }),
@@ -874,6 +876,10 @@ async function load() {
   const run = ++state.run;
   state.ran = opts; state.accounts = []; state.queue = []; state.phase = 'accounts'; state.open.clear();
   notice('');
+  if (opts.detail && state.preset === 'custom' && state.start && state.end && Math.abs(Date.parse(state.end) - Date.parse(state.start)) / 864e5 > 29) {
+    const r = rangeFor('UTC', 30);
+    notice(`Khoảng ngày dài hơn 30 ngày: Tổng quan tính đủ cả khoảng, còn bảng Detail chỉ tính 30 ngày cuối (${r.start} → ${r.end}) vì TikTok giới hạn report theo ngày.`);
+  }
   render();
   const alive = () => run === state.run;
   try {
