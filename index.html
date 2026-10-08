@@ -190,7 +190,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     <div id="sampleNote" class="banner" hidden><b>Đang dùng dữ liệu mẫu.</b> Khách hàng và entity trong mẫu là tên giả để minh họa. Tải file của bạn lên để thay thế.</div>
     <div>
       <h3>Ghép cột</h3>
-      <p class="hint">Tự nhận theo tên cột. Kiểm tra lại nếu file có nhiều cột chi phí (Cash, Credit…). File không có cột tên khách thì mỗi file là 1 khách, tên khách sửa ở ô cạnh tên file. Các file cùng tên khách được cộng chung để xếp tier.</p>
+      <p class="hint">Tự nhận theo tên cột. Kiểm tra lại nếu file có nhiều cột chi phí (Cash, Credit…). File không có cột tên khách thì mỗi file là 1 khách; file nhiều sheet thì mỗi sheet là 1 khách (tên sheet). Tên khách sửa ở ô cạnh tên file, bấm × để bỏ sheet không cần. Các file cùng tên khách được cộng chung để xếp tier.</p>
     </div>
     <div class="map" id="mapping"></div>
   </section>
@@ -493,10 +493,15 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
         const buf = await file.arrayBuffer();
         const isCsv = /\.csv$/i.test(file.name);
         const wb = XLSX.read(buf, { type: 'array', raw: isCsv });
-        // Use the sheet with the most rows
-        let pick = null;
-        wb.SheetNames.forEach(n => { const r = sheetToRows(wb.Sheets[n]); if (!pick || r.rows.length > pick.rows.length) pick = r; });
-        files.push({ name: file.name, customer: file.name.replace(/\.[^.]+$/, ''), ...pick });
+        // Every sheet that has a country and a spend column becomes its own customer (named after the sheet).
+        // Sheets without them (suspension lists, notes…) are skipped.
+        const base = file.name.replace(/\.[^.]+$/, '');
+        const sheets = wb.SheetNames.map(n => ({ n, ...sheetToRows(wb.Sheets[n]) }))
+          .filter(r => r.rows.length && (m => m.country && m.cost)(autoMap(r.headers)));
+        if (!sheets.length) { toast('Không thấy sheet nào có cột quốc gia và chi tiêu trong ' + file.name); continue; }
+        sheets.forEach(r => files.push(sheets.length > 1
+          ? { name: file.name + ' › ' + r.n, customer: r.n.replace(/\((raw\s*tt|tt\s*raw)\)/ig, '').trim() || r.n, headers: r.headers, rows: r.rows }
+          : { name: file.name, customer: base, headers: r.headers, rows: r.rows }));
       } catch (err) { toast('Không đọc được ' + file.name + ': ' + err.message); }
     }
     mapping = autoMap(allHeaders());
