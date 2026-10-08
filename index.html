@@ -299,6 +299,8 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     let s = String(v ?? '').trim();
     if (!s) return 0;
     const neg = /^\(.*\)$/.test(s);
+    const plain = s.replace(/[()$€£\s]/g, '').replace(/,/g, '');
+    if (/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(plain)) { const n = Number(plain); return neg ? -Math.abs(n) : n; }   // includes 1.73e-18
     s = s.replace(/[^0-9.,-]/g, '').replace(/,/g, '');
     const n = parseFloat(s);
     return isNaN(n) ? 0 : (neg ? -Math.abs(n) : n);
@@ -401,7 +403,7 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--line); border-bottom: 0
     { key: 'entity', label: 'Entity', optional: true, pats: [/entity|pháp nhân|legal|company|công ty|advertiser account name/i] },
     { key: 'accountId', label: 'Account ID', optional: true, pats: [/account\s*id|advertiser\s*id|id tài khoản|^id$/i] },
     { key: 'accountName', label: 'Account name', optional: true, pats: [/account\s*name|advertiser\s*name|tên tài khoản/i] },
-    { key: 'country', label: 'Quốc gia / khu vực', pats: [/country|quốc gia|region|khu vực/i] },
+    { key: 'country', label: 'Quốc gia / khu vực', pats: [/country|quốc gia/i, /region|khu vực/i] },
     { key: 'cost', label: 'Chi tiêu (cost)', pats: [/sales performance/i, /cost.*cash/i, /cost|spend|chi tiêu|consumption|amount/i] },
   ];
   let files = [];       // {name, headers, rows}
