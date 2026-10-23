@@ -253,7 +253,7 @@
   .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 14px; color: var(--muted); }
   .share { color: var(--muted); font-size: 13px; }
 
-  dialog.wide { width: min(1080px, calc(100vw - 32px)); }
+  dialog.wide { width: min(1320px, calc(100vw - 32px)); }
   .camp-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; margin-bottom: 12px; }
   .camp-head h2 { margin: 0; }
   .camp-head .meta { color: var(--muted); font-size: 14px; }
@@ -263,7 +263,7 @@
   .camp-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
   .camp-table th { position: sticky; top: 0; background: var(--card); text-align: right; color: var(--muted); font-weight: 500; padding: 8px 10px; white-space: nowrap; border-bottom: 1px solid var(--border); }
   .camp-table td { text-align: right; padding: 7px 10px; border-top: 1px solid var(--border); white-space: nowrap; }
-  .camp-table th:first-child, .camp-table td:first-child { text-align: left; white-space: normal; overflow-wrap: anywhere; min-width: 260px; }
+  .camp-table th:first-child, .camp-table td:first-child { text-align: left; white-space: normal; overflow-wrap: anywhere; min-width: 220px; }
   .camp-table tfoot td { font-weight: 600; border-top: 2px solid var(--border); }
   .pill { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--chip-bg); color: var(--chip-text); }
   .sort { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 9px; padding: 2px 2px 2px 8px; }
@@ -271,6 +271,11 @@
   .sort button[aria-pressed="true"] { background: var(--line); color: var(--on-line); }
   .pic-filter select { font: inherit; font-size: 13px; font-weight: 500; color: var(--text); background: transparent; border: 0; border-radius: 7px; padding: 4px 6px; cursor: pointer; max-width: 180px; }
   .pic-filter select:focus-visible { outline: 2px solid var(--line); }
+  .geo-td { text-align: left !important; white-space: nowrap !important; min-width: 150px; }
+  .geo3 { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+  .geo-chip { font-size: 12px; background: var(--chip-bg); border-radius: 6px; padding: 2px 6px; white-space: nowrap; }
+  .geo-chip b { font-weight: 700; }
+  .geo-chip .num { font-weight: 600; }
   .th-sort { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
   .th-sort[aria-pressed="true"] { color: var(--text); font-weight: 600; }
   .pill.new { background: var(--new-bg); color: var(--new-fg); }
@@ -884,7 +889,7 @@ async function loadAll(refresh = false, silent = false) {
     await loadAccInfo(refresh);
     if (gen !== loadGen) return;
     ensureDefaultRange(); renderRangeUi();
-    if (refresh) geoCache.clear();
+    if (refresh) { geoCache.clear(); campGeo.clear(); }
     const win = rangeWindows();   // khoảng ngày chung (khóa cache); mỗi tài khoản dùng rangeWindows(acc)
     const accounts = g.accounts || [];
     // Kéo lần lượt từng tài khoản trong nhóm; xong tài khoản nào hiện tài khoản đó
@@ -1183,6 +1188,52 @@ function campRows() {
     .filter(c => (!onlyApp || c.code === campView.code) && (!hideZero || c.spend > 0) && (!onlyMaxed || c.maxDays > 0) && (!onlyNew || c.isNew) && (!q || c.name.toLowerCase().includes(q)))
     .sort((x, y) => bySort(campSort)(x, y) || x.name.localeCompare(y.name));
 }
+// Top 3 geo theo spend cho từng camp trong bảng camp (kéo khi mở bảng, theo khoảng ngày của tài khoản)
+const campGeo = new Map();   // `${acc}|${start}|${end}` → { status, by: Map(campaignId → [{cc, spend, rev}]) }
+async function loadCampGeo(acc) {
+  const { cur } = rangeWindows(acc);
+  const key = `${acc}|${cur.start}|${cur.end}`;
+  if (campGeo.has(key)) return;
+  const ids = (accData.get(acc)?.campaigns || []).filter(c => c.spend > 0).map(c => c.id);
+  const entry = { status: "loading", by: new Map() };
+  campGeo.set(key, entry);
+  try {
+    for (let i = 0; i < ids.length; i += 100) {
+      const { rows } = await allPages("report_integrated_get", {
+        advertiser_id: acc, report_type: "AUDIENCE", data_level: "AUCTION_CAMPAIGN",
+        dimensions: ["campaign_id", "country_code"], metrics: ["spend", M_IAA],
+        start_date: cur.start, end_date: cur.end, order_field: "spend",
+        filtering: [{ field_name: "campaign_ids", filter_type: "IN", filter_value: JSON.stringify(ids.slice(i, i + 100)) }],
+      });
+      for (const row of rows) {
+        const id = String(row.dimensions?.campaign_id || ""), sp = num(row.metrics?.spend);
+        if (!id || !sp) continue;
+        if (!entry.by.has(id)) entry.by.set(id, []);
+        entry.by.get(id).push({ cc: row.dimensions?.country_code || "?", spend: sp, rev: sp * num(row.metrics?.[M_IAA]) });
+      }
+    }
+    for (const list of entry.by.values()) list.sort((x, y) => y.spend - x.spend);
+    entry.status = "ok";
+  } catch (e) { entry.status = "error"; entry.error = e; }
+  if (campDlg.open && campView?.acc === acc) renderCamps();
+}
+function top3Text(c) {
+  const { cur } = rangeWindows(campView.acc);
+  const g = campGeo.get(`${campView.acc}|${cur.start}|${cur.end}`);
+  return (g?.by.get(c.id) || []).slice(0, 3).map(x => `${x.cc} ${x.spend.toFixed(2)} (${(x.rev / x.spend).toFixed(2)})`).join(" | ");
+}
+function geoCell(c) {
+  if (!(c.spend > 0)) return `<span class="share">—</span>`;
+  const { cur } = rangeWindows(campView.acc);
+  const g = campGeo.get(`${campView.acc}|${cur.start}|${cur.end}`);
+  if (!g || g.status === "loading") return `<span class="share">đang tải…</span>`;
+  if (g.status === "error") return `<span class="share" title="${esc(errText(g.error))}">lỗi</span>`;
+  const top = (g.by.get(c.id) || []).slice(0, 3);
+  if (!top.length) return `<span class="share">—</span>`;
+  const t = c.roasBid || kpiOf(c.code);
+  return `<span class="geo3">${top.map(x => { const r = x.rev / x.spend;
+    return `<span class="geo-chip" title="${esc(countryName(x.cc))}: ${fmtUsd(x.spend)} · ROAS ${r.toFixed(3)}"><b>${esc(x.cc)}</b> ${fmtUsd(x.spend)} <span class="num ${roasCls(r, t)}">${r.toFixed(2)}</span></span>`; }).join("")}</span>`;
+}
 function renderCamps() {
   const rows = campRows();
   const box = document.getElementById("campTable");
@@ -1193,10 +1244,10 @@ function renderCamps() {
   const maxCell = c => !c.budget || !/DAY|DAILY/.test(c.budgetMode || "") ? `<span class="share">—</span>`
     : c.maxDays ? `<span class="pill max">${len === 1 ? "Max" : `${c.maxDays}/${c.daysSpent || len} ngày`}</span>` : `<span class="share">chưa</span>`;
   const maxed = rows.filter(c => c.maxDays > 0).length;
-  box.innerHTML = `<table><thead><tr><th>Camp</th><th>App</th><th>Trạng thái</th><th>Budget/ngày</th><th>Max budget</th><th><button class="th-sort" data-act="camp-sort" data-key="spend" aria-pressed="${campSort === "spend"}">Spend${campSort === "spend" ? " ↓" : ""}</button></th><th><button class="th-sort" data-act="camp-sort" data-key="roas" aria-pressed="${campSort === "roas"}">ROAS IAA D0${campSort === "roas" ? " ↓" : ""}</button></th><th>Target ROAS</th></tr></thead><tbody>${
+  box.innerHTML = `<table><thead><tr><th>Camp</th><th>App</th><th>Trạng thái</th><th>Budget/ngày</th><th>Max budget</th><th><button class="th-sort" data-act="camp-sort" data-key="spend" aria-pressed="${campSort === "spend"}">Spend${campSort === "spend" ? " ↓" : ""}</button></th><th><button class="th-sort" data-act="camp-sort" data-key="roas" aria-pressed="${campSort === "roas"}">ROAS IAA D0${campSort === "roas" ? " ↓" : ""}</button></th><th>Target ROAS</th><th>Top 3 geo <span class="share">(spend · ROAS)</span></th></tr></thead><tbody>${
     rows.map(c => { const r = c.spend > 0 ? c.rev / c.spend : null, t = c.roasBid || kpiOf(c.code);
-      return `<tr><td>${esc(c.name)}${c.isNew ? ' <span class="pill new">Mới</span>' : ""}<div class="share">${esc(c.id)}${c.createdDay ? ` · tạo ${shortDate(c.createdDay)}` : ""}</div></td><td>${c.code ? esc(appName(c.code)) : '<span class="share">ngoài bộ lọc</span>'}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${maxCell(c)}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, t)}">${r == null ? "—" : r.toFixed(3)}</td><td>${c.roasBid ? c.roasBid.toFixed(2) : '<span class="share">—</span>'}</td></tr>`; }).join("")
-  }</tbody><tfoot><tr><td>${rows.length} camp</td><td></td><td></td><td></td><td>${maxed} max</td><td>${fmtUsd(sp)}</td><td>${sp > 0 ? (rv / sp).toFixed(3) : "—"}</td><td></td></tr></tfoot></table>`;
+      return `<tr><td>${esc(c.name)}${c.isNew ? ' <span class="pill new">Mới</span>' : ""}<div class="share">${esc(c.id)}${c.createdDay ? ` · tạo ${shortDate(c.createdDay)}` : ""}</div></td><td>${c.code ? esc(appName(c.code)) : '<span class="share">ngoài bộ lọc</span>'}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${maxCell(c)}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, t)}">${r == null ? "—" : r.toFixed(3)}</td><td>${c.roasBid ? c.roasBid.toFixed(2) : '<span class="share">—</span>'}</td><td class="geo-td">${geoCell(c)}</td></tr>`; }).join("")
+  }</tbody><tfoot><tr><td>${rows.length} camp</td><td></td><td></td><td></td><td>${maxed} max</td><td>${fmtUsd(sp)}</td><td>${sp > 0 ? (rv / sp).toFixed(3) : "—"}</td><td></td><td></td></tr></tfoot></table>`;
 }
 function openCamps(acc, code, onlyMaxed = false, onlyNew = false) {
   campView = { acc, code };
@@ -1211,6 +1262,7 @@ function openCamps(acc, code, onlyMaxed = false, onlyNew = false) {
   document.getElementById("campSearch").value = "";
   renderCamps();
   campDlg.showModal();
+  loadCampGeo(acc);
 }
 ["campOnlyApp", "campHideZero", "campOnlyMaxed", "campOnlyNew"].forEach(id => document.getElementById(id).addEventListener("change", renderCamps));
 document.getElementById("campSearch").addEventListener("input", renderCamps);
@@ -1241,8 +1293,8 @@ function exportCamps() {
   if (!campView) return;
   const { cur } = rangeWindows(campView.acc);
   saveFile(`campaigns_${campView.acc}_${cur.start}_${cur.end}.csv`,
-    csv([["campaign_id", "campaign_name", "app", "status", "daily_budget", "max_budget_days", "spend", "roas_iaa_d0", "target_roas"],
-      ...campRows().map(c => [c.id, c.name, c.code || "", c.status || "", c.budget || "", c.maxDays || 0, c.spend.toFixed(2), c.spend > 0 ? (c.rev / c.spend).toFixed(3) : "", c.roasBid || ""])]));
+    csv([["campaign_id", "campaign_name", "app", "status", "daily_budget", "max_budget_days", "spend", "roas_iaa_d0", "target_roas", "top3_geo"],
+      ...campRows().map(c => [c.id, c.name, c.code || "", c.status || "", c.budget || "", c.maxDays || 0, c.spend.toFixed(2), c.spend > 0 ? (c.rev / c.spend).toFixed(3) : "", c.roasBid || "", top3Text(c)])]));
 }
 
 /* ---------- Dialogs ---------- */
