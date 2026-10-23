@@ -253,7 +253,10 @@
   .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 14px; color: var(--muted); }
   .share { color: var(--muted); font-size: 13px; }
 
-  dialog.wide { width: min(1320px, calc(100vw - 32px)); }
+  dialog.wide { width: min(1500px, calc(100vw - 32px)); }
+  .setup { font-size: 12.5px; line-height: 1.35; min-width: 70px; max-width: 150px; }
+  .camp-table td.setup { white-space: normal; }
+  .setup .share { font-size: 11.5px; }
   .camp-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; margin-bottom: 12px; }
   .camp-head h2 { margin: 0; }
   .camp-head .meta { color: var(--muted); font-size: 14px; }
@@ -748,7 +751,7 @@ async function fetchAccount(acc, kw, win, refresh) {
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end, order_field: "spend" }, refresh),
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end, order_field: "spend" }, refresh),
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end, order_field: "spend" }, refresh),
-    allPages("campaign_get", { advertiser_id: acc, ...(kw ? { filtering: { campaign_name: kw } } : {}), fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status", "roas_bid", "create_time"] }, refresh)
+    allPages("campaign_get", { advertiser_id: acc, ...(kw ? { filtering: { campaign_name: kw } } : {}), fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status", "roas_bid", "create_time", "campaign_type", "is_advanced_dedicated_campaign", "disable_skan_campaign"] }, refresh)
       .catch(() => ({ rows: [] })), // ngân sách là phụ: lỗi thì hiện spend TB/ngày
   ]);
   return {
@@ -836,6 +839,7 @@ function aggregate(acc, raw, kw, mode = "app") {
     const row = camp(String(c.campaign_id), c.campaign_name);
     row.status = c.operation_status; row.budget = num(c.budget); row.budgetMode = c.budget_mode;
     row.roasBid = num(c.roas_bid) || null;
+    row.campType = c.campaign_type; row.adc = !!c.is_advanced_dedicated_campaign; row.noSkan = !!c.disable_skan_campaign;
     // Camp mới: tạo trong khoảng ngày đang xem (create_time là UTC → đổi sang giờ tài khoản)
     row.createdDay = dayInTz(c.create_time, accInfo.get(acc)?.tz);
     row.isNew = !!row.createdDay && row.createdDay >= cr.start && row.createdDay <= cr.end;
@@ -931,7 +935,7 @@ async function loadAll(refresh = false, silent = false) {
     results[gi] = res;
     rebuild(gi);
     render();
-    if (campDlg.open && campView) { renderCamps(); loadCampGeo(campView.acc); }
+    if (campDlg.open && campView) { renderCamps(); loadCampGeo(campView.acc); loadCampSetup(campView.acc); }
   } finally {
     if (prevRes) prevRes.updating = false;
     if (gen === loadGen) document.getElementById("refreshBtn").disabled = false;
@@ -1239,6 +1243,77 @@ async function loadCampGeo(acc) {
   } catch (e) { entry.status = "error"; entry.error = e; }
   if (campDlg.open && campView?.acc === acc) renderCamps();
 }
+// Setup của camp (đọc từ các ad group): optimization event, attribution, cửa sổ Target ROAS + bid, placement
+const campAdgroups = new Map();   // acc → { status, at, sig, by: Map(campaignId → [adgroup]) }
+async function loadCampSetup(acc) {
+  const ids = (accData.get(acc)?.campaigns || []).filter(c => c.spend > 0 || c.status === "ENABLE").map(c => c.id);
+  const sig = ids.slice().sort().join(",");
+  const old = campAdgroups.get(acc);
+  if (old && old.sig === sig && (old.status === "loading" || (old.status === "ok" && Date.now() - old.at < 600000))) return;
+  const entry = { status: "loading", by: old?.by || new Map(), sig, at: Date.now() };
+  campAdgroups.set(acc, entry);
+  try {
+    const by = new Map();
+    for (let i = 0; i < ids.length; i += 100) {
+      const { rows } = await allPages("adgroup_get", {
+        advertiser_id: acc, filtering: { campaign_ids: ids.slice(i, i + 100) },
+        fields: ["adgroup_id", "campaign_id", "operation_status", "optimization_event", "optimization_goal", "deep_bid_type", "bid_type",
+          "roas_bid", "vbo_window", "placement_type", "placements", "click_attribution_window", "view_attribution_window",
+          "engaged_view_attribution_window", "attribution_event_count", "app_type"],
+      }, !!old);
+      for (const ag of rows) {
+        const id = String(ag.campaign_id || ""); if (!id) continue;
+        if (!by.has(id)) by.set(id, []);
+        by.get(id).push(ag);
+      }
+    }
+    entry.by = by; entry.status = "ok";
+  } catch (e) { entry.status = "error"; entry.error = e; }
+  if (campDlg.open && campView?.acc === acc) renderCamps();
+}
+const prettyEnum = v => String(v).toLowerCase().replace(/_/g, " ").replace(/^\w/, ch => ch.toUpperCase());
+const OPT_EVENT = { AD_REVENUE_VALUE: "Ad revenue (IAA)", ACTIVE_PAY: "Purchase (IAP)", PURCHASE: "Purchase", ACTIVE: "Install", INSTALL: "Install",
+  ACTIVE_REGISTER: "Registration", NEXT_DAY_OPEN: "Retention D1", IN_APP_AD_IMPRESSION: "In-app ad impression" };
+const DEEP_BID = { VO_MIN_ROAS: "Min ROAS", VO_HIGHEST_VALUE: "Highest value", VO_MIN: "Min ROAS", MIN: "Min ROAS", DEFAULT: "", AEO: "", PACING: "" };
+const WINDOW = { ZERO_DAY: "D0", SEVEN_DAY: "D7", SEVEN_DAYS: "D7", ONE_DAY: "D1" };
+const ATTR_WIN = { OFF: "off", ONE_DAY: "1d", SEVEN_DAYS: "7d", FOURTEEN_DAYS: "14d", TWENTY_EIGHT_DAYS: "28d" };
+const PLACE = { PLACEMENT_TIKTOK: "TikTok", PLACEMENT_PANGLE: "Pangle", PLACEMENT_GLOBAL_APP_BUNDLE: "Global App Bundle" };
+const uniq = list => [...new Set(list.filter(x => x != null && x !== ""))];
+function placementText(ag) {
+  if (ag.placement_type === "PLACEMENT_TYPE_AUTOMATIC") return "Auto";
+  const p = ag.placements || [];
+  if (p.length === 1 && PLACE[p[0]]) return `${PLACE[p[0]]} only`;
+  return p.map(x => PLACE[x] || prettyEnum(x.replace(/^PLACEMENT_/, ""))).join(" + ") || "—";
+}
+function campSetup(c) {
+  const st = campAdgroups.get(campView?.acc);
+  const all = st?.by.get(c.id) || [];
+  const ags = all.filter(a => a.operation_status === "ENABLE").length ? all.filter(a => a.operation_status === "ENABLE") : all;
+  const ios = c.campType === "IOS14_CAMPAIGN" || ags.some(a => a.app_type === "APP_IOS");
+  const attr = c.campType === "IOS14_CAMPAIGN" ? (c.noSkan ? "Non-SKAN (MMP)" : "SKAN") + (c.adc ? " · ADC" : "") : ios ? "MMP (iOS thường)" : c.campType ? "MMP" : "";
+  const win = a => `Click ${ATTR_WIN[a.click_attribution_window] || "—"} · View ${ATTR_WIN[a.view_attribution_window] || "—"} · EV ${ATTR_WIN[a.engaged_view_attribution_window] || "—"}${a.attribution_event_count ? ` · ${prettyEnum(a.attribution_event_count)}` : ""}`;
+  const bids = uniq(ags.map(a => num(a.roas_bid) ? num(a.roas_bid).toFixed(2) : null));
+  return {
+    status: st?.status, error: st?.error, count: ags.length,
+    event: uniq(ags.map(a => a.optimization_event ? (OPT_EVENT[a.optimization_event] || prettyEnum(a.optimization_event)) : null)).join(" / "),
+    goal: uniq(ags.map(a => a.optimization_goal && `Goal: ${prettyEnum(a.optimization_goal)}`)).join(" / "),
+    attr, attrWin: uniq(ags.map(win)).join(" / "),
+    window: uniq(ags.map(a => a.vbo_window && (WINDOW[a.vbo_window] || prettyEnum(a.vbo_window)))).join(" / "),
+    bid: bids.length ? bids.join(" / ") : (c.roasBid ? c.roasBid.toFixed(2) : ""),
+    bidMode: uniq(ags.map(a => DEEP_BID[a.deep_bid_type] ?? (a.deep_bid_type && prettyEnum(a.deep_bid_type)))).join(" / "),
+    placement: uniq(ags.map(placementText)).join(" / "),
+  };
+}
+function setupCells(c) {
+  const x = campSetup(c), dash = '<span class="share">—</span>';
+  if (!x.status || (x.status === "loading" && !x.count)) return `<td class="setup share" colspan="4">đang tải setup…</td>`;
+  if (x.status === "error" && !x.count) return `<td class="setup share" colspan="4" title="${esc(errText(x.error))}">lỗi tải setup</td>`;
+  if (!x.count) return `<td class="setup share" colspan="4">không có ad group</td>`;
+  return `<td class="setup">${esc(x.event) || dash}${x.goal ? `<div class="share">${esc(x.goal)}</div>` : ""}</td>`
+    + `<td class="setup" title="${esc(x.attrWin)}">${esc(x.attr) || dash}</td>`
+    + `<td class="setup"><b>${esc(x.window) || "—"}</b> · ${x.bid ? `<span class="num">${esc(x.bid)}</span>` : dash}${x.bidMode ? `<div class="share">${esc(x.bidMode)}</div>` : ""}</td>`
+    + `<td class="setup">${esc(x.placement) || dash}</td>`;
+}
 function top3Text(c) {
   const { cur } = rangeWindows(campView.acc);
   const g = campGeo.get(`${campView.acc}|${cur.start}|${cur.end}`);
@@ -1267,10 +1342,10 @@ function renderCamps() {
   const maxCell = c => !c.budget || !/DAY|DAILY/.test(c.budgetMode || "") ? `<span class="share">—</span>`
     : c.maxDays ? `<span class="pill max">${len === 1 ? "Max" : `${c.maxDays}/${c.daysSpent || len} ngày`}</span>` : `<span class="share">chưa</span>`;
   const maxed = rows.filter(c => c.maxDays > 0).length;
-  box.innerHTML = `<table><thead><tr><th>Camp</th><th>App</th><th>Trạng thái</th><th>Budget/ngày</th><th>Max budget</th><th><button class="th-sort" data-act="camp-sort" data-key="spend" aria-pressed="${campSort === "spend"}">Spend${campSort === "spend" ? " ↓" : ""}</button></th><th><button class="th-sort" data-act="camp-sort" data-key="roas" aria-pressed="${campSort === "roas"}">ROAS IAA D0${campSort === "roas" ? " ↓" : ""}</button></th><th>Target ROAS</th><th>Top 3 geo <span class="share" title="≈ : ROAS ước tính, đã chia doanh thu TikTok không gán được nước (iOS/SKAN) cho các nước theo tỷ lệ doanh thu">(spend · ROAS, ≈ ước tính)</span></th></tr></thead><tbody>${
+  box.innerHTML = `<table><thead><tr><th>Camp</th><th>App</th><th>Trạng thái</th><th>Budget/ngày</th><th>Max budget</th><th><button class="th-sort" data-act="camp-sort" data-key="spend" aria-pressed="${campSort === "spend"}">Spend${campSort === "spend" ? " ↓" : ""}</button></th><th><button class="th-sort" data-act="camp-sort" data-key="roas" aria-pressed="${campSort === "roas"}">ROAS IAA D0${campSort === "roas" ? " ↓" : ""}</button></th><th>Optimization<br>event</th><th title="Rê chuột vào ô để xem cửa sổ attribution">Attribution</th><th>Target ROAS</th><th>Placement</th><th title="Spend · ROAS IAA D0. ≈ : ROAS ước tính, đã chia doanh thu TikTok không gán được nước (iOS/SKAN) cho các nước theo tỷ lệ doanh thu">Top 3 geo</th></tr></thead><tbody>${
     rows.map(c => { const r = c.spend > 0 ? c.rev / c.spend : null, t = c.roasBid || kpiOf(c.code);
-      return `<tr><td>${esc(c.name)}${c.isNew ? ' <span class="pill new">Mới</span>' : ""}<div class="share">${esc(c.id)}${c.createdDay ? ` · tạo ${shortDate(c.createdDay)}` : ""}</div></td><td>${c.code ? esc(appName(c.code)) : '<span class="share">ngoài bộ lọc</span>'}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${maxCell(c)}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, t)}">${r == null ? "—" : r.toFixed(3)}</td><td>${c.roasBid ? c.roasBid.toFixed(2) : '<span class="share">—</span>'}</td><td class="geo-td">${geoCell(c)}</td></tr>`; }).join("")
-  }</tbody><tfoot><tr><td>${rows.length} camp</td><td></td><td></td><td></td><td>${maxed} max</td><td>${fmtUsd(sp)}</td><td>${sp > 0 ? (rv / sp).toFixed(3) : "—"}</td><td></td><td></td></tr></tfoot></table>`;
+      return `<tr><td>${esc(c.name)}${c.isNew ? ' <span class="pill new">Mới</span>' : ""}<div class="share">${esc(c.id)}${c.createdDay ? ` · tạo ${shortDate(c.createdDay)}` : ""}</div></td><td>${c.code ? esc(appName(c.code)) : '<span class="share">ngoài bộ lọc</span>'}</td><td>${status(c.status)}</td><td>${c.budget ? fmtUsd(c.budget) : "—"}</td><td>${maxCell(c)}</td><td>${fmtUsd(c.spend)}</td><td class="num ${r == null ? "na" : roasCls(r, t)}">${r == null ? "—" : r.toFixed(3)}</td>${setupCells(c)}<td class="geo-td">${geoCell(c)}</td></tr>`; }).join("")
+  }</tbody><tfoot><tr><td>${rows.length} camp</td><td></td><td></td><td></td><td>${maxed} max</td><td>${fmtUsd(sp)}</td><td>${sp > 0 ? (rv / sp).toFixed(3) : "—"}</td><td></td><td></td><td></td><td></td><td></td></tr></tfoot></table>`;
 }
 function openCamps(acc, code, onlyMaxed = false, onlyNew = false) {
   campView = { acc, code };
@@ -1286,6 +1361,7 @@ function openCamps(acc, code, onlyMaxed = false, onlyNew = false) {
   renderCamps();
   campDlg.showModal();
   loadCampGeo(acc);
+  loadCampSetup(acc);
 }
 ["campOnlyApp", "campHideZero", "campOnlyMaxed", "campOnlyNew"].forEach(id => document.getElementById(id).addEventListener("change", renderCamps));
 document.getElementById("campSearch").addEventListener("input", renderCamps);
@@ -1319,8 +1395,9 @@ function exportCamps() {
   if (!campView) return;
   const { cur } = rangeWindows(campView.acc);
   saveFile(`campaigns_${campView.acc}_${cur.start}_${cur.end}.csv`,
-    csv([["campaign_id", "campaign_name", "app", "status", "daily_budget", "max_budget_days", "spend", "roas_iaa_d0", "target_roas", "top3_geo"],
-      ...campRows().map(c => [c.id, c.name, c.code || "", c.status || "", c.budget || "", c.maxDays || 0, c.spend.toFixed(2), c.spend > 0 ? (c.rev / c.spend).toFixed(3) : "", c.roasBid || "", top3Text(c)])]));
+    csv([["campaign_id", "campaign_name", "app", "status", "daily_budget", "max_budget_days", "spend", "roas_iaa_d0", "optimization_event", "attribution", "target_roas_window", "target_roas", "placement", "top3_geo"],
+      ...campRows().map(c => { const x = campSetup(c);
+        return [c.id, c.name, c.code || "", c.status || "", c.budget || "", c.maxDays || 0, c.spend.toFixed(2), c.spend > 0 ? (c.rev / c.spend).toFixed(3) : "", x.event, x.attr, x.window, x.bid, x.placement, top3Text(c)]; })]));
 }
 
 /* ---------- Dialogs ---------- */
