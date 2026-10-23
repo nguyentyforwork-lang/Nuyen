@@ -1272,8 +1272,9 @@ async function loadCampSetup(acc) {
   if (campDlg.open && campView?.acc === acc) renderCamps();
 }
 const prettyEnum = v => String(v).toLowerCase().replace(/_/g, " ").replace(/^\w/, ch => ch.toUpperCase());
-const OPT_EVENT = { AD_REVENUE_VALUE: "Ad revenue (IAA)", ACTIVE_PAY: "Purchase (IAP)", PURCHASE: "Purchase", ACTIVE: "Install", INSTALL: "Install",
-  ACTIVE_REGISTER: "Registration", NEXT_DAY_OPEN: "Retention D1", IN_APP_AD_IMPRESSION: "In-app ad impression" };
+// Optimization event gọn: doanh thu quảng cáo → IAA, mua trong app → IAP; sự kiện khác giữ tên gốc
+const OPT_EVENT = { AD_REVENUE_VALUE: "IAA", IN_APP_AD_IMPRESSION: "IAA", ACTIVE_PAY: "IAP", PURCHASE: "IAP", SHOPPING: "IAP",
+  ACTIVE: "Install", INSTALL: "Install", ACTIVE_REGISTER: "Registration", NEXT_DAY_OPEN: "Retention D1" };
 const DEEP_BID = { VO_MIN_ROAS: "Min ROAS", VO_HIGHEST_VALUE: "Highest value", VO_MIN: "Min ROAS", MIN: "Min ROAS", DEFAULT: "", AEO: "", PACING: "" };
 const WINDOW = { ZERO_DAY: "D0", SEVEN_DAY: "D7", SEVEN_DAYS: "D7", ONE_DAY: "D1" };
 const ATTR_WIN = { OFF: "off", ONE_DAY: "1d", SEVEN_DAYS: "7d", FOURTEEN_DAYS: "14d", TWENTY_EIGHT_DAYS: "28d" };
@@ -1309,7 +1310,7 @@ function setupCells(c) {
   if (!x.status || (x.status === "loading" && !x.count)) return `<td class="setup share" colspan="4">đang tải setup…</td>`;
   if (x.status === "error" && !x.count) return `<td class="setup share" colspan="4" title="${esc(errText(x.error))}">lỗi tải setup</td>`;
   if (!x.count) return `<td class="setup share" colspan="4">không có ad group</td>`;
-  return `<td class="setup">${esc(x.event) || dash}${x.goal ? `<div class="share">${esc(x.goal)}</div>` : ""}</td>`
+  return `<td class="setup"><b>${esc(x.event) || dash}</b></td>`
     + `<td class="setup" title="${esc(x.attrWin)}">${esc(x.attr) || dash}</td>`
     + `<td class="setup"><b>${esc(x.window) || "—"}</b> · ${x.bid ? `<span class="num">${esc(x.bid)}</span>` : dash}${x.bidMode ? `<div class="share">${esc(x.bidMode)}</div>` : ""}</td>`
     + `<td class="setup">${esc(x.placement) || dash}</td>`;
