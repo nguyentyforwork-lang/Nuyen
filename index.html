@@ -303,6 +303,12 @@
   .nc-seg button { font: inherit; font-size: 13px; font-weight: 600; border: 0; background: none; color: var(--muted); padding: 5px 11px; border-radius: 7px; cursor: pointer; }
   .nc-seg button[aria-pressed="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .nc-note { margin-left: auto; }
+  .nc-cols { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .nc-cols button { font: inherit; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px; border-radius: 99px; border: 1px solid var(--border); background: var(--card); color: var(--muted); cursor: pointer; }
+  .nc-cols button i { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--border); display: inline-grid; place-items: center; font-style: normal; font-size: 10px; line-height: 1; }
+  .nc-cols button[aria-pressed="true"] { color: var(--text); border-color: color-mix(in srgb, var(--line) 45%, var(--border)); background: color-mix(in srgb, var(--line) 7%, var(--card)); }
+  .nc-cols button[aria-pressed="true"] i { background: var(--line); border-color: var(--line); color: var(--on-line); }
+  .nc-cols button:disabled { cursor: not-allowed; }
   .nc-group { margin-bottom: 12px; }
   .nc-group-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
   .nc-group-head h2 { font-size: 19px; margin: 0; }
@@ -1392,6 +1398,9 @@ function ncPicChart(byPic) {
       <b class="nc-pic-n">${n}</b></button>`).join("")}${list.length > 10 ? `<div class="share">+${list.length - 10} người khác</div>` : ""}</div>`;
 }
 function newCampsHtml() {
+  // Cột đang hiện (bật/tắt ở thanh điều khiển); cột đang đếm/sắp xếp bị ẩn thì chuyển sang cột hiện đầu tiên
+  const cols = NC_BUCKETS.filter(([b]) => (ncPref.cols || NC_BUCKETS.map(x => x[0])).includes(b));
+  if (!cols.some(([b]) => b === ncPref.bucket)) ncPref.bucket = cols[0][0];
   const bucket = ncPref.bucket;
   const groups = config.groups.map((g, gi) => ({ g, gi, ...ncGroupRows(g, gi) }));
   const allRows = groups.flatMap(x => x.rows);
@@ -1414,16 +1423,16 @@ function newCampsHtml() {
   const pending = groups.reduce((n, x) => n + x.pending, 0);
   const errors = groups.flatMap(x => x.errors.map(e => ({ ...e, g: x.g })));
   const list = groups.flatMap(x => x.rows.filter(byPicF).map(r => ({ ...r, g: x.g, gi: x.gi }))).sort(cmp);
-  const head = `<tr><th>App · UA PIC</th><th class="nc-grp">Nhóm</th><th class="nc-sp">8 ngày</th>${NC_BUCKETS.map(([b]) => { const on = b === bucket && ncPref.sort !== "pic";
+  const head = `<tr><th>App · UA PIC</th><th class="nc-grp">Nhóm</th><th class="nc-sp">8 ngày</th>${cols.map(([b]) => { const on = b === bucket && ncPref.sort !== "pic";
     return `<th class="nc-c${b === bucket ? " sel" : ""}"><button class="nc-th" data-act="nc-th" data-v="${b}" aria-pressed="${on}" title="Sắp xếp theo ${NC_SHORT[b].toLowerCase()} (bấm lần nữa để đảo chiều)">${NC_SHORT[b]}<span class="nc-arrow">${on ? (ncPref.sort === "asc" ? "↑" : "↓") : "↕"}</span></button></th>`; }).join("")}</tr>`;
   const body = list.map(r => {
     const id = `${r.gi}|${r.acc}|${r.code}`; nc.rows.set(id, r);
     const pic = picOf(r);
     return `<tr><td class="nc-app"><div class="nc-app-name">${esc(appName(r.code))}</div><div class="nc-app-sub">${pic ? `<span class="nc-pic-chip">${esc(pic)}</span>` : `<span class="nc-pic-chip none">chưa có PIC</span>`}<span class="share" title="${esc(accInfo.get(r.acc)?.name || "")}">${esc(r.acc)}</span></div></td>
-      <td class="nc-grp">${esc(r.g.name)}</td><td class="nc-sp">${ncSpark(r.days)}</td>${NC_BUCKETS.map(([b]) => ncCell(id, b, r.b[b])).join("")}</tr>`;
+      <td class="nc-grp">${esc(r.g.name)}</td><td class="nc-sp">${ncSpark(r.days)}</td>${cols.map(([b]) => ncCell(id, b, r.b[b])).join("")}</tr>`;
   }).join("");
   const errs = errors.length ? `<div class="acc-errors">${errors.map(e => `<div>${esc(e.g.name)} · tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
-  const sections = `${errs}<div class="nc-table"><table><thead>${head}</thead><tbody>${body || `<tr><td colspan="7" class="nc-empty">${pending ? "Đang kéo số…" : "Không có camp mới trong 7 ngày qua."}</td></tr>`}</tbody></table></div>
+  const sections = `${errs}<div class="nc-table"><table><thead>${head}</thead><tbody>${body || `<tr><td colspan="${3 + cols.length}" class="nc-empty">${pending ? "Đang kéo số…" : "Không có camp mới trong 7 ngày qua."}</td></tr>`}</tbody></table></div>
     ${pending && list.length ? `<div class="share" style="margin-top:8px">Đang kéo thêm ${pending} tài khoản…</div>` : ""}`;
   const status = !mcp ? `Kéo số tự động chỉ chạy khi mở trang này trên Claude, với connector ${SERVER} đã kết nối.`
     : nc.loading ? `Đang kéo… còn ${pending} tài khoản` : nc.loadedAt ? `Cập nhật ${new Date(nc.loadedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} · tự làm mới 3 phút/lần` : "";
@@ -1448,8 +1457,10 @@ function newCampsHtml() {
       <div class="nc-card"><div class="nc-card-h"><b>Theo UA PIC</b><span class="share">${NC_SHORT[bucket]} · bấm để lọc</span></div>${ncPicChart(byPic)}</div>
     </div>
     <div class="nc-bar-ctl">
-      <span class="nc-ctl">Đếm theo ${seg("nc-bucket", bucket, NC_BUCKETS.map(([b]) => [b, NC_SHORT[b]]))}</span>
+      <span class="nc-ctl">Đếm theo ${seg("nc-bucket", bucket, cols.map(([b]) => [b, NC_SHORT[b]]))}</span>
       <span class="nc-ctl">Sắp xếp ${seg("nc-sort", ncPref.sort, [["desc", "Nhiều → ít"], ["asc", "Ít → nhiều"], ["pic", "Theo UA PIC"]])}</span>
+      <span class="nc-ctl">Cột hiển thị <span class="nc-cols" role="group">${NC_BUCKETS.map(([b]) => { const on = cols.some(x => x[0] === b);
+        return `<button data-act="nc-col" data-v="${b}" aria-pressed="${on}" ${on && cols.length === 1 ? 'disabled title="Phải còn ít nhất 1 cột"' : ""}><i>${on ? "✓" : ""}</i>${NC_SHORT[b]}</button>`; }).join("")}</span></span>
       <span class="share nc-note">Giờ theo từng tài khoản · "N ngày" không tính hôm nay · bấm số để xem camp</span>
     </div>
     ${sections}
@@ -1908,6 +1919,12 @@ document.addEventListener("click", e => {
     case "nc-list": openNewCampList(el.dataset.key, el.dataset.bucket); break;
     case "nc-bucket": setNcPref("bucket", el.dataset.v); break;
     case "nc-sort": setNcPref("sort", el.dataset.v); break;
+    case "nc-col": {
+      const all = NC_BUCKETS.map(x => x[0]), cur = ncPref.cols || all, b = el.dataset.v;
+      const next = cur.includes(b) ? cur.filter(x => x !== b) : all.filter(x => x === b || cur.includes(x));
+      if (next.length) setNcPref("cols", next);
+      break;
+    }
     case "nc-th": {
       // Bấm tiêu đề cột: chọn cột đó để đếm + sắp xếp; bấm lại cột đang chọn thì đảo chiều
       const b = el.dataset.v;
