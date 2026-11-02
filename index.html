@@ -1388,11 +1388,12 @@ function ncCell(id, bucket, list) {
   return `<td class="nc-c${sel ? " sel" : ""}">${val}</td>`;
 }
 // Cột nhỏ 8 ngày của 1 dòng (ngày cũ → hôm nay), hôm nay tô vàng
+// Cột nhỏ 7 ngày qua của 1 dòng (7 ngày trước → hôm qua, không tính hôm nay: hôm nay có cột riêng)
 function ncSpark(days) {
-  const max = Math.max(...days, 1), W = 8 * 19 - 5, H = 40;
-  return `<svg class="nc-spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">${days.map((v, i) => {
+  const d7 = days.slice(0, 7), max = Math.max(...d7, 1), W = 7 * 21 - 5, H = 40;
+  return `<svg class="nc-spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">${d7.map((v, i) => {
     const h = v ? Math.max(3, Math.round(v / max * (H - 2))) : 1.5;
-    return `<rect x="${i * 19}" y="${H - h}" width="14" height="${h}" rx="2.5" fill="${i === 7 ? "var(--new-bd)" : v ? "var(--line)" : "var(--track)"}" opacity="${i === 7 || !v ? 1 : .75}"><title>${i === 7 ? "Hôm nay" : `${7 - i} ngày trước`}: ${v} camp</title></rect>`; }).join("")}</svg>`;
+    return `<rect x="${i * 21}" y="${H - h}" width="16" height="${h}" rx="2.5" fill="${v ? "var(--line)" : "var(--track)"}" opacity="${v ? .8 : 1}"><title>${dayLabel(i)}${i === 6 ? " (hôm qua)" : ""}: ${v} camp</title></rect>`; }).join("")}</svg>`;
 }
 const dayLabel = i => i === 7 ? "Hôm nay" : (() => { const d = addDays(new Date(), i - 7); return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`; })();
 // Biểu đồ cột: tổng camp mới mỗi ngày, 8 ngày gần nhất
@@ -1447,7 +1448,7 @@ function newCampsHtml() {
   const pending = groups.reduce((n, x) => n + x.pending, 0);
   const errors = groups.flatMap(x => x.errors.map(e => ({ ...e, g: x.g })));
   const list = groups.flatMap(x => x.rows.filter(byPicF).map(r => ({ ...r, g: x.g, gi: x.gi }))).sort(cmp);
-  const head = `<tr><th>App · UA PIC</th><th class="nc-grp">Khách</th><th class="nc-sp">8 ngày</th>${cols.map(([b]) => { const on = b === bucket && ncPref.sort !== "pic";
+  const head = `<tr><th>App · UA PIC</th><th class="nc-grp">Khách</th><th class="nc-sp" title="Số camp mới mỗi ngày, 7 ngày qua (không tính hôm nay)">7 ngày qua</th>${cols.map(([b]) => { const on = b === bucket && ncPref.sort !== "pic";
     return `<th class="nc-c${b === bucket ? " sel" : ""}"><button class="nc-th" data-act="nc-th" data-v="${b}" aria-pressed="${on}" title="Sắp xếp theo ${NC_SHORT[b].toLowerCase()} (bấm lần nữa để đảo chiều)">${NC_SHORT[b]}<span class="nc-arrow">${on ? (ncPref.sort === "asc" ? "↑" : "↓") : "↕"}</span></button></th>`; }).join("")}</tr>`;
   const body = list.map(r => {
     const id = `${r.gi}|${r.acc}|${r.code}`; nc.rows.set(id, r);
