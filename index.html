@@ -322,6 +322,8 @@
   .nc-app-sub { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 12px; }
   .nc-pic-chip { white-space: nowrap; background: var(--camp-bg); color: var(--camp-text); border-radius: 99px; padding: 1px 9px; font-weight: 600; font-size: 12px; }
   .nc-pic-chip.none { background: var(--chip-bg); color: var(--muted); font-weight: 500; }
+  .nc-table th.nc-grp { text-align: left; }
+  td.nc-grp { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
   .nc-sp { width: 120px; text-align: right; }
   .nc-spark { display: inline-block; vertical-align: middle; }
   .nc-c { width: 11%; text-align: right; }
@@ -332,7 +334,7 @@
   .nc-num:hover { background: var(--chip-bg); }
   .nc-num.hot { background: var(--new-bg); color: var(--new-fg); box-shadow: inset 0 0 0 1px var(--new-bd); }
   @media (max-width: 900px) { .nc-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); } .nc-charts { grid-template-columns: 1fr; } .nc-note { margin-left: 0; } }
-  @media (max-width: 560px) { .nc-tile .v { font-size: 34px; } .nc-tile.big .v { font-size: 44px; } .nc-sp { display: none; } .nc-num { font-size: 17px; padding: 2px 6px; } .nc-table td, .nc-table th { padding: 6px 6px; } }
+  @media (max-width: 560px) { .nc-grp { display: none !important; } .nc-tile .v { font-size: 34px; } .nc-tile.big .v { font-size: 44px; } .nc-sp { display: none; } .nc-num { font-size: 17px; padding: 2px 6px; } .nc-table td, .nc-table th { padding: 6px 6px; } }
   .camp-table { max-height: 62vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
   .camp-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
   .camp-table th { position: sticky; top: 0; background: var(--card); text-align: right; color: var(--muted); font-weight: 500; padding: 8px 10px; white-space: nowrap; border-bottom: 1px solid var(--border); }
@@ -1403,29 +1405,21 @@ function newCampsHtml() {
   const appsToday = shown.filter(r => r.b.today.length).length;
   const byPic = new Map();
   for (const r of allRows) { const n = cnt(r); if (n) { const k = picOf(r) || "__none"; byPic.set(k, (byPic.get(k) || 0) + n); } }
-  let pending = 0; nc.rows.clear();
-  const sec = groups.map(({ g, gi, rows, errors, pending: pd }) => {
-    pending += pd;
-    const list = rows.filter(byPicF).sort(cmp);
-    const tot = Object.fromEntries(NC_BUCKETS.map(([b]) => [b, list.reduce((s, r) => s + r.b[b].length, 0)]));
-    return { g, gi, list, errors, pd, tot };
-  });
-  if (ncPref.sort !== "pic") sec.sort((x, y) => (ncPref.sort === "asc" ? x.tot[bucket] - y.tot[bucket] : y.tot[bucket] - x.tot[bucket]));
-  const sections = sec.map(({ g, gi, list, errors, pd, tot }) => {
-    const body = list.map(r => {
-      const id = `${gi}|${r.acc}|${r.code}`; nc.rows.set(id, { g, ...r });
-      const pic = picOf(r);
-      return `<tr><td class="nc-app"><div class="nc-app-name">${esc(appName(r.code))}</div><div class="nc-app-sub">${pic ? `<span class="nc-pic-chip">${esc(pic)}</span>` : `<span class="nc-pic-chip none">chưa có PIC</span>`}<span class="share" title="${esc(accInfo.get(r.acc)?.name || "")}">${esc(r.acc)}</span></div></td>
-        <td class="nc-sp">${ncSpark(r.days)}</td>${NC_BUCKETS.map(([b]) => ncCell(id, b, r.b[b])).join("")}</tr>`;
-    }).join("");
-    const errs = errors.length ? `<div class="acc-errors">${errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
-    const head = `<tr><th>App · UA PIC</th><th class="nc-sp">8 ngày</th>${NC_BUCKETS.map(([b]) => `<th class="nc-c${b === bucket ? " sel" : ""}">${NC_SHORT[b]}</th>`).join("")}</tr>`;
-    const quiet = !list.length && !pd;
-    return `<section class="nc-group${quiet ? " quiet" : ""}"><div class="nc-group-head"><h2>${esc(g.name)}</h2>
-        <span class="nc-gtot${tot[bucket] ? "" : " zero"}"><b>${tot[bucket]}</b> camp ${NC_SHORT[bucket].toLowerCase()}</span>
-        <span class="share">${list.length} app · ${g.groupBy === "account" ? "gom theo tài khoản" : "gom theo mã app"}${pd ? ` · đang kéo ${pd} tài khoản…` : ""}</span></div>${errs}
-      ${quiet ? "" : `<div class="nc-table"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`}</section>`;
+  // Một bảng chung cho mọi nhóm (không tách theo client), xếp theo số camp mới hoặc theo UA PIC
+  nc.rows.clear();
+  const pending = groups.reduce((n, x) => n + x.pending, 0);
+  const errors = groups.flatMap(x => x.errors.map(e => ({ ...e, g: x.g })));
+  const list = groups.flatMap(x => x.rows.filter(byPicF).map(r => ({ ...r, g: x.g, gi: x.gi }))).sort(cmp);
+  const head = `<tr><th>App · UA PIC</th><th class="nc-grp">Nhóm</th><th class="nc-sp">8 ngày</th>${NC_BUCKETS.map(([b]) => `<th class="nc-c${b === bucket ? " sel" : ""}">${NC_SHORT[b]}</th>`).join("")}</tr>`;
+  const body = list.map(r => {
+    const id = `${r.gi}|${r.acc}|${r.code}`; nc.rows.set(id, r);
+    const pic = picOf(r);
+    return `<tr><td class="nc-app"><div class="nc-app-name">${esc(appName(r.code))}</div><div class="nc-app-sub">${pic ? `<span class="nc-pic-chip">${esc(pic)}</span>` : `<span class="nc-pic-chip none">chưa có PIC</span>`}<span class="share" title="${esc(accInfo.get(r.acc)?.name || "")}">${esc(r.acc)}</span></div></td>
+      <td class="nc-grp">${esc(r.g.name)}</td><td class="nc-sp">${ncSpark(r.days)}</td>${NC_BUCKETS.map(([b]) => ncCell(id, b, r.b[b])).join("")}</tr>`;
   }).join("");
+  const errs = errors.length ? `<div class="acc-errors">${errors.map(e => `<div>${esc(e.g.name)} · tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
+  const sections = `${errs}<div class="nc-table"><table><thead>${head}</thead><tbody>${body || `<tr><td colspan="7" class="nc-empty">${pending ? "Đang kéo số…" : "Không có camp mới trong 7 ngày qua."}</td></tr>`}</tbody></table></div>
+    ${pending && list.length ? `<div class="share" style="margin-top:8px">Đang kéo thêm ${pending} tài khoản…</div>` : ""}`;
   const status = !mcp ? `Kéo số tự động chỉ chạy khi mở trang này trên Claude, với connector ${SERVER} đã kết nối.`
     : nc.loading ? `Đang kéo… còn ${pending} tài khoản` : nc.loadedAt ? `Cập nhật ${new Date(nc.loadedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} · tự làm mới 3 phút/lần` : "";
   const avg = (n, d) => (n / d).toFixed(1).replace(/\.0$/, "");
