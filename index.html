@@ -323,16 +323,27 @@
   .nc-table td { padding: 7px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
   .nc-table tr:first-child td { border-top: 0; }
   .nc-table tbody tr:hover td { background: color-mix(in srgb, var(--line) 4%, transparent); }
-  .nc-app { width: 34%; }
-  .nc-app-name { font-size: 15px; font-weight: 700; }
-  .nc-app-sub { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 12px; }
+  .nc-app { min-width: 200px; }
+  .nc-app-name { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .nc-x { font: inherit; font-size: 16px; line-height: 1; width: 22px; height: 22px; border-radius: 6px; border: 0; background: none; color: var(--muted); cursor: pointer; opacity: 0; }
+  .nc-table tr:hover .nc-x, .nc-x:focus-visible { opacity: 1; }
+  .nc-x:hover { background: color-mix(in srgb, var(--down) 12%, transparent); color: var(--down); }
+  @media (hover: none) { .nc-x { opacity: .6; } }
+  .nc-app-sub { display: flex; align-items: center; gap: 8px; margin-top: 3px; font-size: 13px; }
+  .nc-acc { color: var(--muted); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
   .nc-pic-chip { white-space: nowrap; background: var(--camp-bg); color: var(--camp-text); border-radius: 99px; padding: 1px 9px; font-weight: 600; font-size: 12px; }
   .nc-pic-chip.none { background: var(--chip-bg); color: var(--muted); font-weight: 500; }
   .nc-table th.nc-grp { text-align: left; }
   td.nc-grp { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
-  .nc-sp { width: 120px; text-align: right; }
+  .nc-sp { width: 170px; text-align: center; }
   .nc-spark { display: inline-block; vertical-align: middle; }
-  .nc-c { width: 11%; text-align: right; }
+  .nc-c { width: 15%; min-width: 120px; text-align: right; }
+  .nc-db { display: grid; grid-template-columns: 1fr 52px; align-items: center; gap: 6px; min-height: 36px; }
+  .nc-db-track { height: 10px; display: flex; }
+  .nc-db-bar { display: block; height: 100%; border-radius: 5px; background: var(--line); opacity: .55; }
+  .nc-db-bar.hot { background: var(--new-bd); opacity: 1; }
+  td.nc-c.sel .nc-db-bar { opacity: .9; }
+  .nc-db .nc-num, .nc-db .nc-zero { justify-self: end; }
   th.nc-c.sel { color: var(--text); }
   .nc-th { font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; padding: 4px 6px; margin: -4px -6px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
   .nc-th:hover { background: var(--chip-bg); color: var(--text); }
@@ -340,7 +351,7 @@
   .nc-th[aria-pressed="true"] .nc-arrow { opacity: 1; color: var(--line); }
   td.nc-c.sel { background: color-mix(in srgb, var(--line) 6%, transparent); }
   .nc-zero { color: var(--muted); opacity: .5; font-size: 16px; padding: 2px 10px; }
-  .nc-num { font: inherit; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; background: none; border: 0; padding: 2px 10px; border-radius: 8px; cursor: pointer; color: var(--text); }
+  .nc-num { font: inherit; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; background: none; border: 0; padding: 2px 10px; border-radius: 8px; cursor: pointer; color: var(--text); }
   .nc-num:hover { background: var(--chip-bg); }
   .nc-num.hot { background: var(--new-bg); color: var(--new-fg); box-shadow: inset 0 0 0 1px var(--new-bd); }
   @media (max-width: 900px) { .nc-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); } .nc-charts { grid-template-columns: 1fr; } .nc-note { margin-left: 0; } }
@@ -689,7 +700,7 @@ function loadLocal() {
 }
 function normalize(c) {
   return { groups: Array.isArray(c?.groups) ? c.groups : [], apps: c?.apps && typeof c.apps === "object" ? c.apps : {},
-    hidden: Array.isArray(c?.hidden) ? c.hidden : [] };
+    hidden: Array.isArray(c?.hidden) ? c.hidden : [], ncHidden: Array.isArray(c?.ncHidden) ? c.ncHidden : [] };
 }
 // App đã xóa khỏi dashboard: theo nhóm + tài khoản + mã app ("nhóm#tài khoản|mã")
 const hideKey = (gi, acc, code) => `${config.groups[gi]?.name || gi}#${acc}|${code}`;
@@ -1356,19 +1367,24 @@ function ncGroupRows(g, gi) {
       if (day <= back(1)) r.b["7d"].push(row);
     }
   }
-  return { rows: [...rows.values()], errors, pending };
+  // Dòng đã ẩn ở tab Camp mới (nút ×): bỏ khỏi bảng, tổng và biểu đồ
+  const hid = new Set(config.ncHidden || []);
+  const all = [...rows.values()].map(r => ({ ...r, hk: hideKey(gi, r.acc, r.code) }));
+  return { rows: all.filter(r => !hid.has(r.hk)), hiddenN: all.filter(r => hid.has(r.hk)).length, errors, pending };
 }
-function ncCell(id, bucket, list) {
-  const n = list.length, sel = bucket === ncPref.bucket;
-  if (!n) return `<td class="num nc-c${sel ? " sel" : ""}"><span class="nc-zero">0</span></td>`;
-  return `<td class="num nc-c${sel ? " sel" : ""}"><button class="nc-num${bucket === "today" ? " hot" : ""}" data-act="nc-list" data-key="${esc(id)}" data-bucket="${bucket}" title="Xem ${n} camp">${n}</button></td>`;
+// Ô số kèm thanh ngang (dài theo số lớn nhất của cột) để nhìn là thấy app nào lên nhiều camp
+function ncCell(id, bucket, list, max) {
+  const n = list.length, sel = bucket === ncPref.bucket, hot = bucket === "today";
+  const bar = n ? `<span class="nc-db-bar${hot ? " hot" : ""}" style="width:${Math.max(4, n / (max || 1) * 100).toFixed(1)}%"></span>` : "";
+  const val = n ? `<button class="nc-num${hot ? " hot" : ""}" data-act="nc-list" data-key="${esc(id)}" data-bucket="${bucket}" title="Xem ${n} camp">${n}</button>` : `<span class="nc-zero">0</span>`;
+  return `<td class="nc-c${sel ? " sel" : ""}"><div class="nc-db"><span class="nc-db-track">${bar}</span>${val}</div></td>`;
 }
 // Cột nhỏ 8 ngày của 1 dòng (ngày cũ → hôm nay), hôm nay tô vàng
 function ncSpark(days) {
-  const max = Math.max(...days, 1), W = 8 * 13 - 4, H = 30;
+  const max = Math.max(...days, 1), W = 8 * 19 - 5, H = 40;
   return `<svg class="nc-spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">${days.map((v, i) => {
     const h = v ? Math.max(3, Math.round(v / max * (H - 2))) : 1.5;
-    return `<rect x="${i * 13}" y="${H - h}" width="9" height="${h}" rx="1.5" fill="${i === 7 ? "var(--new-bd)" : v ? "var(--line)" : "var(--track)"}" opacity="${i === 7 || !v ? 1 : .75}"><title>${i === 7 ? "Hôm nay" : `${7 - i} ngày trước`}: ${v} camp</title></rect>`; }).join("")}</svg>`;
+    return `<rect x="${i * 19}" y="${H - h}" width="14" height="${h}" rx="2.5" fill="${i === 7 ? "var(--new-bd)" : v ? "var(--line)" : "var(--track)"}" opacity="${i === 7 || !v ? 1 : .75}"><title>${i === 7 ? "Hôm nay" : `${7 - i} ngày trước`}: ${v} camp</title></rect>`; }).join("")}</svg>`;
 }
 const dayLabel = i => i === 7 ? "Hôm nay" : (() => { const d = addDays(new Date(), i - 7); return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`; })();
 // Biểu đồ cột: tổng camp mới mỗi ngày, 8 ngày gần nhất
@@ -1425,11 +1441,12 @@ function newCampsHtml() {
   const list = groups.flatMap(x => x.rows.filter(byPicF).map(r => ({ ...r, g: x.g, gi: x.gi }))).sort(cmp);
   const head = `<tr><th>App · UA PIC</th><th class="nc-grp">Nhóm</th><th class="nc-sp">8 ngày</th>${cols.map(([b]) => { const on = b === bucket && ncPref.sort !== "pic";
     return `<th class="nc-c${b === bucket ? " sel" : ""}"><button class="nc-th" data-act="nc-th" data-v="${b}" aria-pressed="${on}" title="Sắp xếp theo ${NC_SHORT[b].toLowerCase()} (bấm lần nữa để đảo chiều)">${NC_SHORT[b]}<span class="nc-arrow">${on ? (ncPref.sort === "asc" ? "↑" : "↓") : "↕"}</span></button></th>`; }).join("")}</tr>`;
+  const colMax = Object.fromEntries(cols.map(([b]) => [b, Math.max(0, ...list.map(r => r.b[b].length))]));
   const body = list.map(r => {
     const id = `${r.gi}|${r.acc}|${r.code}`; nc.rows.set(id, r);
     const pic = picOf(r);
-    return `<tr><td class="nc-app"><div class="nc-app-name">${esc(appName(r.code))}</div><div class="nc-app-sub">${pic ? `<span class="nc-pic-chip">${esc(pic)}</span>` : `<span class="nc-pic-chip none">chưa có PIC</span>`}<span class="share" title="${esc(accInfo.get(r.acc)?.name || "")}">${esc(r.acc)}</span></div></td>
-      <td class="nc-grp">${esc(r.g.name)}</td><td class="nc-sp">${ncSpark(r.days)}</td>${cols.map(([b]) => ncCell(id, b, r.b[b])).join("")}</tr>`;
+    return `<tr><td class="nc-app"><div class="nc-app-name">${esc(appName(r.code))}<button class="nc-x edit-only" data-act="nc-hide" data-key="${esc(r.hk)}" title="Ẩn dòng này khỏi tab Camp mới" aria-label="Ẩn ${esc(appName(r.code))}">×</button></div><div class="nc-app-sub">${pic ? `<span class="nc-pic-chip">${esc(pic)}</span>` : `<span class="nc-pic-chip none">chưa có PIC</span>`}<span class="nc-acc" title="${esc(r.acc)}">${esc(accInfo.get(r.acc)?.name || r.acc)}</span></div></td>
+      <td class="nc-grp">${esc(r.g.name)}</td><td class="nc-sp">${ncSpark(r.days)}</td>${cols.map(([b]) => ncCell(id, b, r.b[b], colMax[b])).join("")}</tr>`;
   }).join("");
   const errs = errors.length ? `<div class="acc-errors">${errors.map(e => `<div>${esc(e.g.name)} · tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
   const sections = `${errs}<div class="nc-table"><table><thead>${head}</thead><tbody>${body || `<tr><td colspan="${3 + cols.length}" class="nc-empty">${pending ? "Đang kéo số…" : "Không có camp mới trong 7 ngày qua."}</td></tr>`}</tbody></table></div>
@@ -1461,6 +1478,7 @@ function newCampsHtml() {
       <span class="nc-ctl">Sắp xếp ${seg("nc-sort", ncPref.sort, [["desc", "Nhiều → ít"], ["asc", "Ít → nhiều"], ["pic", "Theo UA PIC"]])}</span>
       <span class="nc-ctl">Cột hiển thị <span class="nc-cols" role="group">${NC_BUCKETS.map(([b]) => { const on = cols.some(x => x[0] === b);
         return `<button data-act="nc-col" data-v="${b}" aria-pressed="${on}" ${on && cols.length === 1 ? 'disabled title="Phải còn ít nhất 1 cột"' : ""}><i>${on ? "✓" : ""}</i>${NC_SHORT[b]}</button>`; }).join("")}</span></span>
+      ${(() => { const n = groups.reduce((s, x) => s + x.hiddenN, 0); return n ? `<button class="icon unhide edit-only" data-act="nc-unhide">Hiện lại ${n} dòng đã ẩn</button>` : ""; })()}
       <span class="share nc-note">Giờ theo từng tài khoản · "N ngày" không tính hôm nay · bấm số để xem camp</span>
     </div>
     ${sections}
@@ -1919,6 +1937,11 @@ document.addEventListener("click", e => {
     case "nc-list": openNewCampList(el.dataset.key, el.dataset.bucket); break;
     case "nc-bucket": setNcPref("bucket", el.dataset.v); break;
     case "nc-sort": setNcPref("sort", el.dataset.v); break;
+    case "nc-hide":
+      config.ncHidden = [...new Set([...(config.ncHidden || []), el.dataset.key])];
+      saveConfig(); render(); toast("Đã ẩn. Bấm \"Hiện lại\" trên thanh điều khiển để lấy lại."); break;
+    case "nc-unhide":
+      config.ncHidden = []; saveConfig(); render(); toast("Đã hiện lại các dòng đã ẩn."); break;
     case "nc-col": {
       const all = NC_BUCKETS.map(x => x[0]), cur = ncPref.cols || all, b = el.dataset.v;
       const next = cur.includes(b) ? cur.filter(x => x !== b) : all.filter(x => x === b || cur.includes(x));
