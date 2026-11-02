@@ -339,7 +339,9 @@
   .nc-acc { color: var(--muted); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
   .nc-pic-chip { white-space: nowrap; background: var(--camp-bg); color: var(--camp-text); border-radius: 99px; padding: 1px 9px; font-weight: 600; font-size: 12px; }
   .nc-pic-chip.none { background: var(--chip-bg); color: var(--muted); font-weight: 500; }
-  .nc-grp { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .nc-grp { width: 1%; white-space: nowrap; padding-right: 24px !important; }
+  td.nc-grp { font-size: 14px; font-weight: 600; color: var(--text); }
+  .nc-table th.nc-grp { text-align: left; }
   .nc-sp { width: 170px; text-align: center; }
   .nc-spark { display: inline-block; vertical-align: middle; }
   .nc-c { min-width: 96px; text-align: center; }
@@ -1445,16 +1447,16 @@ function newCampsHtml() {
   const pending = groups.reduce((n, x) => n + x.pending, 0);
   const errors = groups.flatMap(x => x.errors.map(e => ({ ...e, g: x.g })));
   const list = groups.flatMap(x => x.rows.filter(byPicF).map(r => ({ ...r, g: x.g, gi: x.gi }))).sort(cmp);
-  const head = `<tr><th>App · UA PIC · Nhóm</th><th class="nc-sp">8 ngày</th>${cols.map(([b]) => { const on = b === bucket && ncPref.sort !== "pic";
+  const head = `<tr><th>App · UA PIC</th><th class="nc-grp">Khách</th><th class="nc-sp">8 ngày</th>${cols.map(([b]) => { const on = b === bucket && ncPref.sort !== "pic";
     return `<th class="nc-c${b === bucket ? " sel" : ""}"><button class="nc-th" data-act="nc-th" data-v="${b}" aria-pressed="${on}" title="Sắp xếp theo ${NC_SHORT[b].toLowerCase()} (bấm lần nữa để đảo chiều)">${NC_SHORT[b]}<span class="nc-arrow">${on ? (ncPref.sort === "asc" ? "↑" : "↓") : "↕"}</span></button></th>`; }).join("")}</tr>`;
   const body = list.map(r => {
     const id = `${r.gi}|${r.acc}|${r.code}`; nc.rows.set(id, r);
     const pic = picOf(r);
-    return `<tr><td class="nc-app"><div class="nc-app-name" title="${esc(accInfo.get(r.acc)?.name || "")} · ${esc(r.acc)}">${esc(appName(r.code))}<button class="nc-x edit-only" data-act="nc-hide" data-key="${esc(r.hk)}" title="Ẩn dòng này khỏi tab Camp mới" aria-label="Ẩn ${esc(appName(r.code))}">×</button></div><div class="nc-app-sub">${pic ? `<span class="nc-pic-chip">${esc(pic)}</span>` : `<span class="nc-pic-chip none">chưa có PIC</span>`}<span class="nc-grp">${esc(r.g.name)}</span></div></td>
+    return `<tr><td class="nc-app"><div class="nc-app-name" title="${esc(accInfo.get(r.acc)?.name || "")} · ${esc(r.acc)}">${esc(appName(r.code))}<button class="nc-x edit-only" data-act="nc-hide" data-key="${esc(r.hk)}" title="Ẩn dòng này khỏi tab Camp mới" aria-label="Ẩn ${esc(appName(r.code))}">×</button></div><div class="nc-app-sub">${pic ? `<span class="nc-pic-chip">${esc(pic)}</span>` : `<span class="nc-pic-chip none">chưa có PIC</span>`}</div></td><td class="nc-grp">${esc(r.g.name)}</td>
 <td class="nc-sp">${ncSpark(r.days)}</td>${cols.map(([b]) => ncCell(id, b, r.b[b])).join("")}</tr>`;
   }).join("");
   const errs = errors.length ? `<div class="acc-errors">${errors.map(e => `<div>${esc(e.g.name)} · tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
-  const sections = `${errs}<div class="nc-table" style="max-width:${440 + cols.length * 190}px"><table><thead>${head}</thead><tbody>${body || `<tr><td colspan="${3 + cols.length}" class="nc-empty">${pending ? "Đang kéo số…" : "Không có camp mới trong 7 ngày qua."}</td></tr>`}</tbody></table></div>
+  const sections = `${errs}<div class="nc-table" style="max-width:${560 + cols.length * 190}px"><table><thead>${head}</thead><tbody>${body || `<tr><td colspan="${3 + cols.length}" class="nc-empty">${pending ? "Đang kéo số…" : "Không có camp mới trong 7 ngày qua."}</td></tr>`}</tbody></table></div>
     ${pending && list.length ? `<div class="share" style="margin-top:8px">Đang kéo thêm ${pending} tài khoản…</div>` : ""}`;
   const status = !mcp ? `Kéo số tự động chỉ chạy khi mở trang này trên Claude, với connector ${SERVER} đã kết nối.`
     : nc.loading ? `Đang kéo… còn ${pending} tài khoản` : nc.loadedAt ? `Cập nhật ${new Date(nc.loadedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} · tự làm mới 3 phút/lần` : "";
