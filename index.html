@@ -1217,13 +1217,13 @@ function navHtml() {
     <button role="tab" class="tab-new" data-act="view-new" aria-selected="${view === "newcamps"}">Camp mới</button></nav>`;
 }
 
-/* ---------- Tab Camp mới: số camp mới lên theo tài khoản (Hôm nay / Hôm qua / 3 ngày qua / 7 ngày qua) ---------- */
-// Mỗi tài khoản 1 lần campaign_get, chỉ lấy camp tạo trong ~9 ngày gần đây có từ khóa của nhóm (mặc định Ecomdy).
-// Ngày tạo đổi sang múi giờ của tài khoản. "N ngày qua" không tính hôm nay, giống các nút chọn ngày.
-// Camp đã xóa không được TikTok trả về nên không được đếm.
-const nc = { data: new Map(), loading: false, loadedAt: 0, gen: 0 };   // `${acc}|${kw}` → { status, list, error }
+/* ---------- Tab Camp mới: số camp mới lên theo từng thẻ app của các tab (Hôm nay / Hôm qua / 3 ngày qua / 7 ngày qua) ---------- */
+// Lọc camp và gom thẻ y như từng tab: tài khoản "Lấy mọi camp" lấy hết, còn lại theo từ khóa của nhóm; gom theo
+// mã app hoặc theo tài khoản tùy cài đặt nhóm; thẻ đã xóa khỏi dashboard thì bỏ qua. Mỗi tài khoản chỉ 1 lần
+// campaign_get, lấy camp tạo trong ~9 ngày gần đây. Ngày tạo đổi sang múi giờ của tài khoản. "N ngày qua" không
+// tính hôm nay, giống các nút chọn ngày. Camp đã xóa TikTok không trả về nên không được đếm.
+const nc = { data: new Map(), loading: false, loadedAt: 0, gen: 0, rows: new Map() };   // data: `${acc}|${kw}` → { status, list, error }
 const NC_BUCKETS = [["today", "Hôm nay"], ["yesterday", "Hôm qua"], ["3d", "3 ngày qua"], ["7d", "7 ngày qua"]];
-const ncKw = g => (g.keyword || "Ecomdy").trim();
 async function loadNewCamps(refresh = false, silent = false) {
   if (!mcp) { render(); return; }
   const gen = ++nc.gen; nc.loading = true;
@@ -1233,25 +1233,23 @@ async function loadNewCamps(refresh = false, silent = false) {
     await loadAccInfo(refresh);
     if (gen !== nc.gen) return;
     const since = new Date(Date.now() - 9 * 86400000).toISOString().slice(0, 10) + " 00:00:00";
-    const jobs = [...new Map(config.groups.flatMap(g => (g.accounts || []).map(acc => [`${acc}|${ncKw(g)}`, { acc, kw: ncKw(g) }]))).entries()];
-    let left = jobs.length;
+    const jobs = [...new Map(config.groups.flatMap(g => (g.accounts || []).map(acc => { const kw = accKw(g, acc); return [`${acc}|${kw}`, { acc, kw }]; }))).entries()];
     await Promise.all(jobs.map(async ([key, { acc, kw }]) => {
       const old = nc.data.get(key);
-      if (!old || !silent) nc.data.set(key, { ...old, status: old?.list ? "ok" : "loading" });
+      if (!old) nc.data.set(key, { status: "loading" });
       try {
         const { rows } = await allPages("campaign_get", {
-          advertiser_id: acc, page_size: 1000,
+          advertiser_id: acc,
           filtering: { ...(kw ? { campaign_name: kw } : {}), creation_filter_start_time: since },
           fields: ["campaign_id", "campaign_name", "create_time", "operation_status"],
         }, refresh);
         if (gen !== nc.gen) return;
-        const k = kw.toLowerCase();
-        nc.data.set(key, { status: "ok", list: rows.filter(c => !k || String(c.campaign_name || "").toLowerCase().includes(k)) });
+        nc.data.set(key, { status: "ok", list: rows });
       } catch (e) {
         if (gen !== nc.gen) return;
         nc.data.set(key, old?.list ? { ...old, status: "ok", stale: true } : { status: "error", error: e });
       }
-      left--; if (view === "newcamps") render();
+      if (view === "newcamps") render();
     }));
     if (gen !== nc.gen) return;
     nc.loadedAt = Date.now();
@@ -1259,66 +1257,90 @@ async function loadNewCamps(refresh = false, silent = false) {
     if (gen === nc.gen) { nc.loading = false; document.getElementById("refreshBtn").disabled = false; if (view === "newcamps") render(); }
   }
 }
-// Chia camp của 1 tài khoản vào các khoảng ngày (theo múi giờ tài khoản)
-function ncBuckets(acc, list) {
-  const tz = accInfo.get(acc)?.tz;
-  const today = tz ? todayIn(tz) : ymd(new Date());
-  const back = n => ymd(addDays(parseYmd(today), -n));
-  const out = { today: [], yesterday: [], "3d": [], "7d": [] };
-  for (const c of list || []) {
-    const d = dayInTz(c.create_time, tz); if (!d) continue;
-    const row = { ...c, day: d, acc };
-    if (d === today) out.today.push(row);
-    if (d === back(1)) out.yesterday.push(row);
-    if (d >= back(3) && d <= back(1)) out["3d"].push(row);
-    if (d >= back(7) && d <= back(1)) out["7d"].push(row);
+// Gom camp mới của 1 nhóm vào thẻ app giống tab của nhóm đó → [{ code, acc, pic, b: {today, yesterday, 3d, 7d} }]
+function ncGroupRows(g, gi) {
+  const rows = new Map(), errors = []; let pending = 0;
+  for (const acc of g.accounts || []) {
+    const kw = accKw(g, acc), d = nc.data.get(`${acc}|${kw}`);
+    if (!d || d.status === "loading") { pending++; continue; }
+    if (d.status === "error") { errors.push({ acc, err: d.error }); continue; }
+    const tz = accInfo.get(acc)?.tz, today = tz ? todayIn(tz) : ymd(new Date());
+    const back = n => ymd(addDays(parseYmd(today), -n));
+    const kwl = kw.toLowerCase();
+    const assign = g.groupBy === "account" ? () => `acc:${acc}` : assigner(kw);
+    for (const c of d.list || []) {
+      const name = String(c.campaign_name || "");
+      if (kwl && !name.toLowerCase().includes(kwl)) continue;
+      const code = assign(name); if (!code) continue;
+      if (isHidden(gi, { acc, code })) continue;
+      const day = dayInTz(c.create_time, tz); if (!day || day < back(7)) continue;
+      const k = `${acc}|${code}`;
+      if (!rows.has(k)) rows.set(k, { code, acc, tz, b: { today: [], yesterday: [], "3d": [], "7d": [] } });
+      const r = rows.get(k), row = { ...c, day };
+      if (day === today) r.b.today.push(row);
+      if (day === back(1)) r.b.yesterday.push(row);
+      if (day >= back(3) && day <= back(1)) r.b["3d"].push(row);
+      if (day <= back(1)) r.b["7d"].push(row);
+    }
   }
-  return out;
+  return { rows: [...rows.values()], errors, pending };
 }
-function ncCell(key, bucket, list, strong) {
+function ncCell(id, bucket, list) {
   const n = list.length;
   if (!n) return `<td class="num na">0</td>`;
-  return `<td class="num"><button class="nc-num${strong ? " hot" : ""}" data-act="nc-list" data-key="${esc(key)}" data-bucket="${bucket}" title="Xem ${n} camp">${n}</button></td>`;
+  return `<td class="num"><button class="nc-num${bucket === "today" ? " hot" : ""}" data-act="nc-list" data-key="${esc(id)}" data-bucket="${bucket}" title="Xem ${n} camp">${n}</button></td>`;
 }
 function newCampsHtml() {
   const now = new Date();
   const span = n => spanText(ymd(addDays(now, -n)), ymd(addDays(now, -1)));
-  const head = `<tr><th>Tài khoản</th>${NC_BUCKETS.map(([b, l]) => `<th>${l}${b === "3d" ? `<div class="share">${span(3)}</div>` : b === "7d" ? `<div class="share">${span(7)}</div>` : ""}</th>`).join("")}</tr>`;
-  const seen = new Set(); const grand = { today: 0, yesterday: 0, "3d": 0, "7d": 0 };
+  const head = `<tr><th>App</th><th>UA PIC</th><th>Tài khoản</th>${NC_BUCKETS.map(([b, l]) => `<th>${l}${b === "3d" ? `<div class="share">${span(3)}</div>` : b === "7d" ? `<div class="share">${span(7)}</div>` : ""}</th>`).join("")}</tr>`;
+  const grand = { today: 0, yesterday: 0, "3d": 0, "7d": 0 };
+  const groups = config.groups.map((g, gi) => ({ g, gi, ...ncGroupRows(g, gi) }));
+  const pics = [...new Set(groups.flatMap(x => x.rows.map(r => picOf(r)).filter(Boolean)))].sort((x, y) => x.localeCompare(y, "vi"));
+  const pf = picFilter === "__none" || pics.includes(picFilter) ? picFilter : "";
+  const byPic = r => !pf || (pf === "__none" ? !picOf(r) : picOf(r) === pf);
   let pending = 0;
-  const sections = config.groups.map((g, gi) => {
-    const kw = ncKw(g); const tot = { today: 0, yesterday: 0, "3d": 0, "7d": 0 };
-    const rows = (g.accounts || []).map(acc => {
-      const key = `${acc}|${kw}`, d = nc.data.get(key), name = accInfo.get(acc)?.name;
-      const label = `<td><div>${esc(name || acc)}</div>${name ? `<div class="share">${esc(acc)}</div>` : ""}</td>`;
-      if (!d || d.status === "loading") { pending++; return `<tr>${label}<td class="share" colspan="4">đang tải…</td></tr>`; }
-      if (d.status === "error") return `<tr>${label}<td class="share" colspan="4" title="${esc(errText(d.error))}">lỗi: ${esc(errText(d.error))}</td></tr>`;
-      const bk = ncBuckets(acc, d.list);
-      for (const [b] of NC_BUCKETS) { tot[b] += bk[b].length; if (!seen.has(key)) grand[b] += bk[b].length; }
-      seen.add(key);
-      return `<tr>${label}${NC_BUCKETS.map(([b]) => ncCell(key, b, bk[b], b === "today")).join("")}</tr>`;
+  nc.rows.clear();
+  const sections = groups.map(({ g, gi, rows, errors, pending: pd }) => {
+    pending += pd;
+    const list = rows.filter(byPic).sort((x, y) => y.b.today.length - x.b.today.length || y.b["7d"].length - x.b["7d"].length || appName(x.code).localeCompare(appName(y.code)));
+    const tot = { today: 0, yesterday: 0, "3d": 0, "7d": 0 };
+    const body = list.map(r => {
+      const id = `${gi}|${r.acc}|${r.code}`; nc.rows.set(id, { g, ...r });
+      for (const [b] of NC_BUCKETS) tot[b] += r.b[b].length;
+      const accName = accInfo.get(r.acc)?.name;
+      return `<tr><td><b>${esc(appName(r.code))}</b></td><td>${picOf(r) ? esc(picOf(r)) : '<span class="share">—</span>'}</td><td title="${esc(accName || "")}"><span class="share">${esc(r.acc)}</span></td>${NC_BUCKETS.map(([b]) => ncCell(id, b, r.b[b])).join("")}</tr>`;
     }).join("");
-    return `<section class="nc-group"><div class="nc-group-head"><h2>${esc(g.name)}</h2><span class="sub">${(g.accounts || []).length} tài khoản · camp có chữ "${esc(kw)}"</span></div>
-      <div class="camp-table"><table><thead>${head}</thead><tbody>${rows}</tbody>
-      <tfoot><tr><td>Tổng ${esc(g.name)}</td>${NC_BUCKETS.map(([b]) => `<td class="num">${tot[b]}</td>`).join("")}</tr></tfoot></table></div></section>`;
+    for (const [b] of NC_BUCKETS) grand[b] += tot[b];
+    const note = pd ? `<tr><td colspan="7" class="share">Đang kéo ${pd} tài khoản…</td></tr>` : "";
+    const errs = errors.length ? `<div class="acc-errors">${errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
+    const empty = !list.length && !pd ? `<tr><td colspan="7" class="share">Không có camp mới trong 7 ngày qua${pf ? " của UA PIC này" : ""}.</td></tr>` : "";
+    return `<section class="nc-group"><div class="nc-group-head"><h2>${esc(g.name)}</h2><span class="sub">${(g.accounts || []).length} tài khoản · ${g.groupBy === "account" ? "gom theo tài khoản" : "gom theo mã app"}</span></div>${errs}
+      <div class="camp-table"><table><thead>${head}</thead><tbody>${body}${empty}${note}</tbody>
+      <tfoot><tr><td>Tổng ${esc(g.name)}</td><td></td><td></td>${NC_BUCKETS.map(([b]) => `<td class="num">${tot[b]}</td>`).join("")}</tr></tfoot></table></div></section>`;
   }).join("");
   const status = !mcp ? `Kéo số tự động chỉ chạy khi mở trang này trên Claude, với connector ${SERVER} đã kết nối.`
     : nc.loading ? `Đang kéo… còn ${pending} tài khoản` : nc.loadedAt ? `Số liệu lúc ${new Date(nc.loadedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} · tự cập nhật 3 phút/lần` : "";
   const tiles = NC_BUCKETS.map(([b, l]) => `<div class="nc-tile${b === "today" ? " hot" : ""}"><div class="lbl">${l}</div><div class="v">${grand[b]}</div></div>`).join("");
   return `<section role="tabpanel">
-    <div class="group-head"><h1>Camp mới</h1><span class="sub">Số camp mới lên theo ngày tạo, tính theo múi giờ từng tài khoản · "N ngày qua" không tính hôm nay</span>
-      <span class="actions"><span class="status">${esc(status)}</span></span></div>
+    <div class="group-head"><h1>Camp mới</h1><span class="sub">Cộng từ các tab, lọc camp và gom thẻ theo cài đặt từng nhóm · giờ theo từng tài khoản · "N ngày qua" không tính hôm nay</span>
+      <span class="actions"><span class="status">${esc(status)}</span>
+        <label class="sort pic-filter">UA PIC
+          <select id="picFilter" aria-label="Lọc theo UA PIC">
+            <option value="">Tất cả</option>
+            ${pics.map(pn => `<option value="${esc(pn)}" ${pn === pf ? "selected" : ""}>${esc(pn)}</option>`).join("")}
+            <option value="__none" ${pf === "__none" ? "selected" : ""}>Chưa có PIC</option>
+          </select></label></span></div>
     <div class="nc-tiles">${tiles}</div>
     ${sections}
   </section>`;
 }
-function openNewCampList(key, bucket) {
-  const d = nc.data.get(key); if (!d?.list) return;
-  const acc = key.split("|")[0], tz = accInfo.get(acc)?.tz;
-  const list = ncBuckets(acc, d.list)[bucket].sort((x, y) => String(y.create_time).localeCompare(String(x.create_time)));
-  const time = c => { try { return new Intl.DateTimeFormat("vi-VN", { timeZone: tz || "UTC", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(String(c.create_time).replace(" ", "T") + "Z")); } catch (e) { return c.create_time; } };
-  document.getElementById("ncTitle").textContent = `${accInfo.get(acc)?.name || acc} · ${NC_BUCKETS.find(x => x[0] === bucket)[1]}`;
-  document.getElementById("ncMeta").textContent = `${acc}${tz ? " · " + tzOffset(tz) : ""} · ${list.length} camp`;
+function openNewCampList(id, bucket) {
+  const r = nc.rows.get(id); if (!r) return;
+  const list = [...r.b[bucket]].sort((x, y) => String(y.create_time).localeCompare(String(x.create_time)));
+  const time = c => { try { return new Intl.DateTimeFormat("vi-VN", { timeZone: r.tz || "UTC", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(String(c.create_time).replace(" ", "T") + "Z")); } catch (e) { return c.create_time; } };
+  document.getElementById("ncTitle").textContent = `${appName(r.code)} · ${NC_BUCKETS.find(x => x[0] === bucket)[1]}`;
+  document.getElementById("ncMeta").textContent = `${r.g.name} · ${accInfo.get(r.acc)?.name || r.acc}${picOf(r) ? " · UA " + picOf(r) : ""}${r.tz ? " · " + tzOffset(r.tz) : ""} · ${list.length} camp`;
   document.getElementById("ncTable").innerHTML = `<table><thead><tr><th>Camp</th><th>Tạo lúc</th><th>Trạng thái</th></tr></thead><tbody>${list.map(c =>
     `<tr><td>${esc(c.campaign_name)}<div class="share">${esc(c.campaign_id)}</div></td><td>${esc(time(c))}</td><td>${c.operation_status === "ENABLE" ? '<span class="pill on">Đang chạy</span>' : '<span class="pill">Tắt</span>'}</td></tr>`).join("")}</tbody></table>`;
   document.getElementById("ncDlg").showModal();
