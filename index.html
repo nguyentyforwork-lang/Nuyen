@@ -262,6 +262,23 @@
   .camp-head .meta { color: var(--muted); font-size: 14px; }
   .camp-tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; font-size: 14px; color: var(--muted); }
   .camp-tools input[type="search"] { font: inherit; font-size: 14px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; min-width: 0; flex: 1 1 200px; }
+  body.nc-view #presetSeg, body.nc-view .daterange, body.nc-view #rangeLabel { display: none; }
+  .tabs .tab-new { margin-left: auto; font-weight: 600; }
+  .tabs .tab-new::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--new-bd); margin-right: 6px; vertical-align: 1px; }
+  .nc-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .nc-tile { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .nc-tile .lbl { font-size: 13px; color: var(--muted); }
+  .nc-tile .v { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .nc-tile.hot { background: var(--new-bg); border-color: var(--new-bd); }
+  .nc-tile.hot .v, .nc-tile.hot .lbl { color: var(--new-fg); }
+  .nc-group { margin-bottom: 24px; }
+  .nc-group-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .nc-group-head h2 { font-size: 18px; margin: 0; }
+  .nc-group .camp-table { max-height: none; }
+  .nc-group .camp-table td:first-child { min-width: 180px; }
+  .nc-num { font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; background: none; border: 0; padding: 2px 8px; border-radius: 6px; cursor: pointer; color: var(--text); text-decoration: underline dotted; text-underline-offset: 3px; }
+  .nc-num.hot { background: var(--new-bg); color: var(--new-fg); text-decoration: none; }
+  @media (max-width: 640px) { .nc-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .camp-table { max-height: 62vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
   .camp-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
   .camp-table th { position: sticky; top: 0; background: var(--card); text-align: right; color: var(--muted); font-weight: 500; padding: 8px 10px; white-space: nowrap; border-bottom: 1px solid var(--border); }
@@ -419,6 +436,14 @@
   </form>
 </dialog>
 
+<dialog id="ncDlg" class="wide">
+  <form method="dialog">
+    <div class="camp-head"><h2 id="ncTitle"></h2><span class="meta" id="ncMeta"></span></div>
+    <div class="camp-table" id="ncTable"></div>
+    <div class="dlg-actions"><span class="spacer"></span><button class="tb primary" value="close">Đóng</button></div>
+  </form>
+</dialog>
+
 <dialog id="campDlg" class="wide">
   <form method="dialog">
     <div class="camp-head"><h2 id="campTitle"></h2><span class="meta" id="campMeta"></span></div>
@@ -491,6 +516,10 @@ let campSort = "spend";
 const roasOf = x => x.spend > 0 ? x.rev / x.spend : -1;
 const bySort = key => (x, y) => key === "roas" ? roasOf(y) - roasOf(x) || y.spend - x.spend : y.spend - x.spend || roasOf(y) - roasOf(x);
 function setTab(i) { activeTab = i; try { localStorage.setItem(TAB_KEY, String(i)); } catch (e) {} }
+// Trang đang xem: "groups" = dashboard theo nhóm, "newcamps" = tab Camp mới (nhớ trên trình duyệt này)
+const VIEW_KEY = "ecomdy-kpi-view";
+let view = (() => { try { return localStorage.getItem(VIEW_KEY) === "newcamps" ? "newcamps" : "groups"; } catch (e) { return "groups"; } })();
+function setView(v) { view = v; try { localStorage.setItem(VIEW_KEY, v); } catch (e) {} }
 
 /* ---------- Helpers ---------- */
 const isNum = v => typeof v === "number" && isFinite(v);
@@ -648,9 +677,10 @@ const ERR_TEXT = {
 const PAGE_LEVEL = new Set(["server_not_connected", "needs_reauth", "selection_required", "not_in_manifest", "consent_required", "blocked_by_policy", "approval_required"]);
 const errText = e => ERR_TEXT[e?.code] || e?.message || "Không kéo được số liệu.";
 
-// Hàng đợi: TikTok giới hạn số request/giây, nên gọi lần lượt từng request, cách nhau ≥ 350 ms.
+// Hàng đợi: TikTok giới hạn số request/giây → tối đa 2 request cùng lúc, mỗi request bắt đầu cách nhau ≥ 300 ms.
+// Gặp rate limit thì tt() tự chờ rồi gọi lại.
 const Q = { active: 0, next: 0, waiters: [] };
-const Q_MAX = 1, Q_GAP = 350;
+const Q_MAX = 2, Q_GAP = 300;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function acquireSlot() {
   while (Q.active >= Q_MAX) await new Promise(r => Q.waiters.push(r));
@@ -751,13 +781,40 @@ async function fetchAccount(acc, kw, win, refresh) {
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end, order_field: "spend" }, refresh),
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end, order_field: "spend" }, refresh),
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end, order_field: "spend" }, refresh),
-    allPages("campaign_get", { advertiser_id: acc, ...(kw ? { filtering: { campaign_name: kw } } : {}), fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status", "roas_bid", "create_time", "campaign_type", "is_advanced_dedicated_campaign", "disable_skan_campaign"] }, refresh)
-      .catch(() => ({ rows: [] })), // ngân sách là phụ: lỗi thì hiện spend TB/ngày
+    campaignList(acc, kw, refresh),
   ]);
   return {
     cur: cur.rows, prev: prev.rows,
     trend: trend.rows, camps: camps.rows, storedAt: cur.storedAt, curRange: { ...win.cur },
   };
+}
+
+// Kéo gộp tối đa 5 tài khoản cùng từ khóa + cùng khoảng ngày: report nhận advertiser_ids (≤ 5), số của mỗi
+// tài khoản vẫn theo múi giờ của chính nó, mỗi dòng có metrics.advertiser_id để tách lại. campaign_get chỉ
+// nhận 1 tài khoản nên vẫn gọi riêng. Trả về Map(acc → dữ liệu thô giống fetchAccount).
+async function fetchBatch(accs, kw, win, refresh) {
+  if (accs.length === 1) return new Map([[accs[0], await fetchAccount(accs[0], kw, win, refresh)]]);
+  const filtering = kw ? [{ field_name: "campaign_name", filter_type: "MATCH", filter_value: kw }] : undefined;
+  const base = { advertiser_ids: accs, report_type: "BASIC", data_level: "AUCTION_CAMPAIGN", filtering, order_field: "spend" };
+  const [cur, prev, trend, ...camps] = await Promise.all([
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end }, refresh),
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end }, refresh),
+    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end }, refresh),
+    ...accs.map(acc => campaignList(acc, kw, refresh)),
+  ]);
+  const split = rows => {
+    const by = new Map(accs.map(a => [a, []]));
+    for (const r of rows) by.get(String(r.metrics?.advertiser_id || ""))?.push(r);
+    return by;
+  };
+  const c = split(cur.rows), p = split(prev.rows), t = split(trend.rows);
+  return new Map(accs.map((acc, i) => [acc, {
+    cur: c.get(acc), prev: p.get(acc), trend: t.get(acc), camps: camps[i].rows, storedAt: cur.storedAt, curRange: { ...win.cur },
+  }]));
+}
+function campaignList(acc, kw, refresh) {
+  return allPages("campaign_get", { advertiser_id: acc, ...(kw ? { filtering: { campaign_name: kw } } : {}), fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status", "roas_bid", "create_time", "campaign_type", "is_advanced_dedicated_campaign", "disable_skan_campaign"] }, refresh)
+    .catch(() => ({ rows: [] })); // ngân sách là phụ: lỗi thì hiện spend TB/ngày
 }
 
 // Bộ lọc camp của từng app = các chữ người dùng gõ (cách nhau bằng dấu phẩy) + mã app.
@@ -879,6 +936,7 @@ function rebuild(gi) {
 // silent = tự cập nhật ngầm: giữ số cũ trên màn hình đến khi có số mới, lỗi thì giữ số cũ.
 async function loadAll(refresh = false, silent = false) {
   if (silent && document.getElementById("refreshBtn").disabled) return;   // đang kéo dở thì thôi
+  if (view === "newcamps") return loadNewCamps(refresh, silent);
   const gen = ++loadGen;
   if (!mcpReady) { ensureDefaultRange(); renderRangeUi(); render(); return; }
   if (!mcp) {
@@ -904,26 +962,48 @@ async function loadAll(refresh = false, silent = false) {
     // Kéo lần lượt từng tài khoản trong nhóm; xong tài khoản nào hiện tài khoản đó
     const res = { status: "ok", apps: [], errors: [], accs: [], storedAt: null, rangeKey: `${win.cur.start}|${win.cur.end}`, progress: `0/${accounts.length}` };
     if (!silent) results[gi] = res;
-    for (let i = 0; i < accounts.length; i++) {
-      res.progress = `${i + 1}/${accounts.length}`;
-      if (i) { rebuild(gi); render(); }   // khi chạy ngầm: thẻ của tài khoản vừa kéo xong đổi số ngay
-      const kw = accKw(g, accounts[i]);
+    // Gộp tài khoản cùng từ khóa + cùng khoảng ngày (theo múi giờ) thành lô ≤ 5 → 1 lô = 3 report thay vì 3 × 5
+    const lots = new Map();
+    for (const acc of accounts) {
+      const kw = accKw(g, acc), win = rangeWindows(acc);
+      const k = `${kw}|${win.cur.start}|${win.cur.end}|${win.prev.start}|${win.trend.start}|${win.trend.end}`;
+      if (!lots.has(k)) lots.set(k, { kw, win, accs: [] });
+      lots.get(k).accs.push(acc);
+    }
+    const batches = [...lots.values()].flatMap(l => Array.from({ length: Math.ceil(l.accs.length / 5) }, (_, j) => ({ ...l, accs: l.accs.slice(j * 5, j * 5 + 5) })));
+    const keep = (acc, kw, raw) => {
+      accRaw.set(`${acc}|${kw}`, raw); res.accs.push(acc);
+      if (raw.storedAt && (!res.storedAt || raw.storedAt < res.storedAt)) res.storedAt = raw.storedAt;
+    };
+    const fail = (acc, kw, e) => {
+      if (silent && accRaw.has(`${acc}|${kw}`)) { res.accs.push(acc); res.staleAccs = (res.staleAccs || 0) + 1; return; }
+      res.errors.push({ acc, err: e });
+    };
+    let done = 0, stop = null;
+    for (const bt of batches) {
+      res.progress = `${done}/${accounts.length}`;
+      if (done) { rebuild(gi); render(); }   // thẻ của lô vừa kéo xong hiện ngay
+      if (stop) { bt.accs.forEach(acc => res.errors.push({ acc, err: stop })); continue; }
       try {
-        const raw = await fetchAccount(accounts[i], kw, rangeWindows(accounts[i]), refresh);
+        const raws = await fetchBatch(bt.accs, bt.kw, bt.win, refresh);
         if (gen !== loadGen) return;
-        accRaw.set(`${accounts[i]}|${kw}`, raw); res.accs.push(accounts[i]);
-        if (raw.storedAt && (!res.storedAt || raw.storedAt < res.storedAt)) res.storedAt = raw.storedAt;
+        for (const acc of bt.accs) keep(acc, bt.kw, raws.get(acc));
       } catch (e) {
         if (gen !== loadGen) return;
-        if (silent && accRaw.has(`${accounts[i]}|${kw}`)) { res.accs.push(accounts[i]); res.staleAccs = (res.staleAccs || 0) + 1; continue; }
-        res.errors.push({ acc: accounts[i], err: e });
-        // Lỗi kết nối connector thì các tài khoản sau cũng lỗi y vậy → dừng sớm, khỏi gọi thêm
-        if (PAGE_LEVEL.has(e?.code) || e?.code === "tt_rate_limited") {
-          for (const rest of accounts.slice(i + 1)) res.errors.push({ acc: rest, err: e });
-          break;
+        // Lỗi kết nối connector / rate limit: các lô sau cũng lỗi y vậy → dừng sớm
+        if (PAGE_LEVEL.has(e?.code) || e?.code === "tt_rate_limited") { stop = e; bt.accs.forEach(acc => fail(acc, bt.kw, e)); }
+        else if (bt.accs.length === 1) fail(bt.accs[0], bt.kw, e);
+        else {
+          // Lô lỗi (vd. 1 tài khoản mất quyền) → kéo riêng từng tài khoản để biết tài khoản nào lỗi
+          for (const acc of bt.accs) {
+            try { const raw = await fetchAccount(acc, bt.kw, bt.win, refresh); if (gen !== loadGen) return; keep(acc, bt.kw, raw); }
+            catch (e2) { if (gen !== loadGen) return; fail(acc, bt.kw, e2); }
+          }
         }
       }
+      done += bt.accs.length;
     }
+    res.accs.sort((x, y) => accounts.indexOf(x) - accounts.indexOf(y));
     delete res.progress;
     res.loadedAt = Date.now();
     if (!res.storedAt) res.storedAt = res.loadedAt;
@@ -946,7 +1026,9 @@ async function loadAll(refresh = false, silent = false) {
 const AUTO_MS = 180000;
 const isLive = () => (range?.end || "") >= ymd(addDays(new Date(), -1));
 function autoRefresh() {
-  if (document.hidden || !isLive()) return;
+  if (document.hidden) return;
+  if (view === "newcamps") { if (!nc.loading && Date.now() - (nc.loadedAt || 0) >= AUTO_MS - 5000) loadNewCamps(true, true); return; }
+  if (!isLive()) return;
   const r = results[activeTab];
   if (!r || r.status !== "ok" || r.progress || Date.now() - (r.loadedAt || 0) < AUTO_MS - 5000) return;
   loadAll(true, true);
@@ -1128,6 +1210,120 @@ function card(a) {
   </article>`;
 }
 
+function navHtml() {
+  return `<nav class="tabs" role="tablist" aria-label="Nhóm tài khoản">${config.groups.map((x, i) =>
+      `<button role="tab" data-act="tab" data-g="${i}" aria-selected="${view === "groups" && i === activeTab}">${esc(x.name)}</button>`).join("")}
+    <button class="tab-add edit-only" data-act="add-group" title="Thêm nhóm">+ Nhóm</button>
+    <button role="tab" class="tab-new" data-act="view-new" aria-selected="${view === "newcamps"}">Camp mới</button></nav>`;
+}
+
+/* ---------- Tab Camp mới: số camp mới lên theo tài khoản (Hôm nay / Hôm qua / 3 ngày qua / 7 ngày qua) ---------- */
+// Mỗi tài khoản 1 lần campaign_get, chỉ lấy camp tạo trong ~9 ngày gần đây có từ khóa của nhóm (mặc định Ecomdy).
+// Ngày tạo đổi sang múi giờ của tài khoản. "N ngày qua" không tính hôm nay, giống các nút chọn ngày.
+// Camp đã xóa không được TikTok trả về nên không được đếm.
+const nc = { data: new Map(), loading: false, loadedAt: 0, gen: 0 };   // `${acc}|${kw}` → { status, list, error }
+const NC_BUCKETS = [["today", "Hôm nay"], ["yesterday", "Hôm qua"], ["3d", "3 ngày qua"], ["7d", "7 ngày qua"]];
+const ncKw = g => (g.keyword || "Ecomdy").trim();
+async function loadNewCamps(refresh = false, silent = false) {
+  if (!mcp) { render(); return; }
+  const gen = ++nc.gen; nc.loading = true;
+  document.getElementById("refreshBtn").disabled = true;
+  if (!silent) render();
+  try {
+    await loadAccInfo(refresh);
+    if (gen !== nc.gen) return;
+    const since = new Date(Date.now() - 9 * 86400000).toISOString().slice(0, 10) + " 00:00:00";
+    const jobs = [...new Map(config.groups.flatMap(g => (g.accounts || []).map(acc => [`${acc}|${ncKw(g)}`, { acc, kw: ncKw(g) }]))).entries()];
+    let left = jobs.length;
+    await Promise.all(jobs.map(async ([key, { acc, kw }]) => {
+      const old = nc.data.get(key);
+      if (!old || !silent) nc.data.set(key, { ...old, status: old?.list ? "ok" : "loading" });
+      try {
+        const { rows } = await allPages("campaign_get", {
+          advertiser_id: acc, page_size: 1000,
+          filtering: { ...(kw ? { campaign_name: kw } : {}), creation_filter_start_time: since },
+          fields: ["campaign_id", "campaign_name", "create_time", "operation_status"],
+        }, refresh);
+        if (gen !== nc.gen) return;
+        const k = kw.toLowerCase();
+        nc.data.set(key, { status: "ok", list: rows.filter(c => !k || String(c.campaign_name || "").toLowerCase().includes(k)) });
+      } catch (e) {
+        if (gen !== nc.gen) return;
+        nc.data.set(key, old?.list ? { ...old, status: "ok", stale: true } : { status: "error", error: e });
+      }
+      left--; if (view === "newcamps") render();
+    }));
+    if (gen !== nc.gen) return;
+    nc.loadedAt = Date.now();
+  } finally {
+    if (gen === nc.gen) { nc.loading = false; document.getElementById("refreshBtn").disabled = false; if (view === "newcamps") render(); }
+  }
+}
+// Chia camp của 1 tài khoản vào các khoảng ngày (theo múi giờ tài khoản)
+function ncBuckets(acc, list) {
+  const tz = accInfo.get(acc)?.tz;
+  const today = tz ? todayIn(tz) : ymd(new Date());
+  const back = n => ymd(addDays(parseYmd(today), -n));
+  const out = { today: [], yesterday: [], "3d": [], "7d": [] };
+  for (const c of list || []) {
+    const d = dayInTz(c.create_time, tz); if (!d) continue;
+    const row = { ...c, day: d, acc };
+    if (d === today) out.today.push(row);
+    if (d === back(1)) out.yesterday.push(row);
+    if (d >= back(3) && d <= back(1)) out["3d"].push(row);
+    if (d >= back(7) && d <= back(1)) out["7d"].push(row);
+  }
+  return out;
+}
+function ncCell(key, bucket, list, strong) {
+  const n = list.length;
+  if (!n) return `<td class="num na">0</td>`;
+  return `<td class="num"><button class="nc-num${strong ? " hot" : ""}" data-act="nc-list" data-key="${esc(key)}" data-bucket="${bucket}" title="Xem ${n} camp">${n}</button></td>`;
+}
+function newCampsHtml() {
+  const now = new Date();
+  const span = n => spanText(ymd(addDays(now, -n)), ymd(addDays(now, -1)));
+  const head = `<tr><th>Tài khoản</th>${NC_BUCKETS.map(([b, l]) => `<th>${l}${b === "3d" ? `<div class="share">${span(3)}</div>` : b === "7d" ? `<div class="share">${span(7)}</div>` : ""}</th>`).join("")}</tr>`;
+  const seen = new Set(); const grand = { today: 0, yesterday: 0, "3d": 0, "7d": 0 };
+  let pending = 0;
+  const sections = config.groups.map((g, gi) => {
+    const kw = ncKw(g); const tot = { today: 0, yesterday: 0, "3d": 0, "7d": 0 };
+    const rows = (g.accounts || []).map(acc => {
+      const key = `${acc}|${kw}`, d = nc.data.get(key), name = accInfo.get(acc)?.name;
+      const label = `<td><div>${esc(name || acc)}</div>${name ? `<div class="share">${esc(acc)}</div>` : ""}</td>`;
+      if (!d || d.status === "loading") { pending++; return `<tr>${label}<td class="share" colspan="4">đang tải…</td></tr>`; }
+      if (d.status === "error") return `<tr>${label}<td class="share" colspan="4" title="${esc(errText(d.error))}">lỗi: ${esc(errText(d.error))}</td></tr>`;
+      const bk = ncBuckets(acc, d.list);
+      for (const [b] of NC_BUCKETS) { tot[b] += bk[b].length; if (!seen.has(key)) grand[b] += bk[b].length; }
+      seen.add(key);
+      return `<tr>${label}${NC_BUCKETS.map(([b]) => ncCell(key, b, bk[b], b === "today")).join("")}</tr>`;
+    }).join("");
+    return `<section class="nc-group"><div class="nc-group-head"><h2>${esc(g.name)}</h2><span class="sub">${(g.accounts || []).length} tài khoản · camp có chữ "${esc(kw)}"</span></div>
+      <div class="camp-table"><table><thead>${head}</thead><tbody>${rows}</tbody>
+      <tfoot><tr><td>Tổng ${esc(g.name)}</td>${NC_BUCKETS.map(([b]) => `<td class="num">${tot[b]}</td>`).join("")}</tr></tfoot></table></div></section>`;
+  }).join("");
+  const status = !mcp ? `Kéo số tự động chỉ chạy khi mở trang này trên Claude, với connector ${SERVER} đã kết nối.`
+    : nc.loading ? `Đang kéo… còn ${pending} tài khoản` : nc.loadedAt ? `Số liệu lúc ${new Date(nc.loadedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} · tự cập nhật 3 phút/lần` : "";
+  const tiles = NC_BUCKETS.map(([b, l]) => `<div class="nc-tile${b === "today" ? " hot" : ""}"><div class="lbl">${l}</div><div class="v">${grand[b]}</div></div>`).join("");
+  return `<section role="tabpanel">
+    <div class="group-head"><h1>Camp mới</h1><span class="sub">Số camp mới lên theo ngày tạo, tính theo múi giờ từng tài khoản · "N ngày qua" không tính hôm nay</span>
+      <span class="actions"><span class="status">${esc(status)}</span></span></div>
+    <div class="nc-tiles">${tiles}</div>
+    ${sections}
+  </section>`;
+}
+function openNewCampList(key, bucket) {
+  const d = nc.data.get(key); if (!d?.list) return;
+  const acc = key.split("|")[0], tz = accInfo.get(acc)?.tz;
+  const list = ncBuckets(acc, d.list)[bucket].sort((x, y) => String(y.create_time).localeCompare(String(x.create_time)));
+  const time = c => { try { return new Intl.DateTimeFormat("vi-VN", { timeZone: tz || "UTC", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(String(c.create_time).replace(" ", "T") + "Z")); } catch (e) { return c.create_time; } };
+  document.getElementById("ncTitle").textContent = `${accInfo.get(acc)?.name || acc} · ${NC_BUCKETS.find(x => x[0] === bucket)[1]}`;
+  document.getElementById("ncMeta").textContent = `${acc}${tz ? " · " + tzOffset(tz) : ""} · ${list.length} camp`;
+  document.getElementById("ncTable").innerHTML = `<table><thead><tr><th>Camp</th><th>Tạo lúc</th><th>Trạng thái</th></tr></thead><tbody>${list.map(c =>
+    `<tr><td>${esc(c.campaign_name)}<div class="share">${esc(c.campaign_id)}</div></td><td>${esc(time(c))}</td><td>${c.operation_status === "ENABLE" ? '<span class="pill on">Đang chạy</span>' : '<span class="pill">Tắt</span>'}</td></tr>`).join("")}</tbody></table>`;
+  document.getElementById("ncDlg").showModal();
+}
+
 function render() {
   document.body.classList.toggle("readonly", readOnly);
   const el = document.getElementById("app");
@@ -1138,6 +1334,8 @@ function render() {
     return;
   }
   if (activeTab >= config.groups.length) activeTab = 0;
+  document.body.classList.toggle("nc-view", view === "newcamps");
+  if (view === "newcamps") { el.innerHTML = navHtml() + newCampsHtml(); return; }
 
   const gi = activeTab, g = config.groups[gi];
   const r0 = results[gi] || { status: "idle", apps: [], errors: [] };
@@ -1155,7 +1353,7 @@ function render() {
     ? `${r.apps.length} app · ${fmtUsd(Math.round(total))} · chỉ camp ${kw}${hiddenN ? ` · <button class="icon unhide edit-only" data-act="unhide" data-g="${esc(g.name)}">Hiện lại ${hiddenN} app đã xóa</button>` : ""}`
     : `${(g.accounts || []).length} tài khoản · chỉ camp ${kw}`;
   const status = r.status === "loading" ? "Đang kéo số…"
-    : r.progress ? `Đang kéo tài khoản ${r.progress}…`
+    : r.progress ? `Đang kéo số… xong ${r.progress} tài khoản`
     : r.updating ? "Đang cập nhật…"
     : r.status === "ok" && r.storedAt ? `Số liệu lúc ${new Date(r.storedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}${isLive() ? " · tự cập nhật 3 phút/lần" : ""}${r.staleAccs ? ` · ${r.staleAccs} tài khoản chưa cập nhật được` : ""}`
     : "";
@@ -1164,11 +1362,9 @@ function render() {
   else if (r.pageError || r.status !== "ok") body = `<div class="empty">Chưa có số liệu.</div>`;
   else if (!r.apps.length && visible.length) body = `<div class="empty">Không có app nào ${picFilter === "__none" ? "chưa có UA PIC" : `của UA PIC "${esc(picFilter)}"`} trong nhóm này.</div>`;
   else if (!r.apps.length && !r.errors.length) body = `<div class="empty">${hiddenN ? "Đã xóa hết app khỏi dashboard. Bấm \"Hiện lại\" ở trên để lấy lại." : `Không có camp ${kw} nào có spend trong khoảng ngày này.`}</div>`;
-  else body = [...r.apps].sort(bySort(appSort)).map(a => card(a)).join("") + (r.progress ? `<div class="card loading">Đang kéo tài khoản ${r.progress}…</div>` : "");
+  else body = [...r.apps].sort(bySort(appSort)).map(a => card(a)).join("") + (r.progress ? `<div class="card loading">Đang kéo số… xong ${r.progress} tài khoản</div>` : "");
   const errs = r.errors.length ? `<div class="acc-errors">${r.errors.map(e => `<div>Tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
-  const tabs = `<nav class="tabs" role="tablist" aria-label="Nhóm tài khoản">${config.groups.map((x, i) =>
-      `<button role="tab" data-act="tab" data-g="${i}" aria-selected="${i === gi}">${esc(x.name)}</button>`).join("")}
-    <button class="tab-add edit-only" data-act="add-group" title="Thêm nhóm">+ Nhóm</button></nav>`;
+  const tabs = navHtml();
   el.innerHTML = `${tabs}<section role="tabpanel">
       <div class="group-head">
         <h1>${esc(g.name)}</h1>
@@ -1546,8 +1742,8 @@ document.addEventListener("click", e => {
       break;
     }
     case "tab": {
-      const i = +el.dataset.g; if (i === activeTab) break;
-      setTab(i); openPanels.clear();
+      const i = +el.dataset.g; if (i === activeTab && view === "groups") break;
+      setView("groups"); setTab(i); openPanels.clear();
       const key = `${rangeWindows().cur.start}|${rangeWindows().cur.end}`;
       if (results[i]?.status === "ok" && results[i].rangeKey === key) render(); else loadAll();
       break;
@@ -1566,6 +1762,8 @@ document.addEventListener("click", e => {
       config.hidden = (config.hidden || []).filter(k => !k.startsWith(`${el.dataset.g}#`));
       saveConfig(); render(); toast("Đã hiện lại các app đã xóa."); break;
     case "refresh": loadAll(true); break;
+    case "view-new": if (view !== "newcamps") { setView("newcamps"); render(); loadNewCamps(); } break;
+    case "nc-list": openNewCampList(el.dataset.key, el.dataset.bucket); break;
     case "save": document.activeElement?.blur?.(); saveConfig(true); break;
   }
 });
