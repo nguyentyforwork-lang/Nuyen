@@ -320,10 +320,10 @@
   .nc-table table { width: 100%; border-collapse: collapse; }
   .nc-table th { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
   .nc-table th:first-child { text-align: left; }
-  .nc-table td { padding: 7px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+  .nc-table td { padding: 6px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
   .nc-table tr:first-child td { border-top: 0; }
   .nc-table tbody tr:hover td { background: color-mix(in srgb, var(--line) 4%, transparent); }
-  .nc-app { min-width: 200px; }
+  .nc-app { width: 1%; white-space: nowrap; padding-right: 28px !important; }
   .nc-app-name { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
   .nc-x { font: inherit; font-size: 16px; line-height: 1; width: 22px; height: 22px; border-radius: 6px; border: 0; background: none; color: var(--muted); cursor: pointer; opacity: 0; }
   .nc-table tr:hover .nc-x, .nc-x:focus-visible { opacity: 1; }
@@ -333,11 +333,11 @@
   .nc-acc { color: var(--muted); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
   .nc-pic-chip { white-space: nowrap; background: var(--camp-bg); color: var(--camp-text); border-radius: 99px; padding: 1px 9px; font-weight: 600; font-size: 12px; }
   .nc-pic-chip.none { background: var(--chip-bg); color: var(--muted); font-weight: 500; }
-  .nc-table th.nc-grp { text-align: left; }
-  td.nc-grp { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .nc-grp { font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
   .nc-sp { width: 170px; text-align: center; }
   .nc-spark { display: inline-block; vertical-align: middle; }
-  .nc-c { width: 13%; min-width: 96px; text-align: right; }
+  .nc-c { min-width: 96px; text-align: center; }
+  .nc-table th.nc-c { text-align: center; }
   th.nc-c.sel { color: var(--text); }
   .nc-th { font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; padding: 4px 6px; margin: -4px -6px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
   .nc-th:hover { background: var(--chip-bg); color: var(--text); }
@@ -353,7 +353,7 @@
   .nc-targets label { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
   .nc-targets input { width: 46px; font: inherit; font-size: 14px; font-weight: 700; text-align: center; padding: 3px 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); color: var(--text); }
   @media (max-width: 900px) { .nc-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); } .nc-charts { grid-template-columns: 1fr; } .nc-note { margin-left: 0; } }
-  @media (max-width: 560px) { .nc-grp { display: none !important; } .nc-tile .v { font-size: 34px; } .nc-tile.big .v { font-size: 44px; } .nc-sp { display: none; } .nc-num { font-size: 21px; padding: 3px 8px; min-width: 40px; } .nc-table td, .nc-table th { padding: 6px 6px; } }
+  @media (max-width: 560px) { .nc-tile .v { font-size: 34px; } .nc-tile.big .v { font-size: 44px; } .nc-sp { display: none; } .nc-num { font-size: 21px; padding: 3px 8px; min-width: 40px; } .nc-table td, .nc-table th { padding: 6px 6px; } }
   .camp-table { max-height: 62vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
   .camp-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
   .camp-table th { position: sticky; top: 0; background: var(--card); text-align: right; color: var(--muted); font-weight: 500; padding: 8px 10px; white-space: nowrap; border-bottom: 1px solid var(--border); }
@@ -1439,16 +1439,16 @@ function newCampsHtml() {
   const pending = groups.reduce((n, x) => n + x.pending, 0);
   const errors = groups.flatMap(x => x.errors.map(e => ({ ...e, g: x.g })));
   const list = groups.flatMap(x => x.rows.filter(byPicF).map(r => ({ ...r, g: x.g, gi: x.gi }))).sort(cmp);
-  const head = `<tr><th>App · UA PIC</th><th class="nc-grp">Nhóm</th><th class="nc-sp">8 ngày</th>${cols.map(([b]) => { const on = b === bucket && ncPref.sort !== "pic";
+  const head = `<tr><th>App · UA PIC · Nhóm</th><th class="nc-sp">8 ngày</th>${cols.map(([b]) => { const on = b === bucket && ncPref.sort !== "pic";
     return `<th class="nc-c${b === bucket ? " sel" : ""}"><button class="nc-th" data-act="nc-th" data-v="${b}" aria-pressed="${on}" title="Sắp xếp theo ${NC_SHORT[b].toLowerCase()} (bấm lần nữa để đảo chiều)">${NC_SHORT[b]}<span class="nc-arrow">${on ? (ncPref.sort === "asc" ? "↑" : "↓") : "↕"}</span></button></th>`; }).join("")}</tr>`;
   const body = list.map(r => {
     const id = `${r.gi}|${r.acc}|${r.code}`; nc.rows.set(id, r);
     const pic = picOf(r);
-    return `<tr><td class="nc-app"><div class="nc-app-name" title="${esc(accInfo.get(r.acc)?.name || "")} · ${esc(r.acc)}">${esc(appName(r.code))}<button class="nc-x edit-only" data-act="nc-hide" data-key="${esc(r.hk)}" title="Ẩn dòng này khỏi tab Camp mới" aria-label="Ẩn ${esc(appName(r.code))}">×</button></div><div class="nc-app-sub">${pic ? `<span class="nc-pic-chip">${esc(pic)}</span>` : `<span class="nc-pic-chip none">chưa có PIC</span>`}</div></td>
-      <td class="nc-grp">${esc(r.g.name)}</td><td class="nc-sp">${ncSpark(r.days)}</td>${cols.map(([b]) => ncCell(id, b, r.b[b])).join("")}</tr>`;
+    return `<tr><td class="nc-app"><div class="nc-app-name" title="${esc(accInfo.get(r.acc)?.name || "")} · ${esc(r.acc)}">${esc(appName(r.code))}<button class="nc-x edit-only" data-act="nc-hide" data-key="${esc(r.hk)}" title="Ẩn dòng này khỏi tab Camp mới" aria-label="Ẩn ${esc(appName(r.code))}">×</button></div><div class="nc-app-sub">${pic ? `<span class="nc-pic-chip">${esc(pic)}</span>` : `<span class="nc-pic-chip none">chưa có PIC</span>`}<span class="nc-grp">${esc(r.g.name)}</span></div></td>
+<td class="nc-sp">${ncSpark(r.days)}</td>${cols.map(([b]) => ncCell(id, b, r.b[b])).join("")}</tr>`;
   }).join("");
   const errs = errors.length ? `<div class="acc-errors">${errors.map(e => `<div>${esc(e.g.name)} · tài khoản ${esc(e.acc)}: ${esc(errText(e.err))}</div>`).join("")}</div>` : "";
-  const sections = `${errs}<div class="nc-table"><table><thead>${head}</thead><tbody>${body || `<tr><td colspan="${3 + cols.length}" class="nc-empty">${pending ? "Đang kéo số…" : "Không có camp mới trong 7 ngày qua."}</td></tr>`}</tbody></table></div>
+  const sections = `${errs}<div class="nc-table" style="max-width:${440 + cols.length * 190}px"><table><thead>${head}</thead><tbody>${body || `<tr><td colspan="${3 + cols.length}" class="nc-empty">${pending ? "Đang kéo số…" : "Không có camp mới trong 7 ngày qua."}</td></tr>`}</tbody></table></div>
     ${pending && list.length ? `<div class="share" style="margin-top:8px">Đang kéo thêm ${pending} tài khoản…</div>` : ""}`;
   const status = !mcp ? `Kéo số tự động chỉ chạy khi mở trang này trên Claude, với connector ${SERVER} đã kết nối.`
     : nc.loading ? `Đang kéo… còn ${pending} tài khoản` : nc.loadedAt ? `Cập nhật ${new Date(nc.loadedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} · tự làm mới 3 phút/lần` : "";
