@@ -328,6 +328,10 @@
   .nc-spark { display: inline-block; vertical-align: middle; }
   .nc-c { width: 11%; text-align: right; }
   th.nc-c.sel { color: var(--text); }
+  .nc-th { font: inherit; text-transform: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; padding: 4px 6px; margin: -4px -6px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .nc-th:hover { background: var(--chip-bg); color: var(--text); }
+  .nc-arrow { font-size: 12px; opacity: .45; }
+  .nc-th[aria-pressed="true"] .nc-arrow { opacity: 1; color: var(--line); }
   td.nc-c.sel { background: color-mix(in srgb, var(--line) 6%, transparent); }
   .nc-zero { color: var(--muted); opacity: .5; font-size: 16px; padding: 2px 10px; }
   .nc-num { font: inherit; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; background: none; border: 0; padding: 2px 10px; border-radius: 8px; cursor: pointer; color: var(--text); }
@@ -1410,7 +1414,8 @@ function newCampsHtml() {
   const pending = groups.reduce((n, x) => n + x.pending, 0);
   const errors = groups.flatMap(x => x.errors.map(e => ({ ...e, g: x.g })));
   const list = groups.flatMap(x => x.rows.filter(byPicF).map(r => ({ ...r, g: x.g, gi: x.gi }))).sort(cmp);
-  const head = `<tr><th>App · UA PIC</th><th class="nc-grp">Nhóm</th><th class="nc-sp">8 ngày</th>${NC_BUCKETS.map(([b]) => `<th class="nc-c${b === bucket ? " sel" : ""}">${NC_SHORT[b]}</th>`).join("")}</tr>`;
+  const head = `<tr><th>App · UA PIC</th><th class="nc-grp">Nhóm</th><th class="nc-sp">8 ngày</th>${NC_BUCKETS.map(([b]) => { const on = b === bucket && ncPref.sort !== "pic";
+    return `<th class="nc-c${b === bucket ? " sel" : ""}"><button class="nc-th" data-act="nc-th" data-v="${b}" aria-pressed="${on}" title="Sắp xếp theo ${NC_SHORT[b].toLowerCase()} (bấm lần nữa để đảo chiều)">${NC_SHORT[b]}<span class="nc-arrow">${on ? (ncPref.sort === "asc" ? "↑" : "↓") : "↕"}</span></button></th>`; }).join("")}</tr>`;
   const body = list.map(r => {
     const id = `${r.gi}|${r.acc}|${r.code}`; nc.rows.set(id, r);
     const pic = picOf(r);
@@ -1903,6 +1908,12 @@ document.addEventListener("click", e => {
     case "nc-list": openNewCampList(el.dataset.key, el.dataset.bucket); break;
     case "nc-bucket": setNcPref("bucket", el.dataset.v); break;
     case "nc-sort": setNcPref("sort", el.dataset.v); break;
+    case "nc-th": {
+      // Bấm tiêu đề cột: chọn cột đó để đếm + sắp xếp; bấm lại cột đang chọn thì đảo chiều
+      const b = el.dataset.v;
+      const sort = ncPref.bucket === b && ncPref.sort === "desc" ? "asc" : "desc";
+      ncPref.bucket = b; setNcPref("sort", sort); break;
+    }
     case "nc-pic": {
       const v = picFilter === el.dataset.pic ? "" : el.dataset.pic;
       picFilter = v; try { localStorage.setItem(PIC_KEY, v); } catch (e) {}
