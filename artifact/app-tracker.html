@@ -101,7 +101,8 @@ button.card .k::after { color: var(--kc); }
 button.card .k::after { content: " ▾"; color: var(--accent); }
 button.card.on .k::after { content: " ▴"; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; overflow-x: auto; }
-.panel h4 { margin: 0; padding: 10px 12px 4px; font-size: 13px; }
+.panel h4 { margin: 0; padding: 10px 12px 4px; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+.xbtn { margin-left: auto; font-size: 12px; font-weight: 600; padding: 4px 10px; }
 .panel .note { padding: 0 12px 8px; font-size: 12px; color: var(--muted); }
 .lvswap { border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: 6px; padding: 1px 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .lvswap:hover { background: var(--hover); }
@@ -747,6 +748,78 @@ function overviewStats() {
   return { accs, apps, accApps, loaded, spend: sum(accs, (a) => a.spend), rev: sum(accs, (a) => a.rev) };
 }
 
+// ---------- Excel export (ad account x app) ----------
+let downloads = null;
+const XLSX_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = XLSX_SRC;
+    sc.onload = () => (window.XLSX ? res(window.XLSX) : rej(new Error('xlsx')));
+    sc.onerror = () => rej(new Error('xlsx'));
+    document.head.appendChild(sc);
+  });
+}
+// One row per ad account x app, from ad-level spend; follows the genre chip picked in the app list.
+function exportRows() {
+  const rows = [];
+  for (const a of state.accounts) {
+    const ads = a.d?.ads || a.lite?.ads;
+    if (!(a.spend > 0) || !ads) continue;
+    const per = new Map();
+    for (const ad of ads) {
+      if (!ad.app || !(ad.spend > 0)) continue;
+      if (state.appGenre && genreOf(ad.app) !== state.appGenre) continue;
+      const e = per.get(ad.app) || { spend: 0, rev: 0 };
+      e.spend += ad.spend; e.rev += ad.rev; per.set(ad.app, e);
+    }
+    for (const [id, e] of per) {
+      const app = model.apps.get(id) || {};
+      const r = roas(e.rev, e.spend);
+      rows.push({
+        'BC': bcName(a.bc),
+        'Ad account ID': a.id,
+        'Ad account': a.name,
+        'App': app.name || id,
+        'Link app': app.url || '',
+        'Genre': genreOf(id),
+        'Spend (USD)': Math.round(e.spend * 100) / 100,
+        'ROAS IAA D0': r == null ? null : Math.round(r * 10000) / 10000,
+      });
+    }
+  }
+  return rows.sort((x, y) => y['Spend (USD)'] - x['Spend (USD)']);
+}
+async function exportXlsx() {
+  if (!downloads || state.exporting) return;
+  state.exporting = true; render();
+  try {
+    const rows = exportRows();
+    if (!rows.length) { notice('Chưa có dữ liệu app để xuất.'); return; }
+    const XLSX = await loadXlsx();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 28 }, { wch: 22 }, { wch: 34 }, { wch: 36 }, { wch: 60 }, { wch: 20 }, { wch: 14 }, { wch: 13 }];
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = 1; R <= range.e.r; R++) {
+      const sp = ws[XLSX.utils.encode_cell({ r: R, c: 6 })]; if (sp) sp.z = '#,##0.00';
+      const ro = ws[XLSX.utils.encode_cell({ r: R, c: 7 })]; if (ro) ro.z = '0.00%';
+      const ln = ws[XLSX.utils.encode_cell({ r: R, c: 4 })]; if (ln && ln.v) ln.l = { Target: ln.v };
+    }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'App theo account');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const r = rangeFor('UTC');
+    const tag = state.appGenre ? '_' + state.appGenre.replace(/[^\p{L}\p{N}]+/gu, '-') : '';
+    await downloads.save({ filename: `app-spend_${r.start}_${r.end}${tag}.xlsx`, data: buf });
+  } catch (e) {
+    if (e?.code === 'declined') return;
+    notice(e?.message === 'xlsx' ? 'Không tải được thư viện tạo Excel, thử lại sau.' : `Chưa xuất được file (${esc(e?.code || e?.message || 'lỗi')}).`, true);
+  } finally {
+    state.exporting = false; render();
+  }
+}
+
 function renderPanel(st) {
   const withSpend = st.accs, loadingApps = st.loaded < withSpend.length, doneN = st.loaded;
   const el = $('#panel');
@@ -776,7 +849,7 @@ function renderPanel(st) {
     const chip = (key, label, e) => { const r = roas(e.rev, e.spend); return `<button type="button" class="gchip ${state.appGenre === key ? 'on' : ''}" data-genre="${esc(key ?? '')}">${esc(label)} <span class="gm">${money(e.spend)} · <span class="${rcls(r)}">${pct(r)}</span> · ${e.n} app</span></button>`; };
     const gbar = `<div class="gbar">${chip(null, 'Tất cả', all)}${[...genres].sort((a, b) => b[1].spend - a[1].spend).map(([g, e]) => chip(g, g, e)).join('')}</div>`;
     const list = [...st.apps].filter(([id]) => !state.appGenre || genreOf(id) === state.appGenre).sort((a, b) => b[1].spend - a[1].spend);
-    html = `<h4>App đang chạy (${list.length}${state.appGenre ? ' · ' + esc(state.appGenre) : ''})</h4>${loadingApps ? `<div class="note">Đã tải ${doneN}/${withSpend.length} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}${gbar}<table><thead><tr><th class="l">App</th><th class="l">Genre</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
+    html = `<h4>App đang chạy (${list.length}${state.appGenre ? ' · ' + esc(state.appGenre) : ''})${downloads ? `<button type="button" class="btn primary xbtn" id="xlsxBtn" ${state.exporting ? 'disabled' : ''}>${state.exporting ? 'Đang tạo file…' : '⬇ Xuất Excel'}</button>` : ''}</h4>${loadingApps ? `<div class="note">Đã tải ${doneN}/${withSpend.length} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}${gbar}<table><thead><tr><th class="l">App</th><th class="l">Genre</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
       (list.map(([id, e]) => {
         const a = model.apps.get(id) || {};
         const names = [...e.accs].map((x) => model.accounts.get(x)?.name || x);
@@ -1010,6 +1083,7 @@ function initControls() {
     if (inp && !inp.value.trim()) setTimeout(render, 0);
   });
   $('#panel').addEventListener('click', (e) => {
+    if (e.target.closest('#xlsxBtn')) { exportXlsx(); return; }
     const c = e.target.closest('[data-genre]');
     if (!c) return;
     state.appGenre = c.dataset.genre || null;
@@ -1053,6 +1127,7 @@ async function boot() {
   initControls();
   initBcPicker();
   render();
+  window.claude?.use?.('downloads').then((d) => { downloads = d; render(); }).catch(() => {});
   window.claude?.use?.('db').then((d) => { db = d; watchGenres(); }).catch(() => {});
   mcp = window.claude?.use ? await window.claude.use('mcp') : null;
   if (!mcp) {
