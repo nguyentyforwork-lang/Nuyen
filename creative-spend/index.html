@@ -242,7 +242,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       <tbody id="tbody"></tbody>
     </table>
   </div>
-  <p class="foot">Creative xếp theo từng ad account, trong mỗi account sắp theo spend. Cột “Vi phạm” gắn cờ khi chính creative đó bị TikTok đánh vi phạm policy (Partially approved hoặc Rejected), kèm ID các ad chứa nó. Campaign đã tắt hoặc đã xóa không được quét policy và ẩn khỏi bảng (bật “Hiện camp đã tắt” để xem spend của chúng). Ngày theo múi giờ tài khoản, gồm cả ad đã tắt và đã xóa, tối đa 365 ngày.</p>
+  <p class="foot">Creative xếp theo từng ad account, trong mỗi account sắp theo spend. Cột “Vi phạm” gắn cờ khi chính creative đó bị TikTok đánh vi phạm policy (Partially approved hoặc Rejected), kèm ID các ad chứa nó. Creative đã xóa không được lấy. Campaign đã tắt không được quét policy và ẩn khỏi bảng (bật “Hiện camp đã tắt” để xem spend của chúng). Ngày theo múi giờ tài khoản, tối đa 365 ngày.</p>
 </div>
 
 <script>
@@ -419,8 +419,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
   function loadReport(adv, start, end) {
     return paged("report_integrated_get", {
       advertiser_id: adv, report_type: "BASIC", data_level: "AUCTION_AD", dimensions: ["ad_id"],
-      metrics: ["spend", "currency"], start_date: start, end_date: end,
-      filtering: [{ field_name: "ad_status", filter_type: "IN", filter_value: "[\"STATUS_ALL\"]" }]
+      metrics: ["spend", "currency"], start_date: start, end_date: end
     });
   }
   function loadAds(adv, filtering) {
@@ -542,11 +541,14 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 
   async function loadAccount(adv, start, end, onRows, onScan) {
     var reportP = loadReport(adv, start, end);
-    var adsP = loadAds(adv), delP = loadAds(adv, { primary_status: "STATUS_DELETE" });
+    var adsP = loadAds(adv);
     var report = await reportP;
-    var live = await adsP, ads = live.concat(await delP), info = {};
+    var ads = await adsP, info = {};
     ads.forEach(function (a) { info[a.ad_id] = a; });
-    var rows = report.map(function (r) {
+    var rows = report.filter(function (r) {
+      var a = info[r.dimensions && r.dimensions.ad_id];
+      return !(a && DELETED[a.secondary_status]);
+    }).map(function (r) {
       var m = r.metrics || {}, id = r.dimensions && r.dimensions.ad_id, a = info[id] || {};
       var spend = parseFloat(m.spend);
       return {
@@ -643,7 +645,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     return 1;
   }
   var CAMP_OFF = { AD_STATUS_CAMPAIGN_DISABLE: 1, AD_STATUS_CAMPAIGN_DELETE: 1 };
-  var STATUS_LABEL = ["đã xóa", "không phân phối", "đang tắt", "đang chạy"];
+  var STATUS_LABEL = ["không rõ", "không phân phối", "đang tắt", "đang chạy"];
   var STATUS_CLASS = [" del", "", "", " on"];
 
   function flagOf(r) {
