@@ -368,20 +368,43 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 
   // ---------- MCP ----------
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  // TikTok limits calls per second (QPS). Every call goes through one throttle:
+  // at most 3 in flight, spaced by `gap` ms; a QPS error widens the gap and waits before retrying.
+  var throttle = { gap: 220, last: 0, inflight: 0, waiters: [] };
+  async function slot() {
+    while (throttle.inflight >= 3) await new Promise(function (r) { throttle.waiters.push(r); });
+    throttle.inflight++;
+    var wait = throttle.last + throttle.gap - Date.now();
+    throttle.last = Math.max(Date.now(), throttle.last + throttle.gap);
+    if (wait > 0) await sleep(wait);
+  }
+  function release() { throttle.inflight--; var w = throttle.waiters.shift(); if (w) w(); }
+  function isQps(msg, code) {
+    return code === 51010 || code === 40100 || /qps|rate limit|too many|frequen|exceed.*limit/i.test(msg || "");
+  }
   async function call(tool, input) {
     var mcp = await mcpP;
     if (!mcp) throw { code: "no_mcp", message: "Mở trang này trong claude.ai (đã kết nối TikTok MCP) để tải dữ liệu." };
-    var opts = { cache: { staleTime: 120000, gcTime: 600000 } }, res;
-    try { res = await mcp.callTool(SERVER, tool, input, opts); }
-    catch (err) {
-      if (!(err && err.retryable)) throw err;
-      await sleep((err.retryAfterMs || 1500) + Math.random() * 800);
-      res = await mcp.callTool(SERVER, tool, input, opts);
+    var opts = { cache: { staleTime: 120000, gcTime: 600000 } };
+    for (var attempt = 0; ; attempt++) {
+      var res = null, err = null;
+      await slot();
+      try { res = await mcp.callTool(SERVER, tool, input, opts); }
+      catch (e) { err = e; }
+      finally { release(); }
+      var p = res && res.payload;
+      if (typeof p === "string") { try { p = JSON.parse(p); } catch (e) {} }
+      var qps = err ? isQps(err.message) : (p && typeof p === "object" && p.code !== 0 && isQps(p.message, p.code));
+      if ((qps || (err && err.retryable)) && attempt < 5) {
+        if (qps) throttle.gap = Math.min(2000, throttle.gap * 1.6);
+        await sleep(Math.max((err && err.retryAfterMs) || 0, 1500 * Math.pow(2, attempt)) + Math.random() * 600);
+        continue;
+      }
+      if (err) throw err;
+      if (p && typeof p === "object" && "code" in p && p.code !== 0) throw { code: "tool_error", message: p.message || ("code " + p.code) };
+      if (throttle.gap > 220) throttle.gap = Math.max(220, throttle.gap * 0.95);
+      return (p && p.data) || {};
     }
-    var p = res && res.payload;
-    if (typeof p === "string") { try { p = JSON.parse(p); } catch (e) {} }
-    if (p && typeof p === "object" && "code" in p && p.code !== 0) throw { code: "tool_error", message: p.message || ("code " + p.code) };
-    return (p && p.data) || {};
   }
   async function paged(tool, base, size) {
     var out = [], page = 1, total = 1;
