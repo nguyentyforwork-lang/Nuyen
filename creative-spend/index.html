@@ -231,7 +231,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       <tbody id="tbody"></tbody>
     </table>
   </div>
-  <p class="foot">Creative xếp theo từng ad account, trong mỗi account sắp theo spend. Cột “Vi phạm” chỉ gắn cờ khi chính creative đó bị TikTok đánh vi phạm chính sách, kèm ad chứa nó, nước bị chặn và lý do. Ad bị review issue vì creative khác hoặc vì cài đặt ad thì không tính. Ngày theo múi giờ tài khoản, gồm cả ad đã tắt và đã xóa, tối đa 365 ngày.</p>
+  <p class="foot">Creative xếp theo từng ad account, trong mỗi account sắp theo spend. Cột “Vi phạm” gắn cờ khi chính creative đó bị TikTok đánh vi phạm policy (Partially approved hoặc Rejected), kèm ID các ad chứa nó. Ngày theo múi giờ tài khoản, gồm cả ad đã tắt và đã xóa, tối đa 365 ngày.</p>
 </div>
 
 <script>
@@ -460,12 +460,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         if (c.smart_plus_creative_id) state.creativeToSpAd[c.smart_plus_creative_id] = a.smart_plus_ad_id;
       });
     });
-    await pool(chunks(ads.map(function (a) { return a.smart_plus_ad_id; }), 100), 3, async function (b) {
+    await pool(chunks(ads.map(function (a) { return a.smart_plus_ad_id; }), 20), 4, async function (b) {
       var d;
       try {
-        d = await call("smart_plus_ad_review_info_get", {
-          advertiser_id: adv, smart_plus_ad_ids: b, lang: "vi", extra_info_setting: { include_reject_info: true }
-        });
+        d = await call("smart_plus_ad_review_info_get", { advertiser_id: adv, smart_plus_ad_ids: b });
       } catch (e) {
         // No review details: still flag ads whose status says review issue.
         b.forEach(function (id) { if (FLAG_STATUS[adStatus[id]]) state.spAdFlags[id] = { label: FLAG_STATUS[adStatus[id]], reason: "" }; });
@@ -488,8 +486,8 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         var cid = matToCreative[m.ad_material_id];
         if (!cid) return;
         state.spFlags[cid] = {
-          label: m.review_status === "PART_AVAILABLE" ? "Review issue · chạy một phần" : (FLAG_STATUS[adStatus[m.smart_plus_ad_id]] || "Bị từ chối"),
-          reason: summarize(m.reject_info),
+          label: m.review_status === "PART_AVAILABLE" ? "Duyệt một phần" : "Bị từ chối",
+          reason: "",
           adId: m.smart_plus_ad_id,
           kind: "creative"
         };
@@ -515,8 +513,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     });
     var vids = Array.from(new Set(rows.map(function (r) { return r.video_id; }).filter(Boolean)));
     // Review details only for ads whose status already says there is a review problem.
-    var flagged = live.filter(function (a) { return FLAG_STATUS[a.secondary_status] && !a.smart_plus_ad_id; }).map(function (a) { return a.ad_id; });
-    await Promise.all([vids.length ? loadVideos(adv, vids) : null, flagged.length ? loadReviews(adv, flagged) : null, loadSmartPlusFlags(adv)]);
+    await Promise.all([vids.length ? loadVideos(adv, vids) : null, loadSmartPlusFlags(adv)]);
     return rows;
   }
 
@@ -713,9 +710,8 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       var pill = '<span class="pill' + STATUS_CLASS[x.rank] + '" title="Trạng thái hiện tại trên TikTok">' + x.status + "</span>";
       var flag = "";
       if (x.flagged) {
-        flag += '<div class="flag"><span class="flagpill">⚑ Creative bị vi phạm · ' + esc(x.flags[0].label.replace(/^Review issue · /, "")) + "</span>" +
-          '<small class="flagids">Trong ad: <span class="mono">' + esc(x.flagAds.join(", ")) + "</span></small>" +
-          (x.flags.some(function (f) { return f.reason; }) ? "<small>" + esc(uniq(x.flags.map(function (f) { return f.reason; })).join(" · ")) + "</small>" : "") + "</div>";
+        flag += '<div class="flag"><span class="flagpill">⚑ Vi phạm policy</span>' +
+          '<small class="flagids">Ad: <span class="mono">' + esc(x.flagAds.join(", ")) + "</span></small></div>";
       }
       if (!flag) flag = '<span class="okflag">–</span>';
       html.push('<tr class="' + (x.spend > 0 ? "" : "zero") + (x.flagged ? " flagged" : "") + '">' +
@@ -734,10 +730,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     var list = state.visible; if (!list.length) return;
     var dl = await dlP;
     if (!dl) { showStatus("Không xuất file được ở chế độ xem này. Mở trang trong claude.ai để tải file.", true); return; }
-    var head = ["Account ID", "Account name", state.group === "creative" ? "Video ID" : "Ad ID", "Ad IDs", "Spend", "Currency", "Trang thai", "Creative vi pham", "Ad co creative nay bi vi pham", "Chi tiet vi pham", "Link video"];
+    var head = ["Account ID", "Account name", state.group === "creative" ? "Video ID" : "Ad ID", "Ad IDs", "Spend", "Currency", "Trang thai", "Vi pham policy", "Ad ID", "Link video"];
     var lines = [head.join(",")].concat(list.map(function (x) {
       return [x.adv, state.names[x.adv] || "", state.group === "creative" && x.video_id ? x.video_id : x.ads[0], x.ads.join(" "),
-        x.spend.toFixed(2), x.currency, x.status, x.flagged ? "CO" : "", x.flagAds.join(" "), x.flagText, x.preview || ""].map(csvCell).join(",");
+        x.spend.toFixed(2), x.currency, x.status, x.flagged ? "CO" : "", x.flagAds.join(" "), x.preview || ""].map(csvCell).join(",");
     }));
     var name = "creative-spend_" + state.loaded[0] + "_" + state.loaded[1] + ".csv";
     try {
