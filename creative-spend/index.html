@@ -113,6 +113,8 @@ tr.zero td { color: var(--zero); }
 .flag small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .flagpill { align-self: flex-start; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--bad-soft); color: var(--bad); white-space: nowrap; }
 .flagtxt { color: var(--bad); font-weight: 600; }
+.warnpill { align-self: flex-start; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.flag + .flag { margin-top: 6px; }
 .okflag { color: var(--muted); }
 tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 .empty { padding: 36px 16px; text-align: center; color: var(--muted); display: flex; flex-direction: column; gap: 6px; align-items: center; }
@@ -229,7 +231,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       <tbody id="tbody"></tbody>
     </table>
   </div>
-  <p class="foot">Creative xếp theo từng ad account, trong mỗi account sắp theo spend. Cột “Vi phạm” lấy từ kết quả duyệt của TikTok: một creative bị đánh dấu khi có ít nhất một ad dùng nó bị từ chối hoặc bị chặn một phần vị trí. Ngày theo múi giờ tài khoản, gồm cả ad đã tắt và đã xóa, tối đa 365 ngày.</p>
+  <p class="foot">Creative xếp theo từng ad account, trong mỗi account sắp theo spend. Cột “Vi phạm”: cờ đỏ “Creative bị vi phạm” là chính video đó bị TikTok chặn (kèm nước bị chặn và lý do). Nhãn xám “Nằm trong ad bị review issue” là video không bị chặn, nhưng ad chứa nó đang có review issue do creative khác hoặc cài đặt ad. Ngày theo múi giờ tài khoản, gồm cả ad đã tắt và đã xóa, tối đa 365 ngày.</p>
 </div>
 
 <script>
@@ -488,7 +490,8 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         state.spFlags[cid] = {
           label: m.review_status === "PART_AVAILABLE" ? "Review issue · chạy một phần" : (FLAG_STATUS[adStatus[m.smart_plus_ad_id]] || "Bị từ chối"),
           reason: summarize(m.reject_info),
-          adId: m.smart_plus_ad_id
+          adId: m.smart_plus_ad_id,
+          kind: "creative"
         };
       });
     });
@@ -579,8 +582,8 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     var spAd = r.sp_ad || state.creativeToSpAd[r.ad_id];
     if (spAd) {
       var af = state.spAdFlags[spAd];
-      if (af) return { label: af.label, reason: af.reason || "Ad đang bị review issue; creative này không bị chặn riêng", adId: spAd };
-      return FLAG_STATUS[r.sec] ? { label: FLAG_STATUS[r.sec], reason: "", adId: spAd } : null;
+      if (af) return { label: af.label, reason: "", adId: spAd, kind: "ad" };
+      return FLAG_STATUS[r.sec] ? { label: FLAG_STATUS[r.sec], reason: "", adId: spAd, kind: "ad" } : null;
     }
     var rv = state.reviews[r.ad_id];
     var label = FLAG_STATUS[r.sec] || null;
@@ -588,7 +591,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     if (!label) return null;
     var reason = rv ? rv.reason : "";
     if (!reason && rv && rv.placements.length) reason = "Bị chặn ở: " + rv.placements.join(", ");
-    return { label: label, reason: reason, adId: r.ad_id };
+    return { label: label, reason: reason, adId: r.ad_id, kind: "creative" };
   }
   function groups() {
     var map = new Map();
@@ -596,14 +599,16 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       var key = r.adv + "|" + (state.group === "creative" && r.video_id ? "v:" + r.video_id : "a:" + r.ad_id);
       var g = map.get(key);
       if (!g) {
-        g = { adv: r.adv, currency: r.currency, video_id: r.video_id, ads: [], spend: 0, rank: 0, flags: [], flagAds: [] };
+        g = { adv: r.adv, currency: r.currency, video_id: r.video_id, ads: [], spend: 0, rank: 0, flags: [], flagAds: [], adOnly: [] };
         map.set(key, g);
       }
       g.ads.push(r.ad_id);
       g.spend += r.spend;
       g.rank = Math.max(g.rank, statusRank(r));
       var f = flagOf(r);
-      if (f) {
+      if (f && f.kind === "ad") {
+        if (g.adOnly.indexOf(f.adId) < 0) g.adOnly.push(f.adId);
+      } else if (f) {
         if (g.flagAds.indexOf(f.adId) < 0) g.flagAds.push(f.adId);
         if (!g.flags.some(function (x) { return x.label === f.label && x.reason === f.reason; })) g.flags.push(f);
       }
@@ -615,6 +620,8 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       g.preview = v && v.preview_url ? v.preview_url : null;
       g.status = STATUS_LABEL[g.rank];
       g.flagged = g.flags.length > 0;
+      g.adOnly = g.adOnly.filter(function (id) { return g.flagAds.indexOf(id) < 0; });
+      g.inBadAd = g.adOnly.length > 0;
       g.flagText = g.flags.map(function (f) { return "Ad " + f.adId + " - " + f.label + (f.reason ? ": " + f.reason : ""); }).join(" | ");
       out.push(g);
     });
@@ -665,10 +672,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     $("sOff").textContent = nf0.format(all.length - on);
     $("sFlag").textContent = nf0.format(flagged.length);
     var badAds = {};
-    flagged.forEach(function (x) { x.flagAds.forEach(function (id) { badAds[id] = 1; }); });
-    $("sFlagSub").textContent = flagged.length
-      ? Object.keys(badAds).length + " ad bị review issue · " + flagged.filter(function (x) { return x.spend > 0; }).length + " creative vẫn có spend"
-      : "không có review issue";
+    all.forEach(function (x) { x.flagAds.concat(x.adOnly).forEach(function (id) { badAds[id] = 1; }); });
+    var nBad = Object.keys(badAds).length;
+    $("sFlagSub").textContent = (flagged.length ? flagged.filter(function (x) { return x.spend > 0; }).length + " vẫn có spend · " : "") +
+      (nBad ? nBad + " ad đang bị review issue" : "không có review issue");
 
     var list = filtered(all);
     state.visible = list;
@@ -704,11 +711,17 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         ? '<a class="play" href="' + esc(x.preview) + '" target="_blank" rel="noopener">▶ Xem</a>'
         : '<span class="play off">' + (x.video_id ? "video" : "–") + "</span>";
       var pill = '<span class="pill' + STATUS_CLASS[x.rank] + '" title="Trạng thái hiện tại trên TikTok">' + x.status + "</span>";
-      var flag = x.flagged
-        ? '<div class="flag"><span class="flagpill">⚑ ' + esc(x.flags[0].label) + "</span>" +
-          '<small class="flagids">Ad vi phạm: <span class="mono">' + esc(x.flagAds.join(", ")) + "</span></small>" +
-          (x.flags.some(function (f) { return f.reason; }) ? "<small>" + esc(uniq(x.flags.map(function (f) { return f.reason; })).join(" · ")) + "</small>" : "") + "</div>"
-        : '<span class="okflag">–</span>';
+      var flag = "";
+      if (x.flagged) {
+        flag += '<div class="flag"><span class="flagpill">⚑ Creative bị vi phạm · ' + esc(x.flags[0].label.replace(/^Review issue · /, "")) + "</span>" +
+          '<small class="flagids">Trong ad: <span class="mono">' + esc(x.flagAds.join(", ")) + "</span></small>" +
+          (x.flags.some(function (f) { return f.reason; }) ? "<small>" + esc(uniq(x.flags.map(function (f) { return f.reason; })).join(" · ")) + "</small>" : "") + "</div>";
+      }
+      if (x.inBadAd) {
+        flag += '<div class="flag"><span class="warnpill">Nằm trong ad bị review issue</span>' +
+          '<small>Video này không bị chặn; lỗi ở creative khác hoặc cài đặt của ad: <span class="mono">' + esc(x.adOnly.join(", ")) + "</span></small></div>";
+      }
+      if (!flag) flag = '<span class="okflag">–</span>';
       html.push('<tr class="' + (x.spend > 0 ? "" : "zero") + (x.flagged ? " flagged" : "") + '">' +
         '<td class="rank">' + n + "</td>" +
         "<td>" + vid + "</td>" +
@@ -725,10 +738,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     var list = state.visible; if (!list.length) return;
     var dl = await dlP;
     if (!dl) { showStatus("Không xuất file được ở chế độ xem này. Mở trang trong claude.ai để tải file.", true); return; }
-    var head = ["Account ID", "Account name", state.group === "creative" ? "Video ID" : "Ad ID", "Ad IDs", "Spend", "Currency", "Trang thai", "Vi pham", "Ad ID vi pham", "Chi tiet vi pham", "Link video"];
+    var head = ["Account ID", "Account name", state.group === "creative" ? "Video ID" : "Ad ID", "Ad IDs", "Spend", "Currency", "Trang thai", "Creative vi pham", "Ad co creative nay bi vi pham", "Chi tiet vi pham", "Nam trong ad bi review issue (creative khong bi chan)", "Link video"];
     var lines = [head.join(",")].concat(list.map(function (x) {
       return [x.adv, state.names[x.adv] || "", state.group === "creative" && x.video_id ? x.video_id : x.ads[0], x.ads.join(" "),
-        x.spend.toFixed(2), x.currency, x.status, x.flagged ? "CO" : "", x.flagAds.join(" "), x.flagText, x.preview || ""].map(csvCell).join(",");
+        x.spend.toFixed(2), x.currency, x.status, x.flagged ? "CO" : "", x.flagAds.join(" "), x.flagText, x.adOnly.join(" "), x.preview || ""].map(csvCell).join(",");
     }));
     var name = "creative-spend_" + state.loaded[0] + "_" + state.loaded[1] + ".csv";
     try {
