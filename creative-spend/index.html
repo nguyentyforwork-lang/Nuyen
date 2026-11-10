@@ -108,7 +108,8 @@ tr.zero td { color: var(--zero); }
 .acct-row td { background: var(--bg); border-bottom: 1px solid var(--line); padding-top: 14px; }
 .acct-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; font-size: 13px; }
 .acct-head .mono { color: var(--muted); font-size: 12px; }
-.flag { display: flex; flex-direction: column; gap: 2px; max-width: 360px; }
+.flag { display: flex; flex-direction: column; gap: 2px; max-width: 420px; }
+.flag .flagids { color: var(--fg); }
 .flag small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .flagpill { align-self: flex-start; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--bad-soft); color: var(--bad); white-space: nowrap; }
 .flagtxt { color: var(--bad); font-weight: 600; }
@@ -244,7 +245,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
   };
 
   var state = {
-    rows: [], videos: {}, names: {}, reviews: {}, group: "creative", sortDir: "desc",
+    rows: [], videos: {}, names: {}, reviews: {}, spFlags: {}, group: "creative", sortDir: "desc",
     loaded: null, failed: [], visible: []
   };
   var mcpP = (window.claude && window.claude.use) ? window.claude.use("mcp") : Promise.resolve(null);
@@ -252,6 +253,8 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 
   // Ad statuses TikTok shows as a review problem.
   var FLAG_STATUS = {
+    AD_STATUS_REVIEW_PARTIALLY_APPROVED: "Review issue · chạy một phần",
+    AD_STATUS_PRIVACY_POLICY_REJECTED: "Bị từ chối · chính sách quyền riêng tư",
     AD_STATUS_PARTIAL_AUDIT_DELIVERY_OK: "Review issue · chạy một phần",
     AD_STATUS_PARTIAL_AUDIT_NO_DELIVERY: "Review issue · không chạy",
     AD_STATUS_ADGROUP_PARTIAL_AUDIT_NO_DELIVERY: "Review issue ở ad group",
@@ -367,10 +370,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     if (p && typeof p === "object" && "code" in p && p.code !== 0) throw { code: "tool_error", message: p.message || ("code " + p.code) };
     return (p && p.data) || {};
   }
-  async function paged(tool, base) {
+  async function paged(tool, base, size) {
     var out = [], page = 1, total = 1;
     do {
-      var d = await call(tool, Object.assign({}, base, { page: page, page_size: 1000 }));
+      var d = await call(tool, Object.assign({}, base, { page: page, page_size: size || 1000 }));
       (d.list || []).forEach(function (r) { out.push(r); });
       total = (d.page_info && d.page_info.total_page) || 1;
       page++;
@@ -385,7 +388,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     });
   }
   function loadAds(adv, filtering) {
-    var base = { advertiser_id: adv, fields: ["ad_id", "video_id", "secondary_status"] };
+    var base = { advertiser_id: adv, fields: ["ad_id", "video_id", "secondary_status", "smart_plus_ad_id"] };
     if (filtering) base.filtering = filtering;
     return paged("ad_get", base).catch(function () { return []; });
   }
@@ -437,6 +440,49 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     });
   }
 
+  // Upgraded Smart+: review results live per creative (ad material) inside each Smart+ ad.
+  function uniq(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }); }
+  async function loadSmartPlusFlags(adv) {
+    var ads = await paged("smart_plus_ad_get", {
+      advertiser_id: adv, fields: ["secondary_status", "creative_list"],
+      filtering: { effective_statuses: ["PARTIAL_DELIVERY", "NOT_DELIVERED"] }
+    }, 100).catch(function () { return []; });
+    if (!ads.length) return;
+    var matToCreative = {}, adStatus = {};
+    ads.forEach(function (a) {
+      adStatus[a.smart_plus_ad_id] = a.secondary_status || "";
+      (a.creative_list || []).forEach(function (c) { if (c.ad_material_id) matToCreative[c.ad_material_id] = c.smart_plus_creative_id; });
+    });
+    await pool(chunks(ads.map(function (a) { return a.smart_plus_ad_id; }), 100), 3, async function (b) {
+      var d;
+      try {
+        d = await call("smart_plus_ad_review_info_get", {
+          advertiser_id: adv, smart_plus_ad_ids: b, lang: "vi", extra_info_setting: { include_reject_info: true }
+        });
+      } catch (e) { return; }
+      (d.material_review_infos || []).forEach(function (m) {
+        if (!m || m.review_status === "ALL_AVAILABLE") return;
+        var cid = matToCreative[m.ad_material_id];
+        if (!cid) return;
+        var ri = Array.isArray(m.reject_info) ? m.reject_info : [];
+        var locs = [], reasons = [];
+        ri.forEach(function (r) {
+          (r.forbidden_locations || []).forEach(function (l) { locs.push(l); });
+          (r.reasons || []).forEach(function (t) { reasons.push(t); });
+        });
+        locs = uniq(locs); reasons = uniq(reasons);
+        var parts = [];
+        if (locs.length) parts.push("Bị chặn ở " + locs.length + " nước: " + locs.join(", "));
+        if (reasons.length) parts.push(reasons.join(" "));
+        state.spFlags[cid] = {
+          label: m.review_status === "PART_AVAILABLE" ? "Review issue · chạy một phần" : (FLAG_STATUS[adStatus[m.smart_plus_ad_id]] || "Bị từ chối"),
+          reason: parts.join(" · "),
+          adId: m.smart_plus_ad_id
+        };
+      });
+    });
+  }
+
   async function loadAccount(adv, start, end) {
     var reportP = loadReport(adv, start, end);
     var adsP = loadAds(adv), delP = loadAds(adv, { primary_status: "STATUS_DELETE" });
@@ -449,13 +495,14 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       return {
         adv: adv, ad_id: id, spend: isFinite(spend) ? spend : 0,
         currency: m.currency && m.currency !== "-" ? m.currency : "USD",
-        video_id: a.video_id || null, sec: a.secondary_status || null, known: !!info[id]
+        video_id: a.video_id || null, sec: a.secondary_status || null, known: !!info[id],
+        sp_ad: a.smart_plus_ad_id || null
       };
     });
     var vids = Array.from(new Set(rows.map(function (r) { return r.video_id; }).filter(Boolean)));
     // Review details only for ads whose status already says there is a review problem.
-    var flagged = live.filter(function (a) { return FLAG_STATUS[a.secondary_status]; }).map(function (a) { return a.ad_id; });
-    await Promise.all([vids.length ? loadVideos(adv, vids) : null, flagged.length ? loadReviews(adv, flagged) : null]);
+    var flagged = live.filter(function (a) { return FLAG_STATUS[a.secondary_status] && !a.smart_plus_ad_id; }).map(function (a) { return a.ad_id; });
+    await Promise.all([vids.length ? loadVideos(adv, vids) : null, flagged.length ? loadReviews(adv, flagged) : null, loadSmartPlusFlags(adv)]);
     return rows;
   }
 
@@ -501,13 +548,15 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 
   // ---------- aggregate ----------
   function flagOf(r) {
+    if (state.spFlags[r.ad_id]) return state.spFlags[r.ad_id];
+    if (r.sp_ad) return FLAG_STATUS[r.sec] ? { label: FLAG_STATUS[r.sec], reason: "", adId: r.sp_ad } : null;
     var rv = state.reviews[r.ad_id];
     var label = FLAG_STATUS[r.sec] || null;
     if (!label && rv && (!rv.approved || (rv.status && rv.status !== "ALL_AVAILABLE"))) label = rv.approved ? "Review issue · chạy một phần" : "Bị từ chối";
     if (!label) return null;
     var reason = rv ? rv.reason : "";
     if (!reason && rv && rv.placements.length) reason = "Bị chặn ở: " + rv.placements.join(", ");
-    return { label: label, reason: reason };
+    return { label: label, reason: reason, adId: r.ad_id };
   }
   function groups() {
     var map = new Map();
@@ -523,7 +572,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       if (r.sec === "AD_STATUS_DELIVERY_OK" || r.sec === "AD_STATUS_PARTIAL_AUDIT_DELIVERY_OK") g.active = true;
       if (r.known) g.deleted = false;
       var f = flagOf(r);
-      if (f) { g.flagAds.push(r.ad_id); if (!g.flags.some(function (x) { return x.label === f.label && x.reason === f.reason; })) g.flags.push(f); }
+      if (f) {
+        if (g.flagAds.indexOf(f.adId) < 0) g.flagAds.push(f.adId);
+        if (!g.flags.some(function (x) { return x.label === f.label && x.reason === f.reason; })) g.flags.push(f);
+      }
     });
     var out = [];
     map.forEach(function (g) {
@@ -532,7 +584,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       g.preview = v && v.preview_url ? v.preview_url : null;
       g.status = g.active ? "đang chạy" : g.deleted ? "đã xóa" : "không chạy";
       g.flagged = g.flags.length > 0;
-      g.flagText = g.flags.map(function (f) { return f.label + (f.reason ? ": " + f.reason : ""); }).join(" | ");
+      g.flagText = g.flags.map(function (f) { return "Ad " + f.adId + " - " + f.label + (f.reason ? ": " + f.reason : ""); }).join(" | ");
       out.push(g);
     });
     return out;
@@ -621,8 +673,8 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       var pill = '<span class="pill' + (x.active ? " on" : x.deleted ? " del" : "") + '">' + x.status + "</span>";
       var flag = x.flagged
         ? '<div class="flag"><span class="flagpill">⚑ ' + esc(x.flags[0].label) + "</span>" +
-          (x.flags.some(function (f) { return f.reason; }) ? "<small>" + esc(x.flags.map(function (f) { return f.reason; }).filter(Boolean).join(" · ")) + "</small>" : "") +
-          (state.group === "creative" && x.ads.length > 1 ? "<small>" + x.flagAds.length + "/" + x.ads.length + " ad dùng video này bị vi phạm</small>" : "") + "</div>"
+          '<small class="flagids">Ad vi phạm: <span class="mono">' + esc(x.flagAds.join(", ")) + "</span></small>" +
+          (x.flags.some(function (f) { return f.reason; }) ? "<small>" + esc(uniq(x.flags.map(function (f) { return f.reason; })).join(" · ")) + "</small>" : "") + "</div>"
         : '<span class="okflag">–</span>';
       html.push('<tr class="' + (x.spend > 0 ? "" : "zero") + (x.flagged ? " flagged" : "") + '">' +
         '<td class="rank">' + n + "</td>" +
@@ -640,10 +692,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     var list = state.visible; if (!list.length) return;
     var dl = await dlP;
     if (!dl) { showStatus("Không xuất file được ở chế độ xem này. Mở trang trong claude.ai để tải file.", true); return; }
-    var head = ["Account ID", "Account name", state.group === "creative" ? "Video ID" : "Ad ID", "Ad IDs", "Spend", "Currency", "Trang thai", "Vi pham", "Chi tiet vi pham", "Link video"];
+    var head = ["Account ID", "Account name", state.group === "creative" ? "Video ID" : "Ad ID", "Ad IDs", "Spend", "Currency", "Trang thai", "Vi pham", "Ad ID vi pham", "Chi tiet vi pham", "Link video"];
     var lines = [head.join(",")].concat(list.map(function (x) {
       return [x.adv, state.names[x.adv] || "", state.group === "creative" && x.video_id ? x.video_id : x.ads[0], x.ads.join(" "),
-        x.spend.toFixed(2), x.currency, x.status, x.flagged ? "CO" : "", x.flagText, x.preview || ""].map(csvCell).join(",");
+        x.spend.toFixed(2), x.currency, x.status, x.flagged ? "CO" : "", x.flagAds.join(" "), x.flagText, x.preview || ""].map(csvCell).join(",");
     }));
     var name = "creative-spend_" + state.loaded[0] + "_" + state.loaded[1] + ".csv";
     try {
