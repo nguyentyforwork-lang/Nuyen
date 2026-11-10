@@ -102,6 +102,8 @@ button.card .k::after { content: " ▾"; color: var(--accent); }
 button.card.on .k::after { content: " ▴"; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; overflow-x: auto; }
 .panel h4 { margin: 0; padding: 10px 12px 4px; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+.h4seg { font-weight: 400; }
+.h4seg button { padding: 3px 9px; font-size: 12px; }
 .xbtn { margin-left: auto; font-size: 12px; font-weight: 600; padding: 4px 10px; }
 .panel .note { padding: 0 12px 8px; font-size: 12px; color: var(--muted); }
 .lvswap { border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: 6px; padding: 1px 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
@@ -260,7 +262,7 @@ const state = {
   preset: 'today', start: '', end: '',
   lvl2: LS.get('bcat.lvl2', 'account'),
   sort: LS.get('bcat.sort', { key: 'spend', dir: 'desc' }),
-  panel: null, appGenre: null, genres: LS.get('bcat.genres', {}), opts: LS.get('bcat.opts', { overview: true, detail: false }), ran: null, lastKey: '',
+  panel: null, appGenre: null, accSort: LS.get('bcat.accSort', 'bc'), genres: LS.get('bcat.genres', {}), opts: LS.get('bcat.opts', { overview: true, detail: false }), ran: null, lastKey: '',
   open: new Map(), accounts: [], queue: [], phase: null, paused: false, refresh: false, run: 0,
 };
 let mcp = null;
@@ -791,33 +793,68 @@ function exportRows() {
   }
   return rows.sort((x, y) => y['Spend (USD)'] - x['Spend (USD)']);
 }
-async function exportXlsx() {
+// rows: array of objects (header -> value). fmt: header -> number format; links: headers holding URLs.
+async function saveXlsx(rows, { sheet, file, widths, fmt = {}, links = [] }) {
   if (!downloads || state.exporting) return;
   state.exporting = true; render();
   try {
-    const rows = exportRows();
-    if (!rows.length) { notice('Chưa có dữ liệu app để xuất.'); return; }
+    if (!rows.length) { notice('Chưa có dữ liệu để xuất.'); return; }
     const XLSX = await loadXlsx();
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 28 }, { wch: 22 }, { wch: 34 }, { wch: 36 }, { wch: 60 }, { wch: 20 }, { wch: 14 }, { wch: 13 }];
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    for (let R = 1; R <= range.e.r; R++) {
-      const sp = ws[XLSX.utils.encode_cell({ r: R, c: 6 })]; if (sp) sp.z = '#,##0.00';
-      const ro = ws[XLSX.utils.encode_cell({ r: R, c: 7 })]; if (ro) ro.z = '0.00%';
-      const ln = ws[XLSX.utils.encode_cell({ r: R, c: 4 })]; if (ln && ln.v) ln.l = { Target: ln.v };
+    const heads = Object.keys(rows[0]);
+    ws['!cols'] = heads.map((h) => ({ wch: widths?.[h] || 16 }));
+    for (let r = 1; r <= rows.length; r++) {
+      heads.forEach((h, c) => {
+        const cell = ws[XLSX.utils.encode_cell({ r, c })];
+        if (!cell) return;
+        if (fmt[h]) cell.z = fmt[h];
+        if (links.includes(h) && /^https?:\/\/\S+$/.test(String(cell.v))) cell.l = { Target: String(cell.v) };
+      });
     }
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'App theo account');
+    XLSX.utils.book_append_sheet(wb, ws, sheet);
     const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const r = rangeFor('UTC');
-    const tag = state.appGenre ? '_' + state.appGenre.replace(/[^\p{L}\p{N}]+/gu, '-') : '';
-    await downloads.save({ filename: `app-spend_${r.start}_${r.end}${tag}.xlsx`, data: buf });
+    const rg = rangeFor('UTC');
+    await downloads.save({ filename: `${file}_${rg.start}_${rg.end}.xlsx`, data: buf });
   } catch (e) {
     if (e?.code === 'declined') return;
     notice(e?.message === 'xlsx' ? 'Không tải được thư viện tạo Excel, thử lại sau.' : `Chưa xuất được file (${esc(e?.code || e?.message || 'lỗi')}).`, true);
   } finally {
     state.exporting = false; render();
   }
+}
+const NUM_FMT = { 'Spend (USD)': '#,##0.00', 'ROAS IAA D0': '0.00%' };
+function exportApps() {
+  const tag = state.appGenre ? '_' + state.appGenre.replace(/[^\p{L}\p{N}]+/gu, '-') : '';
+  return saveXlsx(exportRows(), {
+    sheet: 'App theo account', file: 'app-spend' + tag, fmt: NUM_FMT, links: ['Link app'],
+    widths: { 'BC': 28, 'Ad account ID': 22, 'Ad account': 34, 'App': 36, 'Link app': 60, 'Genre': 20, 'Spend (USD)': 14, 'ROAS IAA D0': 13 },
+  });
+}
+function sortedAccounts(st) {
+  const byBc = (a, b) => bcName(a.bc).localeCompare(bcName(b.bc), 'vi', { sensitivity: 'base', numeric: true });
+  return [...st.accs].sort(state.accSort === 'spend' ? (a, b) => b.spend - a.spend : (a, b) => byBc(a, b) || b.spend - a.spend);
+}
+// One row per ad account, in the order the list shows; apps it runs joined in one cell.
+function exportAccounts() {
+  const st = overviewStats();
+  const rows = sortedAccounts(st).map((a) => {
+    const appIds = st.accApps.get(a.id) || [];
+    const r = roas(a.rev, a.spend);
+    return {
+      'BC': bcName(a.bc),
+      'Ad account ID': a.id,
+      'Ad account': a.name,
+      'App': appIds.map((id) => model.apps.get(id)?.name || id).join(' | '),
+      'Link app': appIds.map((id) => model.apps.get(id)?.url || '').filter(Boolean).join(' | '),
+      'Spend (USD)': Math.round(a.spend * 100) / 100,
+      'ROAS IAA D0': r == null ? null : Math.round(r * 10000) / 10000,
+    };
+  });
+  return saveXlsx(rows, {
+    sheet: 'Account có spend', file: 'account-spend', fmt: NUM_FMT, links: ['Link app'],
+    widths: { 'BC': 28, 'Ad account ID': 22, 'Ad account': 36, 'App': 50, 'Link app': 70, 'Spend (USD)': 14, 'ROAS IAA D0': 13 },
+  });
 }
 
 function renderPanel(st) {
@@ -827,9 +864,10 @@ function renderPanel(st) {
   const row = (cells) => `<tr>${cells.join('')}</tr>`;
   let html;
   if (state.panel === 'accounts') {
-    // BC A–Z, then spend high → low inside each BC
-    const list = [...withSpend].sort((a, b) => bcName(a.bc).localeCompare(bcName(b.bc), 'vi', { sensitivity: 'base', numeric: true }) || b.spend - a.spend);
-    html = `<h4>Account có spend (${list.length})</h4><table><thead><tr><th class="l">BC</th><th class="l">Account</th><th class="l">App</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
+    const list = sortedAccounts(st);
+    const sortSeg = `<span class="seg h4seg" role="group" aria-label="Sắp xếp"><button type="button" data-accsort="bc" class="${state.accSort !== 'spend' ? 'on' : ''}">BC A–Z</button><button type="button" data-accsort="spend" class="${state.accSort === 'spend' ? 'on' : ''}">Spend cao → thấp</button></span>`;
+    const xbtn = downloads ? `<button type="button" class="btn primary xbtn" data-export="accounts" ${state.exporting ? 'disabled' : ''}>${state.exporting ? 'Đang tạo file…' : '⬇ Xuất Excel'}</button>` : '';
+    html = `<h4>Account có spend (${list.length}) ${sortSeg}${xbtn}</h4><table><thead><tr><th class="l">BC</th><th class="l">Account</th><th class="l">App</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
       list.map((a) => {
         const loaded = st.accApps.has(a.id);
         const apps = loaded ? st.accApps.get(a.id).map(appPill).join(' ') || '<span class="meta">–</span>' : `<span class="meta${a.liteStatus === 'loading' || a.status === 'loading' ? ' loading' : ''}">${a.status === 'error' || a.liteStatus === 'error' ? 'lỗi tải' : a.liteStatus === 'loading' || a.status === 'loading' ? 'đang tải…' : 'chờ tải'}</span>`;
@@ -849,7 +887,7 @@ function renderPanel(st) {
     const chip = (key, label, e) => { const r = roas(e.rev, e.spend); return `<button type="button" class="gchip ${state.appGenre === key ? 'on' : ''}" data-genre="${esc(key ?? '')}">${esc(label)} <span class="gm">${money(e.spend)} · <span class="${rcls(r)}">${pct(r)}</span> · ${e.n} app</span></button>`; };
     const gbar = `<div class="gbar">${chip(null, 'Tất cả', all)}${[...genres].sort((a, b) => b[1].spend - a[1].spend).map(([g, e]) => chip(g, g, e)).join('')}</div>`;
     const list = [...st.apps].filter(([id]) => !state.appGenre || genreOf(id) === state.appGenre).sort((a, b) => b[1].spend - a[1].spend);
-    html = `<h4>App đang chạy (${list.length}${state.appGenre ? ' · ' + esc(state.appGenre) : ''})${downloads ? `<button type="button" class="btn primary xbtn" id="xlsxBtn" ${state.exporting ? 'disabled' : ''}>${state.exporting ? 'Đang tạo file…' : '⬇ Xuất Excel'}</button>` : ''}</h4>${loadingApps ? `<div class="note">Đã tải ${doneN}/${withSpend.length} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}${gbar}<table><thead><tr><th class="l">App</th><th class="l">Genre</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
+    html = `<h4>App đang chạy (${list.length}${state.appGenre ? ' · ' + esc(state.appGenre) : ''})${downloads ? `<button type="button" class="btn primary xbtn" data-export="apps" ${state.exporting ? 'disabled' : ''}>${state.exporting ? 'Đang tạo file…' : '⬇ Xuất Excel'}</button>` : ''}</h4>${loadingApps ? `<div class="note">Đã tải ${doneN}/${withSpend.length} account. Danh sách app sẽ đủ khi tải xong.</div>` : ''}${gbar}<table><thead><tr><th class="l">App</th><th class="l">Genre</th><th class="l">Account chạy</th><th>Spend</th><th>ROAS IAA D0</th></tr></thead><tbody>` +
       (list.map(([id, e]) => {
         const a = model.apps.get(id) || {};
         const names = [...e.accs].map((x) => model.accounts.get(x)?.name || x);
@@ -1083,7 +1121,10 @@ function initControls() {
     if (inp && !inp.value.trim()) setTimeout(render, 0);
   });
   $('#panel').addEventListener('click', (e) => {
-    if (e.target.closest('#xlsxBtn')) { exportXlsx(); return; }
+    const xb = e.target.closest('[data-export]');
+    if (xb) { (xb.dataset.export === 'accounts' ? exportAccounts : exportApps)(); return; }
+    const sb = e.target.closest('[data-accsort]');
+    if (sb) { state.accSort = sb.dataset.accsort; LS.set('bcat.accSort', state.accSort); render(); return; }
     const c = e.target.closest('[data-genre]');
     if (!c) return;
     state.appGenre = c.dataset.genre || null;
