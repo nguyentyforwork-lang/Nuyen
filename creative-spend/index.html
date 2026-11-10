@@ -494,21 +494,27 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         };
       });
     }
+    var failed = [];
     await pool(chunks(ids, 20), 4, async function (b) {
-      try { await scan(b); }
-      catch (e) {
-        // Retry once in smaller pieces so one bad response does not hide flags.
-        for (var i = 0; i < b.length; i += 5) {
-          try { await scan(b.slice(i, i + 5)); } catch (e2) { missed = missed.concat(b.slice(i, i + 5)); }
-        }
-      }
+      try { await scan(b); } catch (e) { failed = failed.concat(b); }
       done += b.length;
-      info.scanned = done;
+      info.scanned = done - failed.length;
       onProgress && onProgress(done, ids.length);
     });
+    // Second pass: one ad at a time, slowly, so a single bad ad or a rate limit cannot hide the rest.
+    var errs = {};
+    for (var i = 0; i < failed.length; i++) {
+      var id = failed[i], ok = false;
+      for (var t = 0; t < 3 && !ok; t++) {
+        await sleep(400 + t * 1200);
+        try { await scan([id]); ok = true; }
+        catch (e) { errs[id] = (e && (e.message || e.code)) || "lỗi"; }
+      }
+      if (ok) { delete errs[id]; info.scanned++; } else missed.push(id);
+      onProgress && onProgress(ids.length - failed.length + i + 1, ids.length, "quét lại");
+    }
     info.missed = missed.length;
-    info.scanned = ids.length - missed.length;
-    if (missed.length) state.scanMissed[adv] = missed;
+    if (missed.length) state.scanMissed[adv] = missed.map(function (id) { return { id: id, err: errs[id] }; });
   }
 
   async function loadAccount(adv, start, end, onRows, onScan) {
@@ -570,7 +576,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
           await loadAccount(adv, start, end, function (r) {
             rows = rows.concat(r); state.rows = rows; render();
           }, function (n, total) {
-            showStatus("Đang quét policy " + adv + ": " + n + "/" + total + " ad Smart+ (spend cao → thấp)…");
+            showStatus("Đang quét policy " + adv + ": " + n + "/" + total + " ad Smart+ (spend cao → thấp)" + (arguments[2] ? ", đang quét lại từng ad lỗi" : "") + "…");
             render();
           });
         }
@@ -587,7 +593,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     try {
       await Promise.all([worker(), worker(), worker()]);
       if (fatal) showStatus(errText(fatal), true);
-      else if (Object.keys(state.scanMissed).length) showStatus("Chưa quét được policy cho " + Object.keys(state.scanMissed).map(function (a) { return state.scanMissed[a].length + " ad ở " + a; }).join(", ") + ". Bấm “Xem creative” lần nữa để quét lại.", true);
+      else if (Object.keys(state.scanMissed).length) showStatus(doneSummary() + "\n\nTikTok không trả kết quả duyệt cho các ad sau (đã thử lại từng ad 3 lần):\n" +
+        Object.keys(state.scanMissed).map(function (a) {
+          return state.scanMissed[a].map(function (m) { return a + " · ad " + m.id + ": " + m.err; }).join("\n");
+        }).join("\n"), true);
       else if (failed.length) showStatus("Không tải được " + failed.length + " tài khoản:\n" + failed.map(function (f) { return f.adv + ": " + f.msg; }).join("\n"), true);
       else showStatus(rows.length ? doneSummary() : "Không có ad nào trong khoảng ngày đã chọn.");
       await advListP; render();
