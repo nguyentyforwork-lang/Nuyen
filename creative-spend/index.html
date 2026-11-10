@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: control bar on top, summary strip, then one dense sortable table of creatives */
+/* Layout: control bar on top, summary strip, then one dense sortable spend table */
 :root {
   --bg: #f5f7f8;
   --surface: #ffffff;
@@ -13,7 +13,6 @@
   --accent: #0b8f86;
   --accent-soft: #d8f1ee;
   --bar: #9fd8d2;
-  --warn: #b45309;
   --bad: #b42318;
   --bad-soft: #fde8e6;
   --zero: #8b979e;
@@ -24,13 +23,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f1416; --surface: #161d20; --fg: #e6ecee; --muted: #93a2a9; --line: #273136;
-    --accent: #3cc7bb; --accent-soft: #143a37; --bar: #1f6660; --warn: #f0a656;
+    --accent: #3cc7bb; --accent-soft: #143a37; --bar: #1f6660;
     --bad: #ff8a80; --bad-soft: #3a1c1a; --zero: #6b787e; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f1416; --surface: #161d20; --fg: #e6ecee; --muted: #93a2a9; --line: #273136;
-  --accent: #3cc7bb; --accent-soft: #143a37; --bar: #1f6660; --warn: #f0a656;
+  --accent: #3cc7bb; --accent-soft: #143a37; --bar: #1f6660;
   --bad: #ff8a80; --bad-soft: #3a1c1a; --zero: #6b787e; color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -40,33 +39,38 @@ body {
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: 20px 40px;
 }
-.wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.wrap { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 header h1 { font-family: var(--font-display); font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
 header p { margin: 4px 0 0; color: var(--muted); }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-.controls { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(200px, 1fr) auto; gap: 12px 16px; align-items: end; }
+.controls { display: grid; grid-template-columns: minmax(240px, 1.4fr) minmax(200px, 1fr); gap: 14px 16px; align-items: start; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field label, .label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-input[type="text"], input[type="date"], input[type="number"], select {
+.hint { font-size: 12px; color: var(--muted); }
+input[type="text"], input[type="date"], input[type="number"], textarea {
   font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
   padding: 8px 10px; min-width: 0; width: 100%;
 }
-input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+textarea { resize: vertical; min-height: 76px; font-family: var(--font-mono); font-size: 13px; }
+input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mono { font-family: var(--font-mono); }
 .dates { display: flex; gap: 8px; align-items: center; }
 .dates span { color: var(--muted); }
 button { font: inherit; cursor: pointer; border-radius: 7px; }
 .btn-primary { background: var(--accent); color: var(--surface); border: 0; padding: 9px 18px; font-weight: 600; white-space: nowrap; }
-.btn-primary:disabled { opacity: 0.55; cursor: progress; }
-.presets { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.btn-primary:disabled, .btn:disabled { opacity: 0.55; cursor: progress; }
+.btn { background: var(--surface); color: var(--fg); border: 1px solid var(--line); padding: 7px 14px; font-weight: 500; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { background: transparent; border: 1px solid var(--line); color: var(--fg); padding: 5px 11px; font-size: 13px; }
 .chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
-.toolbar .grow { flex: 1 1 200px; min-width: 0; }
+.actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; }
+.toolbar .grow { flex: 1 1 180px; min-width: 0; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
 .seg button { border: 0; border-radius: 0; background: transparent; color: var(--muted); padding: 6px 12px; font-size: 13px; }
 .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; padding-bottom: 6px; }
 .switch input { width: 34px; height: 20px; appearance: none; background: var(--line); border-radius: 999px; position: relative; cursor: pointer; margin: 0; transition: background .15s; }
 .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: transform .15s; }
 .switch input:checked { background: var(--accent); }
@@ -76,36 +80,34 @@ button { font: inherit; cursor: pointer; border-radius: 7px; }
 .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .stat .v { font-family: var(--font-display); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.stat .s { color: var(--muted); font-size: 12px; }
-.status { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+.stat .s { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.status { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); white-space: pre-line; }
 .status.err { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
 .tablebox { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+table { width: 100%; border-collapse: collapse; min-width: 640px; }
 th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
-th { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); background: var(--surface); position: sticky; top: 0; white-space: nowrap; }
+th { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); background: var(--surface); white-space: nowrap; }
 th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 13px; }
 th[data-sort] { cursor: pointer; }
 th[data-sort]:hover { color: var(--fg); }
 th .arrow { color: var(--accent); }
 tbody tr:hover { background: var(--bg); }
 tr.zero td { color: var(--zero); }
-.rank { color: var(--muted); font-family: var(--font-mono); font-size: 12px; width: 36px; }
+.rank { color: var(--muted); font-family: var(--font-mono); font-size: 12px; width: 40px; }
+.idcell { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; min-width: 200px; }
+.acct { font-size: 13px; max-width: 220px; overflow-wrap: anywhere; }
+.acct small { display: block; color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.pill { display: inline-block; font-family: var(--font-body); font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); margin-left: 6px; }
+.pill.on { border-color: var(--accent); color: var(--accent); }
+.pill.del { border-color: var(--bad); color: var(--bad); }
+.spendcell { min-width: 160px; }
+.spendcell .bar { height: 4px; border-radius: 2px; background: var(--bar); margin-top: 4px; margin-left: auto; }
 .play { display: inline-block; white-space: nowrap; font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--accent); color: var(--accent); text-decoration: none; }
 .play:hover { background: var(--accent-soft); }
 .play.off { border-color: var(--line); color: var(--muted); font-weight: 400; }
-.name { min-width: 260px; max-width: 420px; }
-.name b { font-weight: 600; display: block; overflow-wrap: anywhere; }
-.name small { color: var(--muted); display: block; overflow-wrap: anywhere; }
-.name .id { font-family: var(--font-mono); font-size: 11px; }
-.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); margin-top: 3px; margin-right: 4px; }
-.pill.on { border-color: var(--accent); color: var(--accent); }
-.pill.del { border-color: var(--bad); color: var(--bad); }
-.spendcell { min-width: 150px; }
-.spendcell .bar { height: 4px; border-radius: 2px; background: var(--bar); margin-top: 4px; margin-left: auto; }
 .empty { padding: 36px 16px; text-align: center; color: var(--muted); display: flex; flex-direction: column; gap: 6px; align-items: center; }
 .empty strong { color: var(--fg); font-family: var(--font-display); font-size: 16px; }
-.foot { color: var(--muted); font-size: 12px; }
-a { color: var(--accent); }
+.foot { color: var(--muted); font-size: 12px; margin: 0; }
 @media (max-width: 760px) {
   .controls { grid-template-columns: 1fr; }
   .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -117,13 +119,14 @@ a { color: var(--accent); }
 <div class="wrap">
   <header>
     <h1>Creative Spend Viewer</h1>
-    <p>Nhập ID tài khoản quảng cáo TikTok, chọn khoảng ngày, xem creative nào đang tiêu tiền và creative nào không.</p>
+    <p>Nhập một hoặc nhiều ID tài khoản quảng cáo TikTok, chọn khoảng ngày, xem spend của từng creative.</p>
   </header>
 
   <form class="panel controls" id="form" autocomplete="off">
     <div class="field">
-      <label for="adv">Ad account ID</label>
-      <input type="text" id="adv" class="mono" list="advList" placeholder="vd: 7392895945995911169" inputmode="numeric" required>
+      <label for="advs">Ad account ID</label>
+      <textarea id="advs" placeholder="Mỗi dòng một ID, hoặc cách nhau bằng dấu phẩy / dấu cách" spellcheck="false"></textarea>
+      <input type="text" id="pick" list="advList" placeholder="Hoặc gõ tên tài khoản để thêm…" aria-label="Thêm tài khoản theo tên">
       <datalist id="advList"></datalist>
     </div>
     <div class="field">
@@ -133,17 +136,20 @@ a { color: var(--accent); }
         <span>→</span>
         <input type="date" id="end" aria-label="Đến ngày" required>
       </div>
+      <div class="presets" id="presets" role="group" aria-label="Khoảng ngày nhanh">
+        <button type="button" class="chip" data-p="today">Hôm nay</button>
+        <button type="button" class="chip" data-p="yesterday">Hôm qua</button>
+        <button type="button" class="chip" data-p="7d">7 ngày</button>
+        <button type="button" class="chip" data-p="30d">30 ngày</button>
+        <button type="button" class="chip" data-p="month">Đầu tháng → nay</button>
+        <button type="button" class="chip" data-p="quarter">Đầu quý → nay</button>
+        <button type="button" class="chip" data-p="lastquarter">Quý trước</button>
+        <button type="button" class="chip" data-p="year">Đầu năm → nay</button>
+      </div>
     </div>
-    <button type="submit" class="btn-primary" id="go">Xem creative</button>
-    <div class="presets" id="presets" role="group" aria-label="Khoảng ngày nhanh">
-      <button type="button" class="chip" data-p="today">Hôm nay</button>
-      <button type="button" class="chip" data-p="yesterday">Hôm qua</button>
-      <button type="button" class="chip" data-p="7d">7 ngày</button>
-      <button type="button" class="chip" data-p="30d">30 ngày</button>
-      <button type="button" class="chip" data-p="month">Đầu tháng → nay</button>
-      <button type="button" class="chip" data-p="quarter">Đầu quý → nay</button>
-      <button type="button" class="chip" data-p="lastquarter">Quý trước</button>
-      <button type="button" class="chip" data-p="year">Đầu năm → nay</button>
+    <div class="actions">
+      <span class="hint" id="advCount">0 tài khoản</span>
+      <button type="submit" class="btn-primary" id="go">Xem creative</button>
     </div>
   </form>
 
@@ -153,7 +159,7 @@ a { color: var(--accent); }
     <div class="stat"><span class="label">Tổng spend</span><span class="v" id="sSpend">–</span><span class="s" id="sRange"></span></div>
     <div class="stat"><span class="label">Creative có spend</span><span class="v" id="sOn">–</span><span class="s" id="sOnSub"></span></div>
     <div class="stat"><span class="label">Creative không spend</span><span class="v" id="sOff">–</span><span class="s">spend = 0 trong khoảng ngày</span></div>
-    <div class="stat"><span class="label">Top 1 chiếm</span><span class="v" id="sTop">–</span><span class="s" id="sTopName"></span></div>
+    <div class="stat"><span class="label">Tài khoản</span><span class="v" id="sAcc">–</span><span class="s" id="sAccSub"></span></div>
   </section>
 
   <div class="panel toolbar" id="toolbar" hidden>
@@ -180,16 +186,17 @@ a { color: var(--accent); }
       </div>
     </div>
     <div class="field grow">
-      <label for="q">Tìm tên / ID</label>
-      <input type="text" id="q" placeholder="Tên video, ad, campaign…">
+      <label for="q">Tìm ID</label>
+      <input type="text" id="q" placeholder="Video ID, ad ID, account ID…">
     </div>
     <label class="switch" for="showZero">
       <input type="checkbox" id="showZero" checked>
       <span>Hiện creative không spend</span>
     </label>
+    <button type="button" class="btn" id="export">Xuất CSV</button>
   </div>
 
-  <div class="tablebox" id="tablebox">
+  <div class="tablebox">
     <div class="empty" id="empty">
       <strong>Chưa có dữ liệu</strong>
       <span>Nhập ad account ID, chọn khoảng ngày (vd: “Đầu quý → nay”) rồi bấm <b>Xem creative</b>.</span>
@@ -200,22 +207,17 @@ a { color: var(--accent); }
         <tr>
           <th class="rank">#</th>
           <th>Video</th>
-          <th data-sort="name">Creative</th>
-          <th class="num" data-sort="ads">Ads</th>
+          <th data-sort="idLabel">Creative ID</th>
+          <th data-sort="advName" id="thAcc">Tài khoản</th>
+          <th class="num" data-sort="adsN" title="Số ad dùng creative này (tính trên mọi campaign / ad group)">Số ad</th>
           <th class="num spendcell" data-sort="spend">Spend</th>
-          <th class="num" data-sort="share">% spend</th>
-          <th class="num" data-sort="impressions">Impr.</th>
-          <th class="num" data-sort="clicks">Clicks</th>
-          <th class="num" data-sort="ctr">CTR</th>
-          <th class="num" data-sort="cpm">CPM</th>
-          <th class="num" data-sort="conversion">Conv.</th>
-          <th class="num" data-sort="cpa">CPA</th>
+          <th class="num" data-sort="share" title="Phần trăm spend trong tài khoản đó">% spend</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
     </table>
   </div>
-  <p class="foot" id="foot">Ngày tính theo múi giờ của tài khoản quảng cáo. Gồm cả ad đã tắt và đã xóa. Khoảng ngày tối đa 365 ngày.</p>
+  <p class="foot">“Số ad” là số ad đang dùng creative đó, cộng dồn trên mọi campaign và ad group. “% spend” tính trong từng tài khoản. Ngày theo múi giờ tài khoản, gồm cả ad đã tắt và đã xóa, tối đa 365 ngày.</p>
 </div>
 
 <script>
@@ -224,26 +226,63 @@ a { color: var(--accent); }
   var SERVER = "TikTok MCP";
   var $ = function (id) { return document.getElementById(id); };
   var els = {
-    form: $("form"), adv: $("adv"), advList: $("advList"), start: $("start"), end: $("end"), go: $("go"),
-    presets: $("presets"), status: $("status"), summary: $("summary"), toolbar: $("toolbar"),
-    table: $("table"), tbody: $("tbody"), empty: $("empty"), minS: $("minS"), maxS: $("maxS"),
-    q: $("q"), showZero: $("showZero")
+    form: $("form"), advs: $("advs"), pick: $("pick"), advList: $("advList"), advCount: $("advCount"),
+    start: $("start"), end: $("end"), go: $("go"), presets: $("presets"), status: $("status"),
+    summary: $("summary"), toolbar: $("toolbar"), table: $("table"), tbody: $("tbody"), empty: $("empty"),
+    minS: $("minS"), maxS: $("maxS"), q: $("q"), showZero: $("showZero"), exportBtn: $("export")
   };
 
   var state = {
-    rows: [],          // per-ad rows from the report, merged with ad info
-    videos: {},        // video_id -> info
-    currency: "USD",
-    group: "creative",
-    sortKey: "spend",
-    sortDir: "desc",
-    loadedRange: null
+    rows: [], videos: {}, names: {}, group: "creative", sortKey: "spend", sortDir: "desc",
+    loaded: null, failed: [], visible: []
   };
   var mcpP = (window.claude && window.claude.use) ? window.claude.use("mcp") : Promise.resolve(null);
+  var dlP = (window.claude && window.claude.use) ? window.claude.use("downloads") : Promise.resolve(null);
 
-  // ---------- storage (per-viewer convenience) ----------
   function sget(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function sset(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  // ---------- accounts input ----------
+  function parseAdvs() {
+    var seen = {}, out = [];
+    (els.advs.value.match(/\d{6,}/g) || []).forEach(function (id) { if (!seen[id]) { seen[id] = 1; out.push(id); } });
+    return out;
+  }
+  function updateCount() {
+    var n = parseAdvs().length;
+    els.advCount.textContent = n + " tài khoản";
+  }
+  els.advs.addEventListener("input", updateCount);
+  els.pick.addEventListener("change", function () {
+    var v = els.pick.value.trim();
+    var m = v.match(/\d{6,}/);
+    var id = m ? m[0] : null;
+    if (!id) {
+      for (var k in state.names) { if (state.names[k] === v) { id = k; break; } }
+    }
+    if (!id) return;
+    if (parseAdvs().indexOf(id) < 0) {
+      els.advs.value = (els.advs.value.trim() ? els.advs.value.trim() + "\n" : "") + id;
+    }
+    els.pick.value = "";
+    updateCount();
+  });
+  var advListP = null;
+  function loadAdvList() {
+    if (advListP) return advListP;
+    advListP = call("auth_advertiser_get", {}).then(function (d) {
+      var frag = document.createDocumentFragment();
+      (d.list || []).forEach(function (a) {
+        state.names[a.advertiser_id] = a.advertiser_name || "";
+        var o = document.createElement("option");
+        o.value = a.advertiser_name ? a.advertiser_name + " · " + a.advertiser_id : a.advertiser_id;
+        frag.appendChild(o);
+      });
+      els.advList.appendChild(frag);
+    }).catch(function () { advListP = null; });
+    return advListP;
+  }
+  els.pick.addEventListener("focus", loadAdvList);
 
   // ---------- dates ----------
   function fmt(d) {
@@ -252,37 +291,29 @@ a { color: var(--accent); }
   }
   function preset(p) {
     var t = new Date(); t.setHours(0, 0, 0, 0);
-    var s = new Date(t), e = new Date(t);
-    var q = Math.floor(t.getMonth() / 3);
+    var s = new Date(t), e = new Date(t), q = Math.floor(t.getMonth() / 3);
     switch (p) {
-      case "today": break;
       case "yesterday": s.setDate(s.getDate() - 1); e = new Date(s); break;
       case "7d": s.setDate(s.getDate() - 6); break;
       case "30d": s.setDate(s.getDate() - 29); break;
       case "month": s = new Date(t.getFullYear(), t.getMonth(), 1); break;
       case "quarter": s = new Date(t.getFullYear(), q * 3, 1); break;
-      case "lastquarter":
-        s = new Date(t.getFullYear(), q * 3 - 3, 1);
-        e = new Date(t.getFullYear(), q * 3, 0); break;
+      case "lastquarter": s = new Date(t.getFullYear(), q * 3 - 3, 1); e = new Date(t.getFullYear(), q * 3, 0); break;
       case "year": s = new Date(t.getFullYear(), 0, 1); break;
     }
     return [fmt(s), fmt(e)];
-  }
-  function setPreset(p) {
-    var r = preset(p);
-    els.start.value = r[0]; els.end.value = r[1];
-    markPreset(p);
   }
   function markPreset(p) {
     Array.prototype.forEach.call(els.presets.querySelectorAll(".chip"), function (b) {
       b.setAttribute("aria-pressed", b.dataset.p === p ? "true" : "false");
     });
   }
+  function setPreset(p) { var r = preset(p); els.start.value = r[0]; els.end.value = r[1]; markPreset(p); }
   els.presets.addEventListener("click", function (e) {
     var b = e.target.closest(".chip"); if (!b) return;
     setPreset(b.dataset.p); sset("csv.preset", b.dataset.p);
   });
-  [els.start, els.end].forEach(function (i) { i.addEventListener("change", function () { markPreset(null); sset("csv.preset", ""); }); });
+  [els.start, els.end].forEach(function (i) { i.addEventListener("change", function () { markPreset(null); }); });
 
   // ---------- status ----------
   function showStatus(msg, isErr) {
@@ -293,6 +324,7 @@ a { color: var(--accent); }
   function errText(err) {
     var c = err && err.code;
     switch (c) {
+      case "no_mcp": return err.message;
       case "server_not_connected": return "Chưa kết nối TikTok MCP. Thêm connector “" + SERVER + "” trong claude.ai → Settings → Connectors rồi tải lại trang.";
       case "needs_reauth": return "Phiên đăng nhập TikTok MCP đã hết hạn. Kết nối lại “" + SERVER + "” trong claude.ai → Settings → Connectors.";
       case "selection_required": return "Bạn có nhiều connector tên “" + SERVER + "”. Chọn một connector trong hộp thoại của claude.ai rồi bấm lại.";
@@ -300,278 +332,272 @@ a { color: var(--accent); }
         return "Trang chưa được cho phép dùng TikTok MCP. Bấm “Xem creative” lần nữa và chọn Cho phép.";
       case "blocked_by_policy": return "Tổ chức của bạn đang chặn công cụ TikTok MCP này.";
       case "server_unavailable": case "rate_limited": return "TikTok MCP đang bận hoặc không phản hồi. Đợi vài giây rồi bấm lại.";
-      case "tool_error": return "TikTok báo lỗi: " + (err.message || "không rõ") + ". Kiểm tra lại ad account ID và quyền truy cập tài khoản.";
+      case "tool_error": return "TikTok báo lỗi: " + (err.message || "không rõ");
       default: return "Không lấy được dữ liệu (" + (c || "lỗi") + "): " + ((err && err.message) || "");
     }
   }
+  var FATAL = { no_mcp: 1, server_not_connected: 1, needs_reauth: 1, selection_required: 1, not_in_manifest: 1, approval_required: 1, consent_required: 1, blocked_by_policy: 1 };
 
-  // ---------- MCP calls ----------
-  async function getMcp() {
-    var mcp = await mcpP;
-    if (!mcp) throw { code: "no_mcp", message: "Trang cần được mở trong claude.ai để dùng TikTok MCP." };
-    return mcp;
-  }
+  // ---------- MCP ----------
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   async function call(tool, input) {
-    var mcp = await getMcp();
-    var res;
-    try {
-      res = await mcp.callTool(SERVER, tool, input, { cache: { staleTime: 120000, gcTime: 600000 } });
-    } catch (err) {
-      if (err && err.retryable) {
-        await sleep((err.retryAfterMs || 1500) + Math.random() * 800);
-        res = await mcp.callTool(SERVER, tool, input, { cache: { staleTime: 120000, gcTime: 600000 } });
-      } else { throw err; }
+    var mcp = await mcpP;
+    if (!mcp) throw { code: "no_mcp", message: "Mở trang này trong claude.ai (đã kết nối TikTok MCP) để tải dữ liệu." };
+    var opts = { cache: { staleTime: 120000, gcTime: 600000 } }, res;
+    try { res = await mcp.callTool(SERVER, tool, input, opts); }
+    catch (err) {
+      if (!(err && err.retryable)) throw err;
+      await sleep((err.retryAfterMs || 1500) + Math.random() * 800);
+      res = await mcp.callTool(SERVER, tool, input, opts);
     }
     var p = res && res.payload;
     if (typeof p === "string") { try { p = JSON.parse(p); } catch (e) {} }
-    if (p && typeof p === "object" && "code" in p && p.code !== 0) {
-      throw { code: "tool_error", message: p.message || ("code " + p.code) };
-    }
+    if (p && typeof p === "object" && "code" in p && p.code !== 0) throw { code: "tool_error", message: p.message || ("code " + p.code) };
     return (p && p.data) || {};
   }
-
-  async function loadReport(adv, start, end, onProgress) {
+  async function paged(tool, base) {
     var out = [], page = 1, total = 1;
     do {
-      var d = await call("report_integrated_get", {
-        advertiser_id: adv, report_type: "BASIC", data_level: "AUCTION_AD",
-        dimensions: ["ad_id"],
-        metrics: ["spend", "impressions", "clicks", "conversion", "ad_name", "campaign_name", "adgroup_name", "campaign_id", "currency"],
-        start_date: start, end_date: end, page: page, page_size: 1000,
-        filtering: [{ field_name: "ad_status", filter_type: "IN", filter_value: "[\"STATUS_ALL\"]" }]
-      });
+      var d = await call(tool, Object.assign({}, base, { page: page, page_size: 1000 }));
       (d.list || []).forEach(function (r) { out.push(r); });
       total = (d.page_info && d.page_info.total_page) || 1;
-      onProgress && onProgress("Đang tải báo cáo… trang " + page + "/" + total);
       page++;
     } while (page <= total && page <= 50);
     return out;
   }
-
-  async function loadAds(adv, extraFilter) {
-    var out = [], page = 1, total = 1;
-    do {
-      var input = {
-        advertiser_id: adv, page: page, page_size: 1000,
-        fields: ["ad_id", "video_id", "image_ids", "operation_status", "secondary_status", "ad_format", "tiktok_item_id", "create_time"]
-      };
-      if (extraFilter) input.filtering = extraFilter;
-      var d = await call("ad_get", input);
-      (d.list || []).forEach(function (a) { out.push(a); });
-      total = (d.page_info && d.page_info.total_page) || 1;
-      page++;
-    } while (page <= total && page <= 50);
-    return out;
+  function loadReport(adv, start, end) {
+    return paged("report_integrated_get", {
+      advertiser_id: adv, report_type: "BASIC", data_level: "AUCTION_AD", dimensions: ["ad_id"],
+      metrics: ["spend", "currency"], start_date: start, end_date: end,
+      filtering: [{ field_name: "ad_status", filter_type: "IN", filter_value: "[\"STATUS_ALL\"]" }]
+    });
   }
-
-  async function loadVideos(adv, ids, onProgress) {
+  function loadAds(adv, filtering) {
+    var base = { advertiser_id: adv, fields: ["ad_id", "video_id", "secondary_status"] };
+    if (filtering) base.filtering = filtering;
+    return paged("ad_get", base).catch(function () { return []; });
+  }
+  async function loadVideos(adv, ids) {
     var need = ids.filter(function (id) { return !state.videos[id]; });
     var batches = [];
     for (var i = 0; i < need.length; i += 60) batches.push(need.slice(i, i + 60));
-    var done = 0;
     async function worker() {
       while (batches.length) {
         var b = batches.shift();
         try {
           var d = await call("file_video_ad_info_get", { advertiser_id: adv, video_ids: b });
           (d.list || []).forEach(function (v) { state.videos[v.video_id] = v; });
-        } catch (e) { /* thumbnails are optional */ }
-        done++;
-        onProgress && onProgress("Đang tải thông tin video… " + done + " nhóm");
+        } catch (e) { /* the video link is optional */ }
       }
     }
     await Promise.all([worker(), worker(), worker()]);
   }
 
-  // ---------- run ----------
+  async function loadAccount(adv, start, end) {
+    var reportP = loadReport(adv, start, end);
+    var adsP = loadAds(adv), delP = loadAds(adv, { primary_status: "STATUS_DELETE" });
+    var report = await reportP;
+    var ads = (await adsP).concat(await delP), info = {};
+    ads.forEach(function (a) { info[a.ad_id] = a; });
+    var rows = report.map(function (r) {
+      var m = r.metrics || {}, id = r.dimensions && r.dimensions.ad_id, a = info[id] || {};
+      var spend = parseFloat(m.spend);
+      return {
+        adv: adv, ad_id: id, spend: isFinite(spend) ? spend : 0,
+        currency: m.currency && m.currency !== "-" ? m.currency : "USD",
+        video_id: a.video_id || null, sec: a.secondary_status || null, known: !!info[id]
+      };
+    });
+    var vids = Array.from(new Set(rows.map(function (r) { return r.video_id; }).filter(Boolean)));
+    if (vids.length) await loadVideos(adv, vids);
+    return rows;
+  }
+
   var running = false;
   els.form.addEventListener("submit", async function (e) {
     e.preventDefault();
     if (running) return;
-    var adv = els.adv.value.trim().replace(/\D/g, "");
-    var start = els.start.value, end = els.end.value;
-    if (!adv) { showStatus("Nhập ad account ID (chỉ gồm số).", true); return; }
+    var advs = parseAdvs(), start = els.start.value, end = els.end.value;
+    if (!advs.length) { showStatus("Nhập ít nhất một ad account ID (chỉ gồm số).", true); return; }
     if (!start || !end || start > end) { showStatus("Chọn khoảng ngày hợp lệ: ngày bắt đầu phải trước ngày kết thúc.", true); return; }
-    var days = (new Date(end) - new Date(start)) / 86400000 + 1;
-    if (days > 365) { showStatus("TikTok chỉ cho xem tối đa 365 ngày một lần. Thu hẹp khoảng ngày lại.", true); return; }
-    els.adv.value = adv;
-    sset("csv.adv", adv);
+    if ((new Date(end) - new Date(start)) / 86400000 + 1 > 365) { showStatus("TikTok chỉ cho xem tối đa 365 ngày một lần. Thu hẹp khoảng ngày lại.", true); return; }
+    els.advs.value = advs.join("\n"); updateCount();
+    sset("csv.advs", els.advs.value);
     running = true; els.go.disabled = true; els.go.textContent = "Đang tải…";
-    showStatus("Đang tải báo cáo spend…");
-    try {
-      var reportP = loadReport(adv, start, end, function (m) { showStatus(m); });
-      var adsP = loadAds(adv).catch(function () { return []; });
-      var delP = loadAds(adv, { primary_status: "STATUS_DELETE" }).catch(function () { return []; });
-      var report = await reportP;
-      var ads = (await adsP).concat(await delP);
-      var info = {};
-      ads.forEach(function (a) { info[a.ad_id] = a; });
-      var currency = "USD";
-      var rows = report.map(function (r) {
-        var m = r.metrics || {}, id = r.dimensions && r.dimensions.ad_id;
-        if (m.currency && m.currency !== "-") currency = m.currency;
-        var a = info[id] || {};
-        return {
-          ad_id: id, ad_name: m.ad_name || "", campaign_name: m.campaign_name || "", adgroup_name: m.adgroup_name || "",
-          spend: num(m.spend), impressions: num(m.impressions), clicks: num(m.clicks), conversion: num(m.conversion),
-          video_id: a.video_id || null, image: (a.image_ids && a.image_ids[0]) || null,
-          op: a.operation_status || null, sec: a.secondary_status || null, known: !!info[id]
-        };
-      });
-      state.rows = rows; state.currency = currency;
-      state.loadedRange = [start, end, adv];
-      render();
-      var vids = Array.from(new Set(rows.map(function (r) { return r.video_id; }).filter(Boolean)));
-      if (vids.length) {
-        showStatus("Đã tải " + rows.length + " ad. Đang lấy tên và ảnh video…");
-        await loadVideos(adv, vids, function (m) { showStatus(m); });
+    loadAdvList();
+    var queue = advs.slice(), rows = [], failed = [], done = 0, fatal = null;
+    showStatus("Đang tải 0/" + advs.length + " tài khoản…");
+    async function worker() {
+      while (queue.length && !fatal) {
+        var adv = queue.shift();
+        try { rows = rows.concat(await loadAccount(adv, start, end)); }
+        catch (err) {
+          if (err && FATAL[err.code]) { fatal = err; break; }
+          failed.push({ adv: adv, msg: errText(err) });
+        }
+        done++;
+        showStatus("Đang tải " + done + "/" + advs.length + " tài khoản…");
+        state.rows = rows; state.failed = failed; state.loaded = [start, end, advs];
         render();
       }
-      showStatus(rows.length ? "" : "Tài khoản này không có ad nào trong khoảng ngày đã chọn.");
-    } catch (err) {
-      showStatus(errText(err), true);
+    }
+    try {
+      await Promise.all([worker(), worker()]);
+      if (fatal) { showStatus(errText(fatal), true); }
+      else if (failed.length) {
+        showStatus("Không tải được " + failed.length + " tài khoản:\n" + failed.map(function (f) { return f.adv + ": " + f.msg; }).join("\n"), true);
+      } else {
+        showStatus(rows.length ? "" : "Không có ad nào trong khoảng ngày đã chọn.");
+      }
+      await advListP; render();
     } finally {
       running = false; els.go.disabled = false; els.go.textContent = "Xem creative";
     }
   });
 
-  function num(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
-
   // ---------- aggregate ----------
   function groups() {
-    var map = new Map();
+    var map = new Map(), acctTotal = {};
     state.rows.forEach(function (r) {
-      var key = state.group === "creative" && r.video_id ? "v:" + r.video_id : "a:" + r.ad_id;
+      var key = r.adv + "|" + (state.group === "creative" && r.video_id ? "v:" + r.video_id : "a:" + r.ad_id);
       var g = map.get(key);
       if (!g) {
-        g = { key: key, video_id: state.group === "creative" ? r.video_id : r.video_id, ads: [], campaigns: new Set(),
-              spend: 0, impressions: 0, clicks: 0, conversion: 0, active: false, deleted: true };
+        g = { adv: r.adv, currency: r.currency, video_id: r.video_id, ads: [], spend: 0, active: false, deleted: true };
         map.set(key, g);
       }
-      g.ads.push(r);
-      g.campaigns.add(r.campaign_name);
-      g.spend += r.spend; g.impressions += r.impressions; g.clicks += r.clicks; g.conversion += r.conversion;
+      g.ads.push(r.ad_id);
+      g.spend += r.spend;
       if (r.sec === "AD_STATUS_DELIVERY_OK") g.active = true;
       if (r.known) g.deleted = false;
+      acctTotal[r.adv] = (acctTotal[r.adv] || 0) + r.spend;
     });
-    var total = 0;
-    map.forEach(function (g) { total += g.spend; });
     var out = [];
     map.forEach(function (g) {
       var v = g.video_id ? state.videos[g.video_id] : null;
-      var first = g.ads[0];
-      g.name = state.group === "creative"
-        ? (v && v.file_name) || (g.ads.length === 1 ? first.ad_name : first.ad_name + " +" + (g.ads.length - 1))
-        : first.ad_name;
-      g.sub = state.group === "creative"
-        ? Array.from(g.campaigns).slice(0, 2).join(" · ") + (g.campaigns.size > 2 ? " +" + (g.campaigns.size - 2) : "")
-        : first.campaign_name + " › " + first.adgroup_name;
-      g.idLabel = state.group === "creative" && g.video_id ? g.video_id : "ad " + first.ad_id;
+      g.idLabel = state.group === "creative" && g.video_id ? g.video_id : "ad " + g.ads[0];
       g.preview = v && v.preview_url ? v.preview_url : null;
-      g.share = total ? g.spend / total : 0;
-      g.ctr = g.impressions ? g.clicks / g.impressions : 0;
-      g.cpm = g.impressions ? g.spend / g.impressions * 1000 : 0;
-      g.cpa = g.conversion ? g.spend / g.conversion : 0;
+      g.share = acctTotal[g.adv] ? g.spend / acctTotal[g.adv] : 0;
       g.adsN = g.ads.length;
+      g.advName = state.names[g.adv] || g.adv;
+      g.status = g.active ? "đang chạy" : g.deleted ? "đã xóa" : "không chạy";
       out.push(g);
     });
-    return { list: out, total: total };
+    return out;
   }
 
   // ---------- render ----------
   var nf0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-  function money(v) {
-    try { return new Intl.NumberFormat("en-US", { style: "currency", currency: state.currency, maximumFractionDigits: 2 }).format(v); }
-    catch (e) { return v.toFixed(2) + " " + state.currency; }
+  function money(v, cur) {
+    try { return new Intl.NumberFormat("en-US", { style: "currency", currency: cur, maximumFractionDigits: 2 }).format(v); }
+    catch (e) { return v.toFixed(2) + " " + cur; }
   }
   function pct(v) { return (v * 100).toFixed(v >= 0.1 ? 1 : 2) + "%"; }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
-  function render() {
-    if (!state.loadedRange) return;
-    var g = groups();
-    var all = g.list;
-    var onCount = all.filter(function (x) { return x.spend > 0; }).length;
-    var offCount = all.length - onCount;
-    var top = all.slice().sort(function (a, b) { return b.spend - a.spend; })[0];
-
-    els.summary.hidden = false; els.toolbar.hidden = false;
-    $("sSpend").textContent = money(g.total);
-    $("sRange").textContent = state.loadedRange[0] + " → " + state.loadedRange[1];
-    $("sOn").textContent = nf0.format(onCount);
-    $("sOnSub").textContent = "trên " + nf0.format(all.length) + (state.group === "creative" ? " creative" : " ad");
-    $("sOff").textContent = nf0.format(offCount);
-    $("sTop").textContent = top && top.spend > 0 ? pct(top.share) : "–";
-    $("sTopName").textContent = top && top.spend > 0 ? top.name : "";
-
-    var min = parseFloat(els.minS.value), max = parseFloat(els.maxS.value);
-    var q = els.q.value.trim().toLowerCase();
+  function filtered(all) {
+    var min = parseFloat(els.minS.value), max = parseFloat(els.maxS.value), q = els.q.value.trim().toLowerCase();
     var list = all.filter(function (x) {
       if (!els.showZero.checked && x.spend <= 0) return false;
       if (isFinite(min) && x.spend < min) return false;
       if (isFinite(max) && x.spend > max) return false;
-      if (q) {
-        var hay = (x.name + " " + x.sub + " " + x.idLabel + " " + x.ads.map(function (a) { return a.ad_name + " " + a.ad_id; }).join(" ")).toLowerCase();
-        if (hay.indexOf(q) < 0) return false;
-      }
+      if (q && (x.idLabel + " " + x.adv + " " + x.advName + " " + x.ads.join(" ")).toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
-    var k = state.sortKey === "ads" ? "adsN" : state.sortKey, dir = state.sortDir === "asc" ? 1 : -1;
+    var k = state.sortKey, dir = state.sortDir === "asc" ? 1 : -1;
     list.sort(function (a, b) {
       var va = a[k], vb = b[k];
-      if (typeof va === "string") return dir * va.localeCompare(vb);
+      if (typeof va === "string") return dir * va.localeCompare(vb) || (b.spend - a.spend);
       return dir * (va - vb) || (b.spend - a.spend);
     });
+    return list;
+  }
+
+  function render() {
+    if (!state.loaded) return;
+    var all = groups();
+    var multi = state.loaded[2].length > 1;
+    var on = all.filter(function (x) { return x.spend > 0; }).length;
+    var totals = {};
+    all.forEach(function (x) { totals[x.currency] = (totals[x.currency] || 0) + x.spend; });
+    var unit = state.group === "creative" ? " creative" : " ad";
+
+    els.summary.hidden = false; els.toolbar.hidden = false;
+    var curs = Object.keys(totals);
+    $("sSpend").textContent = curs.length ? curs.map(function (c) { return money(totals[c], c); }).join(" + ") : money(0, "USD");
+    $("sRange").textContent = state.loaded[0] + " → " + state.loaded[1];
+    $("sOn").textContent = nf0.format(on);
+    $("sOnSub").textContent = "trên " + nf0.format(all.length) + unit;
+    $("sOff").textContent = nf0.format(all.length - on);
+    var okAcc = new Set(state.rows.map(function (r) { return r.adv; })).size;
+    $("sAcc").textContent = nf0.format(state.loaded[2].length);
+    $("sAccSub").textContent = state.failed.length ? state.failed.length + " lỗi · " + okAcc + " có ad" : okAcc + " có ad trong khoảng ngày";
+    $("thAcc").hidden = !multi;
+
+    var list = filtered(all);
+    state.visible = list;
+    els.exportBtn.textContent = "Xuất CSV (" + nf0.format(list.length) + " dòng)";
+    els.exportBtn.disabled = !list.length;
 
     Array.prototype.forEach.call(els.table.querySelectorAll("th[data-sort]"), function (th) {
-      var on = th.dataset.sort === state.sortKey;
-      th.setAttribute("aria-sort", on ? (state.sortDir === "asc" ? "ascending" : "descending") : "none");
+      var active = th.dataset.sort === state.sortKey;
+      th.setAttribute("aria-sort", active ? (state.sortDir === "asc" ? "ascending" : "descending") : "none");
       var base = th.dataset.label || (th.dataset.label = th.textContent);
-      th.innerHTML = esc(base) + (on ? ' <span class="arrow">' + (state.sortDir === "asc" ? "↑" : "↓") + "</span>" : "");
+      th.innerHTML = esc(base) + (active ? ' <span class="arrow">' + (state.sortDir === "asc" ? "↑" : "↓") + "</span>" : "");
     });
 
-    var maxSpend = all.reduce(function (m, x) { return Math.max(m, x.spend); }, 0) || 1;
     if (!list.length) {
       els.table.hidden = true; els.empty.hidden = false;
       els.empty.innerHTML = all.length
         ? "<strong>Không có creative khớp bộ lọc</strong><span>Thử bật “Hiện creative không spend”, nới khoảng spend hoặc xóa ô tìm kiếm.</span>"
-        : "<strong>Không có ad nào</strong><span>Tài khoản này không có ad trong khoảng ngày đã chọn.</span>";
+        : "<strong>Chưa có ad nào</strong><span>Các tài khoản đã tải không có ad trong khoảng ngày đã chọn.</span>";
       return;
     }
     els.empty.hidden = true; els.table.hidden = false;
-    var html = list.map(function (x, i) {
-      var thumb = x.preview
+    var maxSpend = list.reduce(function (m, x) { return Math.max(m, x.spend); }, 0) || 1;
+    els.tbody.innerHTML = list.map(function (x, i) {
+      var vid = x.preview
         ? '<a class="play" href="' + esc(x.preview) + '" target="_blank" rel="noopener">▶ Xem</a>'
         : '<span class="play off">' + (x.video_id ? "video" : "–") + "</span>";
-      var pills = "";
-      if (x.active) pills += '<span class="pill on">đang chạy</span>';
-      else if (x.deleted) pills += '<span class="pill del">đã xóa</span>';
-      else pills += '<span class="pill">không chạy</span>';
-      if (state.group === "creative" && x.adsN > 1) pills += '<span class="pill">' + x.adsN + " ad</span>";
+      var pill = '<span class="pill' + (x.active ? " on" : x.deleted ? " del" : "") + '">' + x.status + "</span>";
       return '<tr class="' + (x.spend > 0 ? "" : "zero") + '">' +
         '<td class="rank">' + (i + 1) + "</td>" +
-        "<td>" + thumb + "</td>" +
-        '<td class="name"><b>' + esc(x.name) + "</b><small>" + esc(x.sub) + '</small><small class="id">' + esc(x.idLabel) + "</small>" + pills + "</td>" +
+        "<td>" + vid + "</td>" +
+        '<td class="idcell">' + esc(x.idLabel) + pill + "</td>" +
+        (multi ? '<td class="acct">' + esc(state.names[x.adv] || "") + "<small>" + esc(x.adv) + "</small></td>" : "") +
         '<td class="num">' + x.adsN + "</td>" +
-        '<td class="num spendcell">' + money(x.spend) + '<div class="bar" style="width:' + Math.max(x.spend > 0 ? 2 : 0, x.spend / maxSpend * 100).toFixed(1) + '%"></div></td>' +
-        '<td class="num">' + (x.spend > 0 ? pct(x.share) : "–") + "</td>" +
-        '<td class="num">' + nf0.format(x.impressions) + "</td>" +
-        '<td class="num">' + nf0.format(x.clicks) + "</td>" +
-        '<td class="num">' + (x.impressions ? pct(x.ctr) : "–") + "</td>" +
-        '<td class="num">' + (x.impressions ? money(x.cpm) : "–") + "</td>" +
-        '<td class="num">' + nf0.format(x.conversion) + "</td>" +
-        '<td class="num">' + (x.conversion ? money(x.cpa) : "–") + "</td></tr>";
+        '<td class="num spendcell">' + money(x.spend, x.currency) + '<div class="bar" style="width:' + (x.spend > 0 ? Math.max(2, x.spend / maxSpend * 100) : 0).toFixed(1) + '%"></div></td>' +
+        '<td class="num">' + (x.spend > 0 ? pct(x.share) : "–") + "</td></tr>";
     }).join("");
-    els.tbody.innerHTML = html;
   }
+
+  // ---------- export ----------
+  function csvCell(v) { v = String(v == null ? "" : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  els.exportBtn.addEventListener("click", async function () {
+    var list = state.visible; if (!list.length) return;
+    var dl = await dlP;
+    if (!dl) { showStatus("Không xuất file được ở chế độ xem này. Mở trang trong claude.ai để tải file.", true); return; }
+    var head = ["Account ID", "Account name", state.group === "creative" ? "Video ID" : "Ad ID", "So ad", "Ad IDs", "Spend", "Currency", "% spend trong account", "Trang thai", "Link video"];
+    var lines = [head.join(",")].concat(list.map(function (x) {
+      return [x.adv, state.names[x.adv] || "", state.group === "creative" && x.video_id ? x.video_id : x.ads[0], x.adsN, x.ads.join(" "),
+        x.spend.toFixed(2), x.currency, (x.share * 100).toFixed(2), x.status, x.preview || ""].map(csvCell).join(",");
+    }));
+    var name = "creative-spend_" + state.loaded[0] + "_" + state.loaded[1] + ".csv";
+    try {
+      await dl.save({ filename: name, data: "\ufeff" + lines.join("\r\n") });
+      showStatus("Đã lưu " + name + ".");
+    } catch (err) {
+      if (err && err.code === "declined") return;
+      if (err && err.code === "rate_limited") { showStatus("Đang có một hộp thoại lưu file mở. Đóng nó rồi bấm lại.", true); return; }
+      showStatus("Không lưu được file (" + ((err && err.code) || "lỗi") + ").", true);
+    }
+  });
 
   // ---------- interactions ----------
   els.table.querySelector("thead").addEventListener("click", function (e) {
     var th = e.target.closest("th[data-sort]"); if (!th) return;
     var k = th.dataset.sort;
     if (state.sortKey === k) state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-    else { state.sortKey = k; state.sortDir = k === "name" ? "asc" : "desc"; }
+    else { state.sortKey = k; state.sortDir = (k === "idLabel" || k === "advName") ? "asc" : "desc"; }
     syncOrderSeg(); render();
   });
   function syncOrderSeg() {
@@ -579,48 +605,24 @@ a { color: var(--accent); }
       b.setAttribute("aria-pressed", state.sortKey === "spend" && b.dataset.o === state.sortDir ? "true" : "false");
     });
   }
+  function syncGroupSeg() {
+    Array.prototype.forEach.call(els.toolbar.querySelectorAll("[data-g]"), function (x) { x.setAttribute("aria-pressed", x.dataset.g === state.group ? "true" : "false"); });
+  }
   els.toolbar.addEventListener("click", function (e) {
     var b = e.target.closest("button"); if (!b) return;
-    if (b.dataset.g) {
-      state.group = b.dataset.g; sset("csv.group", state.group);
-      Array.prototype.forEach.call(els.toolbar.querySelectorAll("[data-g]"), function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
-      render();
-    } else if (b.dataset.o) {
-      state.sortKey = "spend"; state.sortDir = b.dataset.o; syncOrderSeg(); render();
-    }
+    if (b.dataset.g) { state.group = b.dataset.g; sset("csv.group", state.group); syncGroupSeg(); render(); }
+    else if (b.dataset.o) { state.sortKey = "spend"; state.sortDir = b.dataset.o; syncOrderSeg(); render(); }
   });
   els.showZero.addEventListener("change", function () { sset("csv.zero", els.showZero.checked ? "1" : "0"); render(); });
   [els.minS, els.maxS, els.q].forEach(function (i) { i.addEventListener("input", render); });
 
-  // account list for autocomplete (loaded on first focus, not on page load)
-  var advLoaded = false;
-  els.adv.addEventListener("focus", async function () {
-    if (advLoaded) return; advLoaded = true;
-    try {
-      var d = await call("auth_advertiser_get", {});
-      var frag = document.createDocumentFragment();
-      (d.list || []).forEach(function (a) {
-        var o = document.createElement("option");
-        o.value = a.advertiser_id; o.label = a.advertiser_name || "";
-        o.textContent = a.advertiser_name || "";
-        frag.appendChild(o);
-      });
-      els.advList.appendChild(frag);
-    } catch (e) { advLoaded = false; }
-  });
-
   // ---------- init ----------
-  els.adv.value = sget("csv.adv") || "";
-  var p = sget("csv.preset");
-  setPreset(p === null ? "quarter" : (p || "quarter"));
+  els.advs.value = sget("csv.advs") || sget("csv.adv") || "";
+  updateCount();
+  setPreset(sget("csv.preset") || "quarter");
   if (sget("csv.zero") === "0") els.showZero.checked = false;
-  var gsaved = sget("csv.group");
-  if (gsaved === "ad" || gsaved === "creative") {
-    state.group = gsaved;
-    Array.prototype.forEach.call(els.toolbar.querySelectorAll("[data-g]"), function (x) { x.setAttribute("aria-pressed", x.dataset.g === gsaved ? "true" : "false"); });
-  }
-  mcpP.then(function (m) {
-    if (!m) showStatus("Mở trang này trong claude.ai (đã kết nối TikTok MCP) để tải dữ liệu.", true);
-  });
+  var gs = sget("csv.group");
+  if (gs === "ad" || gs === "creative") { state.group = gs; syncGroupSeg(); }
+  mcpP.then(function (m) { if (!m) showStatus("Mở trang này trong claude.ai (đã kết nối TikTok MCP) để tải dữ liệu.", true); });
 })();
 </script>
