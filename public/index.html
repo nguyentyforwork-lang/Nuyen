@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creative Spend Viewer</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #16181d; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #fe2c55; --accent-2: #25f4ee; --ok: #059669; --zero: #9ca3af; --hover: #f3f4f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1115; --card: #171a21; --text: #e8eaed; --muted: #9aa0aa; --line: #2a2f3a; --hover: #1f2430; --zero: #6b7280; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 16px 20px; border-bottom: 1px solid var(--line); background: var(--card); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0 12px 0 0; white-space: nowrap; }
+  header h1 span { color: var(--accent); }
+  main { padding: 16px 20px 40px; max-width: 1600px; margin: 0 auto; }
+  input, select, button { font: inherit; color: inherit; }
+  input[type=text], input[type=date], input[type=number], input[type=password], select {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
+  button:hover { background: var(--hover); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  .acc { display: flex; gap: 8px; flex: 1; min-width: 260px; max-width: 520px; }
+  .acc input { flex: 1; font-size: 15px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+  .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .group label.t { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; border-right: 1px solid var(--line); }
+  .seg button:last-child { border-right: 0; }
+  .seg button.on { background: var(--text); color: var(--bg); }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  .switch input { display: none; }
+  .switch .k { width: 36px; height: 20px; background: var(--line); border-radius: 20px; position: relative; transition: .15s; }
+  .switch .k::after { content: ""; position: absolute; width: 16px; height: 16px; top: 2px; left: 2px; background: #fff; border-radius: 50%; transition: .15s; }
+  .switch input:checked + .k { background: var(--ok); }
+  .switch input:checked + .k::after { left: 18px; }
+  .w-num { width: 100px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .card .l { color: var(--muted); font-size: 12px; }
+  .card .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .card .s { color: var(--muted); font-size: 12px; }
+  .meta { color: var(--muted); font-size: 13px; margin: 0 0 10px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .tablewrap { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: calc(100vh - 120px); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  th { position: sticky; top: 0; background: var(--card); z-index: 1; font-size: 12px; color: var(--muted); font-weight: 600; cursor: pointer; white-space: nowrap; user-select: none; }
+  th.num, td.num { text-align: right; }
+  th.sorted { color: var(--text); }
+  th .arrow { font-size: 10px; margin-left: 3px; }
+  tbody tr:hover { background: var(--hover); }
+  tr.zero td { color: var(--zero); }
+  tr.zero td.name b { color: var(--zero); }
+  td.thumb { width: 58px; }
+  .thumb img, .thumb .ph { width: 42px; height: 74px; object-fit: cover; border-radius: 6px; background: var(--line); display: block; }
+  .thumb a { display: block; }
+  td.name { min-width: 260px; max-width: 420px; }
+  td.name b { display: block; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.name .sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+  .pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .pill.on { color: var(--ok); border-color: var(--ok); }
+  .bar { height: 4px; background: var(--line); border-radius: 4px; margin-top: 4px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  .spend { font-weight: 700; }
+  .empty, .loading, .error { padding: 40px; text-align: center; color: var(--muted); }
+  .error { color: var(--accent); }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: sp 0.8s linear infinite; margin: 0 auto 10px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); padding: 18px; max-width: 460px; width: calc(100% - 32px); }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog p { color: var(--muted); font-size: 13px; }
+  .hide-sm { }
+  @media (max-width: 720px) { header, main { padding-left: 12px; padding-right: 12px; } .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Creative <span>Spend</span> Viewer</h1>
+  <form class="acc" id="accForm">
+    <input type="text" id="accId" placeholder="Nhập Ad Account ID (hoặc 'demo')" autocomplete="off" inputmode="numeric">
+    <button class="primary" type="submit">Xem</button>
+  </form>
+  <button id="settingsBtn" title="Cài đặt Access Token">⚙ Token</button>
+</header>
+
+<main>
+  <div class="toolbar">
+    <div class="group">
+      <label class="t">Khoảng ngày</label>
+      <select id="preset">
+        <option value="today">Hôm nay</option>
+        <option value="yesterday">Hôm qua</option>
+        <option value="last7">7 ngày qua</option>
+        <option value="last30">30 ngày qua</option>
+        <option value="thisMonth">Tháng này</option>
+        <option value="lastMonth">Tháng trước</option>
+        <option value="thisQuarter" selected>Đầu quý đến nay</option>
+        <option value="lastQuarter">Quý trước</option>
+        <option value="thisYear">Đầu năm đến nay</option>
+        <option value="custom">Tùy chỉnh…</option>
+      </select>
+      <input type="date" id="startDate"> → <input type="date" id="endDate">
+    </div>
+    <div class="group">
+      <label class="t">Gom theo</label>
+      <div class="seg" id="groupBy">
+        <button data-v="creative" class="on" title="Gom các ad dùng chung 1 video/ảnh">Creative</button>
+        <button data-v="ad" title="Mỗi dòng là 1 ad">Ad</button>
+      </div>
+    </div>
+    <div class="group">
+      <label class="switch"><input type="checkbox" id="showZero" checked><span class="k"></span> Hiện creative không spend</label>
+    </div>
+    <div class="group">
+      <label class="t">Spend</label>
+      <input type="number" class="w-num" id="minSpend" placeholder="từ" min="0" step="any">
+      –
+      <input type="number" class="w-num" id="maxSpend" placeholder="đến" min="0" step="any">
+    </div>
+    <div class="group">
+      <label class="t">Sắp xếp</label>
+      <select id="sortSel">
+        <option value="spend:desc">Spend cao → thấp</option>
+        <option value="spend:asc">Spend thấp → cao</option>
+        <option value="impressions:desc">Impressions cao → thấp</option>
+        <option value="conversion:desc">Conversions cao → thấp</option>
+        <option value="cpa:asc">CPA thấp → cao</option>
+        <option value="roas:desc">ROAS cao → thấp</option>
+        <option value="create_time:desc">Mới tạo nhất</option>
+      </select>
+    </div>
+    <div class="group" style="flex:1; min-width:180px">
+      <input type="text" id="search" placeholder="Tìm tên / ID / campaign…" style="width:100%">
+    </div>
+    <div class="group">
+      <label class="switch" title="Lấy cả các ad đã xoá"><input type="checkbox" id="incDeleted"><span class="k"></span> Gồm ad đã xoá</label>
+      <button id="csvBtn" disabled>⬇ CSV</button>
+    </div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+  <div class="meta" id="meta"></div>
+  <div class="tablewrap" id="tableWrap"><div class="empty">Nhập Ad Account ID rồi nhấn <b>Xem</b>. Gõ <b>demo</b> để thử với dữ liệu mẫu.</div></div>
+</main>
+
+<dialog id="settings">
+  <h3 style="margin-top:0">TikTok Access Token</h3>
+  <p id="tokenHint"></p>
+  <input type="password" id="tokenInput" placeholder="Access Token" style="width:100%">
+  <p>Token chỉ lưu trên trình duyệt này (localStorage) và được gửi tới server của bạn để gọi TikTok API.</p>
+  <div style="display:flex; gap:8px; justify-content:flex-end">
+    <button id="tokenClear">Xoá</button>
+    <button class="primary" id="tokenSave">Lưu</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('csv.' + k); return v === null ? d : v; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('csv.' + k, v); } catch {} },
+    del(k) { try { localStorage.removeItem('csv.' + k); } catch {} },
+  };
+
+  const state = {
+    data: null,          // raw API response
+    groupBy: store.get('groupBy', 'creative'),
+    sortKey: 'spend', sortDir: 'desc',
+    loading: false, reqId: 0,
+  };
+
+  // ---------- dates ----------
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmtD = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  function presetRange(p) {
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const y = t.getFullYear(), m = t.getMonth(), q = Math.floor(m / 3) * 3;
+    const add = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+    switch (p) {
+      case 'today': return [t, t];
+      case 'yesterday': return [add(t, -1), add(t, -1)];
+      case 'last7': return [add(t, -6), t];
+      case 'last30': return [add(t, -29), t];
+      case 'thisMonth': return [new Date(y, m, 1), t];
+      case 'lastMonth': return [new Date(y, m - 1, 1), new Date(y, m, 0)];
+      case 'thisQuarter': return [new Date(y, q, 1), t];
+      case 'lastQuarter': return [new Date(y, q - 3, 1), new Date(y, q, 0)];
+      case 'thisYear': return [new Date(y, 0, 1), t];
+    }
+    return null;
+  }
+  function applyPreset() {
+    const r = presetRange($('preset').value);
+    if (r) { $('startDate').value = fmtD(r[0]); $('endDate').value = fmtD(r[1]); }
+  }
+
+  // ---------- formatting ----------
+  let currency = 'USD';
+  const money = (v) => { try { return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(v); } catch { return v.toFixed(2); } };
+  const int = (v) => new Intl.NumberFormat('en-US').format(Math.round(v));
+  const pct = (v) => (v * 100).toFixed(2) + '%';
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const dash = '<span style="color:var(--zero)">–</span>';
+
+  // ---------- data shaping ----------
+  function withDerived(r) {
+    r.ctr = r.impressions ? r.clicks / r.impressions : 0;
+    r.cpc = r.clicks ? r.spend / r.clicks : 0;
+    r.cpm = r.impressions ? r.spend / r.impressions * 1000 : 0;
+    r.cpa = r.conversion ? r.spend / r.conversion : 0;
+    r.roas = r.spend ? r.revenue / r.spend : 0;
+    return r;
+  }
+
+  function creativeKey(a) {
+    if (a.video_id) return 'video:' + a.video_id;
+    if (a.tiktok_item_id) return 'post:' + a.tiktok_item_id;
+    if (a.image_id) return 'image:' + a.image_id;
+    return 'ad:' + a.ad_id;
+  }
+
+  function buildRows() {
+    const ads = state.data?.ads || [];
+    if (state.groupBy === 'ad') {
+      return ads.map((a) => withDerived({
+        key: a.ad_id, kind: 'ad', title: a.ad_name || a.ad_id, creative_name: a.creative_name,
+        creative_id: a.video_id || a.tiktok_item_id || a.image_id, ids: [a.ad_id],
+        campaigns: [a.campaign_name].filter(Boolean), adgroups: [a.adgroup_name].filter(Boolean),
+        status: a.status, active: a.status === 'ENABLE' ? 1 : 0, adCount: 1, spendingAds: a.spend > 0 ? 1 : 0,
+        thumbnail: a.thumbnail, preview_url: a.preview_url, tiktok_item_id: a.tiktok_item_id,
+        create_time: a.create_time, spend: a.spend, impressions: a.impressions, clicks: a.clicks,
+        conversion: a.conversion, revenue: a.revenue, purchases: a.purchases, video_views: a.video_views,
+        search: [a.ad_name, a.ad_id, a.campaign_name, a.adgroup_name, a.video_id, a.creative_name, a.tiktok_item_id].join(' ').toLowerCase(),
+      }));
+    }
+    const map = new Map();
+    for (const a of ads) {
+      const k = creativeKey(a);
+      let r = map.get(k);
+      if (!r) {
+        r = { key: k, kind: k.split(':')[0], title: a.creative_name || a.ad_name || a.ad_id, creative_name: a.creative_name,
+          creative_id: a.video_id || a.tiktok_item_id || a.image_id, ids: [], adNames: new Set(), campaigns: new Set(), adgroups: new Set(),
+          active: 0, adCount: 0, spendingAds: 0, thumbnail: a.thumbnail, preview_url: a.preview_url, tiktok_item_id: a.tiktok_item_id,
+          create_time: a.create_time, spend: 0, impressions: 0, clicks: 0, conversion: 0, revenue: 0, purchases: 0, video_views: 0, search: '' };
+        map.set(k, r);
+      }
+      r.ids.push(a.ad_id); r.adCount++;
+      if (a.spend > 0) r.spendingAds++;
+      if (a.status === 'ENABLE') r.active++;
+      if (a.ad_name) r.adNames.add(a.ad_name);
+      if (a.campaign_name) r.campaigns.add(a.campaign_name);
+      if (a.adgroup_name) r.adgroups.add(a.adgroup_name);
+      if (!r.thumbnail && a.thumbnail) r.thumbnail = a.thumbnail;
+      if (a.create_time && a.create_time < r.create_time) r.create_time = a.create_time;
+      for (const f of ['spend', 'impressions', 'clicks', 'conversion', 'revenue', 'purchases', 'video_views']) r[f] += a[f] || 0;
+      r.search += ' ' + [a.ad_name, a.ad_id, a.campaign_name, a.adgroup_name, a.video_id, a.creative_name, a.tiktok_item_id].join(' ').toLowerCase();
+    }
+    return [...map.values()].map((r) => {
+      r.campaigns = [...r.campaigns]; r.adgroups = [...r.adgroups];
+      if (!r.creative_name && r.adNames.size) r.title = [...r.adNames][0];
+      r.status = r.active ? 'ENABLE' : 'DISABLE';
+      return withDerived(r);
+    });
+  }
+
+  function filteredRows() {
+    let rows = buildRows();
+    const all = rows;
+    const showZero = $('showZero').checked;
+    const min = parseFloat($('minSpend').value), max = parseFloat($('maxSpend').value);
+    const q = $('search').value.trim().toLowerCase();
+    rows = rows.filter((r) => {
+      if (!showZero && r.spend <= 0) return false;
+      if (!isNaN(min) && r.spend < min) return false;
+      if (!isNaN(max) && r.spend > max) return false;
+      if (q && !r.search.includes(q)) return false;
+      return true;
+    });
+    const { sortKey: k, sortDir: d } = state;
+    const mul = d === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      let x = a[k], y = b[k];
+      // Push "no data" (0) to the bottom for ratio metrics when sorting ascending
+      if (['cpa', 'cpc', 'cpm'].includes(k) && d === 'asc') { if (!x && y) return 1; if (x && !y) return -1; }
+      if (typeof x === 'string' || typeof y === 'string') return String(x || '').localeCompare(String(y || '')) * mul || (b.spend - a.spend);
+      return ((x || 0) - (y || 0)) * mul || (b.spend - a.spend);
+    });
+    return { rows, all };
+  }
+
+  // ---------- render ----------
+  const COLS = [
+    { k: 'thumb', label: '', sort: false },
+    { k: 'title', label: 'Creative / Ad' },
+    { k: 'status', label: 'Trạng thái', cls: 'hide-sm' },
+    { k: 'adCount', label: 'Số ad', num: true, onlyCreative: true },
+    { k: 'spend', label: 'Spend', num: true },
+    { k: 'share', label: '% Spend', num: true, sort: false },
+    { k: 'impressions', label: 'Impr.', num: true },
+    { k: 'clicks', label: 'Clicks', num: true },
+    { k: 'ctr', label: 'CTR', num: true },
+    { k: 'cpc', label: 'CPC', num: true },
+    { k: 'cpm', label: 'CPM', num: true },
+    { k: 'conversion', label: 'Conv.', num: true },
+    { k: 'cpa', label: 'CPA', num: true },
+    { k: 'roas', label: 'ROAS', num: true },
+    { k: 'create_time', label: 'Ngày tạo', cls: 'hide-sm' },
+  ];
+
+  function render() {
+    if (!state.data) return;
+    const { rows, all } = filteredRows();
+    const total = all.reduce((s, r) => s + r.spend, 0);
+    const spending = all.filter((r) => r.spend > 0).length;
+    const shownSpend = rows.reduce((s, r) => s + r.spend, 0);
+    const maxSpend = Math.max(0, ...rows.map((r) => r.spend));
+    const unit = state.groupBy === 'creative' ? 'creative' : 'ad';
+    const tImpr = all.reduce((s, r) => s + r.impressions, 0);
+    const tConv = all.reduce((s, r) => s + r.conversion, 0);
+
+    $('cards').innerHTML = [
+      ['Tổng spend', money(total), `${state.data.start_date} → ${state.data.end_date}`],
+      [`Tổng ${unit}`, int(all.length), `${int(state.data.ads.length)} ads trong account`],
+      [`${unit} có spend`, int(spending), all.length ? pct(spending / all.length) + ' tổng số' : ''],
+      [`${unit} không spend`, int(all.length - spending), $('showZero').checked ? 'đang hiện' : 'đang ẩn'],
+      ['Impressions', int(tImpr), tImpr ? 'CPM ' + money(total / tImpr * 1000) : ''],
+      ['Conversions', int(tConv), tConv ? 'CPA ' + money(total / tConv) : ''],
+    ].map(([l, v, s]) => `<div class="card"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+
+    const adv = state.data.advertiser || {};
+    $('meta').innerHTML = [
+      `<span><b>${esc(adv.name || 'Account')}</b> · <span class="id">${esc(adv.advertiser_id)}</span></span>`,
+      adv.currency ? `<span>Tiền tệ: ${esc(adv.currency)}</span>` : '',
+      adv.timezone || adv.display_timezone ? `<span>Múi giờ: ${esc(adv.display_timezone || adv.timezone)}</span>` : '',
+      `<span>Đang hiển thị ${int(rows.length)}/${int(all.length)} ${unit} · ${money(shownSpend)}</span>`,
+      state.data.demo ? '<span class="pill">DỮ LIỆU MẪU</span>' : '',
+      adv.warning ? `<span style="color:var(--accent)">⚠ ${esc(adv.warning)}</span>` : '',
+      adv.thumbWarning ? `<span style="color:var(--accent)">⚠ Thumbnail: ${esc(adv.thumbWarning)}</span>` : '',
+    ].join('');
+
+    const cols = COLS.filter((c) => !(c.onlyCreative && state.groupBy !== 'creative'));
+    const head = '<tr>' + cols.map((c) => {
+      const sorted = state.sortKey === c.k;
+      const arrow = sorted ? `<span class="arrow">${state.sortDir === 'asc' ? '▲' : '▼'}</span>` : '';
+      return `<th data-k="${c.k}" data-sort="${c.sort !== false}" class="${c.num ? 'num' : ''} ${sorted ? 'sorted' : ''} ${c.cls || ''}">${c.label}${arrow}</th>`;
+    }).join('') + '</tr>';
+
+    if (!rows.length) {
+      $('tableWrap').innerHTML = `<table><thead>${head}</thead></table><div class="empty">Không có ${unit} nào khớp bộ lọc.</div>`;
+      bindHead();
+      return;
+    }
+
+    const body = rows.map((r) => {
+      const zero = r.spend <= 0;
+      const link = r.preview_url || (r.tiktok_item_id ? `https://www.tiktok.com/@/video/${r.tiktok_item_id}` : '');
+      const img = r.thumbnail ? `<img loading="lazy" src="${esc(r.thumbnail)}" alt="">` : '<div class="ph"></div>';
+      const sub = state.groupBy === 'creative'
+        ? `<span class="id">${esc(r.kind === 'ad' ? 'ad ' + r.ids[0] : r.kind + ' ' + r.creative_id)}</span> · ${esc(r.campaigns.slice(0, 2).join(', '))}${r.campaigns.length > 2 ? ` +${r.campaigns.length - 2}` : ''}`
+        : `<span class="id">${esc(r.ids[0])}</span> · ${esc(r.campaigns[0] || '')} › ${esc(r.adgroups[0] || '')}`;
+      const subTitle = state.groupBy === 'creative' ? r.ids.join(', ') : (r.creative_name || '');
+      const cells = {
+        thumb: `<td class="thumb">${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${img}</a>` : img}</td>`,
+        title: `<td class="name" title="${esc(subTitle)}"><b>${esc(r.title)}</b><div class="sub">${sub}</div></td>`,
+        status: `<td class="hide-sm">${r.status === 'ENABLE' ? `<span class="pill on">${state.groupBy === 'creative' ? `${r.active}/${r.adCount} bật` : 'Đang bật'}</span>` : `<span class="pill">${esc(r.status === 'DISABLE' ? 'Tắt' : r.status === 'DELETED?' ? 'Đã xoá' : r.status || '–')}</span>`}</td>`,
+        adCount: `<td class="num">${r.adCount}${r.spendingAds && r.spendingAds !== r.adCount ? `<div class="sub" style="font-size:11px;color:var(--muted)">${r.spendingAds} có spend</div>` : ''}</td>`,
+        spend: `<td class="num spend">${zero ? dash : money(r.spend)}<div class="bar"><i style="width:${maxSpend ? (r.spend / maxSpend * 100).toFixed(1) : 0}%"></i></div></td>`,
+        share: `<td class="num">${total && !zero ? pct(r.spend / total) : dash}</td>`,
+        impressions: `<td class="num">${r.impressions ? int(r.impressions) : dash}</td>`,
+        clicks: `<td class="num">${r.clicks ? int(r.clicks) : dash}</td>`,
+        ctr: `<td class="num">${r.impressions ? pct(r.ctr) : dash}</td>`,
+        cpc: `<td class="num">${r.clicks ? money(r.cpc) : dash}</td>`,
+        cpm: `<td class="num">${r.impressions ? money(r.cpm) : dash}</td>`,
+        conversion: `<td class="num">${r.conversion ? int(r.conversion) : dash}</td>`,
+        cpa: `<td class="num">${r.conversion ? money(r.cpa) : dash}</td>`,
+        roas: `<td class="num">${r.revenue ? r.roas.toFixed(2) : dash}</td>`,
+        create_time: `<td class="hide-sm" style="white-space:nowrap">${esc((r.create_time || '').slice(0, 10))}</td>`,
+      };
+      return `<tr class="${zero ? 'zero' : ''}">${cols.map((c) => cells[c.k]).join('')}</tr>`;
+    }).join('');
+
+    $('tableWrap').innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+    bindHead();
+  }
+
+  function bindHead() {
+    $('tableWrap').querySelectorAll('th[data-sort="true"]').forEach((th) => {
+      th.onclick = () => {
+        const k = th.dataset.k;
+        if (state.sortKey === k) state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+        else { state.sortKey = k; state.sortDir = ['title', 'status', 'cpa', 'cpc', 'cpm'].includes(k) ? 'asc' : 'desc'; }
+        syncSortSel(); render();
+      };
+    });
+  }
+  function syncSortSel() {
+    const v = `${state.sortKey}:${state.sortDir}`;
+    const opt = [...$('sortSel').options].find((o) => o.value === v);
+    if (opt) $('sortSel').value = v;
+  }
+
+  // ---------- load ----------
+  async function load() {
+    const acc = $('accId').value.trim();
+    if (!acc) { $('accId').focus(); return; }
+    const s = $('startDate').value, e = $('endDate').value;
+    if (!s || !e || s > e) { showError('Khoảng ngày không hợp lệ'); return; }
+    store.set('accId', acc);
+    const id = ++state.reqId;
+    $('tableWrap').innerHTML = '<div class="loading"><div class="spinner"></div>Đang tải creative…</div>';
+    const qs = new URLSearchParams({ advertiser_id: acc, start_date: s, end_date: e, include_deleted: $('incDeleted').checked ? '1' : '0' });
+    const url = new URL(location.href); url.searchParams.set('acc', acc); history.replaceState(null, '', url);
+    try {
+      const headers = {};
+      const tok = store.get('token', '');
+      if (tok) headers['X-Access-Token'] = tok;
+      const res = await fetch('/api/creatives?' + qs, { headers });
+      const body = await res.json();
+      if (id !== state.reqId) return;
+      if (!res.ok) throw new Error(body.error || 'HTTP ' + res.status);
+      state.data = body;
+      currency = body.advertiser?.currency || 'USD';
+      $('csvBtn').disabled = false;
+      render();
+    } catch (err) {
+      if (id !== state.reqId) return;
+      showError(err.message);
+    }
+  }
+  function showError(msg) {
+    state.data = null; $('cards').innerHTML = ''; $('meta').innerHTML = ''; $('csvBtn').disabled = true;
+    $('tableWrap').innerHTML = `<div class="error">⚠ ${esc(msg)}</div>`;
+  }
+
+  // ---------- CSV ----------
+  function exportCsv() {
+    const { rows } = filteredRows();
+    const head = state.groupBy === 'creative'
+      ? ['creative_key', 'creative_name', 'ad_ids', 'campaigns', 'ads', 'active_ads', 'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'conversions', 'cpa', 'roas']
+      : ['ad_id', 'ad_name', 'creative_id', 'campaign', 'adgroup', 'status', 'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'conversions', 'cpa', 'roas'];
+    const lines = rows.map((r) => (state.groupBy === 'creative'
+      ? [r.key, r.title, r.ids.join(' '), r.campaigns.join(' | '), r.adCount, r.active]
+      : [r.ids[0], r.title, r.creative_id, r.campaigns[0], r.adgroups[0], r.status]
+    ).concat([r.spend.toFixed(2), r.impressions, r.clicks, r.ctr.toFixed(4), r.cpc.toFixed(2), r.cpm.toFixed(2), r.conversion, r.cpa.toFixed(2), r.roas.toFixed(2)]));
+    const csv = [head, ...lines].map((l) => l.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `creatives_${state.data.advertiser?.advertiser_id}_${state.data.start_date}_${state.data.end_date}.csv`;
+    a.click();
+  }
+
+  // ---------- wire up ----------
+  $('accForm').onsubmit = (e) => { e.preventDefault(); load(); };
+  $('preset').onchange = () => { store.set('preset', $('preset').value); if ($('preset').value !== 'custom') { applyPreset(); if (state.data) load(); } else $('startDate').focus(); };
+  ['startDate', 'endDate'].forEach((id) => $(id).onchange = () => { $('preset').value = 'custom'; if (state.data && $('startDate').value && $('endDate').value) load(); });
+  $('incDeleted').onchange = () => { if (state.data) load(); };
+  $('showZero').onchange = () => { store.set('showZero', $('showZero').checked ? '1' : '0'); render(); };
+  ['minSpend', 'maxSpend', 'search'].forEach((id) => $(id).oninput = render);
+  $('sortSel').onchange = () => { [state.sortKey, state.sortDir] = $('sortSel').value.split(':'); render(); };
+  $('groupBy').querySelectorAll('button').forEach((b) => b.onclick = () => {
+    state.groupBy = b.dataset.v; store.set('groupBy', state.groupBy);
+    $('groupBy').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    render();
+  });
+  $('csvBtn').onclick = exportCsv;
+
+  // settings
+  $('settingsBtn').onclick = async () => {
+    $('tokenInput').value = store.get('token', '');
+    try {
+      const cfg = await (await fetch('/api/config')).json();
+      $('tokenHint').textContent = cfg.hasServerToken
+        ? 'Server đã có token trong .env. Chỉ nhập ở đây nếu muốn dùng token khác.'
+        : 'Server chưa có token (.env). Nhập TikTok Marketing API Access Token để dùng.';
+    } catch { $('tokenHint').textContent = ''; }
+    $('settings').showModal();
+  };
+  $('tokenSave').onclick = () => { const v = $('tokenInput').value.trim(); v ? store.set('token', v) : store.del('token'); $('settings').close(); };
+  $('tokenClear').onclick = () => { store.del('token'); $('tokenInput').value = ''; };
+
+  // init
+  $('groupBy').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.v === state.groupBy));
+  $('showZero').checked = store.get('showZero', '1') === '1';
+  const savedPreset = store.get('preset', 'thisQuarter');
+  $('preset').value = savedPreset === 'custom' ? 'thisQuarter' : savedPreset;
+  applyPreset();
+  const fromUrl = new URLSearchParams(location.search).get('acc');
+  $('accId').value = fromUrl || store.get('accId', '');
+  if (fromUrl) load(); else $('accId').focus();
+})();
+</script>
+</body>
+</html>

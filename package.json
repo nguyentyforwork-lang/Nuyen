@@ -1,0 +1,9 @@
+{
+  "name": "creative-spend-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Xem spend theo creative của 1 TikTok ad account",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
