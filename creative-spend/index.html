@@ -245,7 +245,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
   };
 
   var state = {
-    rows: [], videos: {}, names: {}, reviews: {}, spFlags: {}, group: "creative", sortDir: "desc",
+    rows: [], videos: {}, names: {}, reviews: {}, spFlags: {}, spAdFlags: {}, creativeToSpAd: {}, group: "creative", sortDir: "desc",
     loaded: null, failed: [], visible: []
   };
   var mcpP = (window.claude && window.claude.use) ? window.claude.use("mcp") : Promise.resolve(null);
@@ -453,7 +453,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     var matToCreative = {}, adStatus = {};
     ads.forEach(function (a) {
       adStatus[a.smart_plus_ad_id] = a.secondary_status || "";
-      (a.creative_list || []).forEach(function (c) { if (c.ad_material_id) matToCreative[c.ad_material_id] = c.smart_plus_creative_id; });
+      (a.creative_list || []).forEach(function (c) {
+        if (c.ad_material_id) matToCreative[c.ad_material_id] = c.smart_plus_creative_id;
+        if (c.smart_plus_creative_id) state.creativeToSpAd[c.smart_plus_creative_id] = a.smart_plus_ad_id;
+      });
     });
     await pool(chunks(ads.map(function (a) { return a.smart_plus_ad_id; }), 100), 3, async function (b) {
       var d;
@@ -461,7 +464,23 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         d = await call("smart_plus_ad_review_info_get", {
           advertiser_id: adv, smart_plus_ad_ids: b, lang: "vi", extra_info_setting: { include_reject_info: true }
         });
-      } catch (e) { return; }
+      } catch (e) {
+        // No review details: still flag ads whose status says review issue.
+        b.forEach(function (id) { if (FLAG_STATUS[adStatus[id]]) state.spAdFlags[id] = { label: FLAG_STATUS[adStatus[id]], reason: "" }; });
+        return;
+      }
+      (d.smart_plus_ad_review_infos || []).forEach(function (r) {
+        var bad = r && r.review_status && r.review_status !== "ALL_AVAILABLE";
+        var st = FLAG_STATUS[adStatus[r.smart_plus_ad_id]];
+        if (!bad && !st) return;
+        state.spAdFlags[r.smart_plus_ad_id] = {
+          label: st || (r.review_status === "PART_AVAILABLE" ? "Review issue · chạy một phần" : "Bị từ chối"),
+          reason: summarize(r.reject_info)
+        };
+      });
+      b.forEach(function (id) {
+        if (!state.spAdFlags[id] && FLAG_STATUS[adStatus[id]]) state.spAdFlags[id] = { label: FLAG_STATUS[adStatus[id]], reason: "" };
+      });
       (d.material_review_infos || []).forEach(function (m) {
         if (!m || m.review_status === "ALL_AVAILABLE") return;
         var cid = matToCreative[m.ad_material_id];
@@ -557,7 +576,12 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 
   function flagOf(r) {
     if (state.spFlags[r.ad_id]) return state.spFlags[r.ad_id];
-    if (r.sp_ad) return FLAG_STATUS[r.sec] ? { label: FLAG_STATUS[r.sec], reason: "", adId: r.sp_ad } : null;
+    var spAd = r.sp_ad || state.creativeToSpAd[r.ad_id];
+    if (spAd) {
+      var af = state.spAdFlags[spAd];
+      if (af) return { label: af.label, reason: af.reason || "Ad đang bị review issue; creative này không bị chặn riêng", adId: spAd };
+      return FLAG_STATUS[r.sec] ? { label: FLAG_STATUS[r.sec], reason: "", adId: spAd } : null;
+    }
     var rv = state.reviews[r.ad_id];
     var label = FLAG_STATUS[r.sec] || null;
     if (!label && rv && (!rv.approved || (rv.status && rv.status !== "ALL_AVAILABLE"))) label = rv.approved ? "Review issue · chạy một phần" : "Bị từ chối";
@@ -640,8 +664,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     $("sOnSub").textContent = "trên " + nf0.format(all.length) + unit;
     $("sOff").textContent = nf0.format(all.length - on);
     $("sFlag").textContent = nf0.format(flagged.length);
+    var badAds = {};
+    flagged.forEach(function (x) { x.flagAds.forEach(function (id) { badAds[id] = 1; }); });
     $("sFlagSub").textContent = flagged.length
-      ? flagged.filter(function (x) { return x.spend > 0; }).length + " trong số đó vẫn có spend"
+      ? Object.keys(badAds).length + " ad bị review issue · " + flagged.filter(function (x) { return x.spend > 0; }).length + " creative vẫn có spend"
       : "không có review issue";
 
     var list = filtered(all);
