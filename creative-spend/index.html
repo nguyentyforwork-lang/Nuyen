@@ -408,19 +408,21 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       } catch (e) { /* the video link is optional */ }
     });
   }
-  // Collect readable text from reject_info, whatever its exact shape.
-  function rejectText(info) {
-    var out = [];
-    (Array.isArray(info) ? info : info ? [info] : []).forEach(function (r) {
-      if (typeof r === "string") { out.push(r); return; }
+  // Turn TikTok reject_info into "Bị chặn ở N nước: … · reason".
+  function summarize(info, extraLocs) {
+    var list = Array.isArray(info) ? info : info ? [info] : [];
+    var locs = (extraLocs || []).slice(), reasons = [];
+    list.forEach(function (r) {
       if (!r || typeof r !== "object") return;
-      ["reason", "content", "suggestion"].forEach(function (k) {
-        var v = r[k];
-        if (Array.isArray(v)) v = v.filter(function (x) { return typeof x === "string"; }).join("; ");
-        if (typeof v === "string" && v.trim() && out.indexOf(v.trim()) < 0) out.push(v.trim());
-      });
+      (r.forbidden_locations || []).forEach(function (l) { locs.push(l); });
+      var rs = r.reasons || r.reason;
+      (Array.isArray(rs) ? rs : rs ? [rs] : []).forEach(function (t) { if (typeof t === "string" && t.trim()) reasons.push(t.trim()); });
     });
-    return out.join(" · ");
+    locs = uniq(locs); reasons = uniq(reasons);
+    var parts = [];
+    if (locs.length) parts.push("Bị chặn ở " + locs.length + " nước: " + locs.join(", "));
+    if (reasons.length) parts.push(reasons.join(" "));
+    return parts.join(" · ");
   }
   async function loadReviews(adv, adIds) {
     await pool(chunks(adIds, 100), 3, async function (b) {
@@ -433,7 +435,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
             approved: r.is_approved !== false,
             status: r.review_status || "",
             placements: r.forbidden_placements || [],
-            reason: rejectText(r.reject_info)
+            reason: summarize(r.reject_info, r.forbidden_locations)
           };
         });
       } catch (e) { /* the reason text is optional; the status flag still shows */ }
@@ -464,19 +466,9 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         if (!m || m.review_status === "ALL_AVAILABLE") return;
         var cid = matToCreative[m.ad_material_id];
         if (!cid) return;
-        var ri = Array.isArray(m.reject_info) ? m.reject_info : [];
-        var locs = [], reasons = [];
-        ri.forEach(function (r) {
-          (r.forbidden_locations || []).forEach(function (l) { locs.push(l); });
-          (r.reasons || []).forEach(function (t) { reasons.push(t); });
-        });
-        locs = uniq(locs); reasons = uniq(reasons);
-        var parts = [];
-        if (locs.length) parts.push("Bị chặn ở " + locs.length + " nước: " + locs.join(", "));
-        if (reasons.length) parts.push(reasons.join(" "));
         state.spFlags[cid] = {
           label: m.review_status === "PART_AVAILABLE" ? "Review issue · chạy một phần" : (FLAG_STATUS[adStatus[m.smart_plus_ad_id]] || "Bị từ chối"),
-          reason: parts.join(" · "),
+          reason: summarize(m.reject_info),
           adId: m.smart_plus_ad_id
         };
       });
@@ -547,6 +539,22 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
   });
 
   // ---------- aggregate ----------
+  var RUNNING = {
+    AD_STATUS_DELIVERY_OK: 1, AD_STATUS_PARTIAL_AUDIT_DELIVERY_OK: 1, AD_STATUS_REVIEW_PARTIALLY_APPROVED: 1,
+    AD_STATUS_DELIVERY_AND_REAUDIT: 1, AD_STATUS_OK: 1, AD_STATUS_GOOD: 1, AD_STATUS_EXPLORING: 1,
+    AD_STATUS_UNEXPLORED: 1, AD_STATUS_BAD: 1, AD_STATUS_REAUDIT: 1
+  };
+  var PAUSED = { AD_STATUS_DISABLE: 1, AD_STATUS_ADGROUP_DISABLE: 1, AD_STATUS_CAMPAIGN_DISABLE: 1 };
+  var DELETED = { AD_STATUS_DELETE: 1, AD_STATUS_ADGROUP_DELETE: 1, AD_STATUS_CAMPAIGN_DELETE: 1 };
+  function statusRank(r) {
+    if (!r.known || DELETED[r.sec]) return 0;
+    if (RUNNING[r.sec]) return 3;
+    if (PAUSED[r.sec]) return 2;
+    return 1;
+  }
+  var STATUS_LABEL = ["đã xóa", "không phân phối", "đang tắt", "đang chạy"];
+  var STATUS_CLASS = [" del", "", "", " on"];
+
   function flagOf(r) {
     if (state.spFlags[r.ad_id]) return state.spFlags[r.ad_id];
     if (r.sp_ad) return FLAG_STATUS[r.sec] ? { label: FLAG_STATUS[r.sec], reason: "", adId: r.sp_ad } : null;
@@ -564,13 +572,12 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       var key = r.adv + "|" + (state.group === "creative" && r.video_id ? "v:" + r.video_id : "a:" + r.ad_id);
       var g = map.get(key);
       if (!g) {
-        g = { adv: r.adv, currency: r.currency, video_id: r.video_id, ads: [], spend: 0, active: false, deleted: true, flags: [], flagAds: [] };
+        g = { adv: r.adv, currency: r.currency, video_id: r.video_id, ads: [], spend: 0, rank: 0, flags: [], flagAds: [] };
         map.set(key, g);
       }
       g.ads.push(r.ad_id);
       g.spend += r.spend;
-      if (r.sec === "AD_STATUS_DELIVERY_OK" || r.sec === "AD_STATUS_PARTIAL_AUDIT_DELIVERY_OK") g.active = true;
-      if (r.known) g.deleted = false;
+      g.rank = Math.max(g.rank, statusRank(r));
       var f = flagOf(r);
       if (f) {
         if (g.flagAds.indexOf(f.adId) < 0) g.flagAds.push(f.adId);
@@ -582,7 +589,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       var v = g.video_id ? state.videos[g.video_id] : null;
       g.idLabel = state.group === "creative" && g.video_id ? g.video_id : "ad " + g.ads[0];
       g.preview = v && v.preview_url ? v.preview_url : null;
-      g.status = g.active ? "đang chạy" : g.deleted ? "đã xóa" : "không chạy";
+      g.status = STATUS_LABEL[g.rank];
       g.flagged = g.flags.length > 0;
       g.flagText = g.flags.map(function (f) { return "Ad " + f.adId + " - " + f.label + (f.reason ? ": " + f.reason : ""); }).join(" | ");
       out.push(g);
@@ -670,7 +677,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       var vid = x.preview
         ? '<a class="play" href="' + esc(x.preview) + '" target="_blank" rel="noopener">▶ Xem</a>'
         : '<span class="play off">' + (x.video_id ? "video" : "–") + "</span>";
-      var pill = '<span class="pill' + (x.active ? " on" : x.deleted ? " del" : "") + '">' + x.status + "</span>";
+      var pill = '<span class="pill' + STATUS_CLASS[x.rank] + '" title="Trạng thái hiện tại trên TikTok">' + x.status + "</span>";
       var flag = x.flagged
         ? '<div class="flag"><span class="flagpill">⚑ ' + esc(x.flags[0].label) + "</span>" +
           '<small class="flagids">Ad vi phạm: <span class="mono">' + esc(x.flagAds.join(", ")) + "</span></small>" +
