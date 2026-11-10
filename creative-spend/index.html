@@ -231,7 +231,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       <tbody id="tbody"></tbody>
     </table>
   </div>
-  <p class="foot">Creative xếp theo từng ad account, trong mỗi account sắp theo spend. Cột “Vi phạm”: cờ đỏ “Creative bị vi phạm” là chính video đó bị TikTok chặn (kèm nước bị chặn và lý do). Nhãn xám “Nằm trong ad bị review issue” là video không bị chặn, nhưng ad chứa nó đang có review issue do creative khác hoặc cài đặt ad. Ngày theo múi giờ tài khoản, gồm cả ad đã tắt và đã xóa, tối đa 365 ngày.</p>
+  <p class="foot">Creative xếp theo từng ad account, trong mỗi account sắp theo spend. Cột “Vi phạm” chỉ gắn cờ khi chính creative đó bị TikTok đánh vi phạm chính sách, kèm ad chứa nó, nước bị chặn và lý do. Ad bị review issue vì creative khác hoặc vì cài đặt ad thì không tính. Ngày theo múi giờ tài khoản, gồm cả ad đã tắt và đã xóa, tối đa 365 ngày.</p>
 </div>
 
 <script>
@@ -672,10 +672,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     $("sOff").textContent = nf0.format(all.length - on);
     $("sFlag").textContent = nf0.format(flagged.length);
     var badAds = {};
-    all.forEach(function (x) { x.flagAds.concat(x.adOnly).forEach(function (id) { badAds[id] = 1; }); });
+    all.forEach(function (x) { x.flagAds.forEach(function (id) { badAds[id] = 1; }); });
     var nBad = Object.keys(badAds).length;
     $("sFlagSub").textContent = (flagged.length ? flagged.filter(function (x) { return x.spend > 0; }).length + " vẫn có spend · " : "") +
-      (nBad ? nBad + " ad đang bị review issue" : "không có review issue");
+      (nBad ? "trong " + nBad + " ad" : "không có creative bị vi phạm");
 
     var list = filtered(all);
     state.visible = list;
@@ -717,10 +717,6 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
           '<small class="flagids">Trong ad: <span class="mono">' + esc(x.flagAds.join(", ")) + "</span></small>" +
           (x.flags.some(function (f) { return f.reason; }) ? "<small>" + esc(uniq(x.flags.map(function (f) { return f.reason; })).join(" · ")) + "</small>" : "") + "</div>";
       }
-      if (x.inBadAd) {
-        flag += '<div class="flag"><span class="warnpill">Nằm trong ad bị review issue</span>' +
-          '<small>Video này không bị chặn; lỗi ở creative khác hoặc cài đặt của ad: <span class="mono">' + esc(x.adOnly.join(", ")) + "</span></small></div>";
-      }
       if (!flag) flag = '<span class="okflag">–</span>';
       html.push('<tr class="' + (x.spend > 0 ? "" : "zero") + (x.flagged ? " flagged" : "") + '">' +
         '<td class="rank">' + n + "</td>" +
@@ -738,10 +734,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     var list = state.visible; if (!list.length) return;
     var dl = await dlP;
     if (!dl) { showStatus("Không xuất file được ở chế độ xem này. Mở trang trong claude.ai để tải file.", true); return; }
-    var head = ["Account ID", "Account name", state.group === "creative" ? "Video ID" : "Ad ID", "Ad IDs", "Spend", "Currency", "Trang thai", "Creative vi pham", "Ad co creative nay bi vi pham", "Chi tiet vi pham", "Nam trong ad bi review issue (creative khong bi chan)", "Link video"];
+    var head = ["Account ID", "Account name", state.group === "creative" ? "Video ID" : "Ad ID", "Ad IDs", "Spend", "Currency", "Trang thai", "Creative vi pham", "Ad co creative nay bi vi pham", "Chi tiet vi pham", "Link video"];
     var lines = [head.join(",")].concat(list.map(function (x) {
       return [x.adv, state.names[x.adv] || "", state.group === "creative" && x.video_id ? x.video_id : x.ads[0], x.ads.join(" "),
-        x.spend.toFixed(2), x.currency, x.status, x.flagged ? "CO" : "", x.flagAds.join(" "), x.flagText, x.adOnly.join(" "), x.preview || ""].map(csvCell).join(",");
+        x.spend.toFixed(2), x.currency, x.status, x.flagged ? "CO" : "", x.flagAds.join(" "), x.flagText, x.preview || ""].map(csvCell).join(",");
     }));
     var name = "creative-spend_" + state.loaded[0] + "_" + state.loaded[1] + ".csv";
     try {
