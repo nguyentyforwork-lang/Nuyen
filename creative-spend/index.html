@@ -75,6 +75,8 @@ button { font: inherit; cursor: pointer; border-radius: 7px; }
 .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: transform .15s; }
 .switch input:checked { background: var(--accent); }
 .switch input:checked::after { transform: translateX(14px); }
+.searchrow { display: flex; gap: 6px; }
+.searchrow input { flex: 1 1 auto; min-width: 0; }
 .range { display: inline-flex; align-items: center; gap: 6px; }
 .range input { width: 96px; }
 .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
@@ -198,12 +200,21 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       </div>
     </div>
     <div class="field grow">
-      <label for="q">Tìm ID</label>
-      <input type="text" id="q" placeholder="Video ID, ad ID, account ID…">
+      <label for="q">Tìm ad ID</label>
+      <div class="searchrow">
+        <input type="text" id="q" class="mono" placeholder="Dán 1 hoặc nhiều ad ID / video ID…">
+        <button type="button" class="btn" id="qGo">Tìm</button>
+        <button type="button" class="btn" id="qClear" hidden>Xóa</button>
+      </div>
+      <span class="hint" id="qHint" hidden></span>
     </div>
     <label class="switch" for="showZero">
       <input type="checkbox" id="showZero" checked>
       <span>Hiện creative không spend</span>
+    </label>
+    <label class="switch" for="showOff">
+      <input type="checkbox" id="showOff">
+      <span>Hiện camp đã tắt</span>
     </label>
     <label class="switch" for="onlyFlag">
       <input type="checkbox" id="onlyFlag">
@@ -231,7 +242,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       <tbody id="tbody"></tbody>
     </table>
   </div>
-  <p class="foot">Creative xếp theo từng ad account, trong mỗi account sắp theo spend. Cột “Vi phạm” gắn cờ khi chính creative đó bị TikTok đánh vi phạm policy (Partially approved hoặc Rejected), kèm ID các ad chứa nó. Ngày theo múi giờ tài khoản, gồm cả ad đã tắt và đã xóa, tối đa 365 ngày.</p>
+  <p class="foot">Creative xếp theo từng ad account, trong mỗi account sắp theo spend. Cột “Vi phạm” gắn cờ khi chính creative đó bị TikTok đánh vi phạm policy (Partially approved hoặc Rejected), kèm ID các ad chứa nó. Campaign đã tắt hoặc đã xóa không được quét policy và ẩn khỏi bảng (bật “Hiện camp đã tắt” để xem spend của chúng). Ngày theo múi giờ tài khoản, gồm cả ad đã tắt và đã xóa, tối đa 365 ngày.</p>
 </div>
 
 <script>
@@ -243,11 +254,11 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     form: $("form"), advs: $("advs"), pick: $("pick"), advList: $("advList"), advCount: $("advCount"),
     start: $("start"), end: $("end"), go: $("go"), presets: $("presets"), status: $("status"),
     summary: $("summary"), toolbar: $("toolbar"), table: $("table"), tbody: $("tbody"), empty: $("empty"),
-    minS: $("minS"), maxS: $("maxS"), q: $("q"), showZero: $("showZero"), onlyFlag: $("onlyFlag"), exportBtn: $("export")
+    minS: $("minS"), maxS: $("maxS"), q: $("q"), showZero: $("showZero"), onlyFlag: $("onlyFlag"), showOff: $("showOff"), qGo: $("qGo"), qClear: $("qClear"), qHint: $("qHint"), exportBtn: $("export")
   };
 
   var state = {
-    rows: [], videos: {}, names: {}, reviews: {}, spFlags: {}, spAdFlags: {}, creativeToSpAd: {}, scanMissed: {}, group: "creative", sortDir: "desc",
+    rows: [], videos: {}, names: {}, reviews: {}, spFlags: {}, spAdFlags: {}, creativeToSpAd: {}, scanMissed: {}, scanInfo: {}, group: "creative", sortDir: "desc",
     loaded: null, failed: [], visible: []
   };
   var mcpP = (window.claude && window.claude.use) ? window.claude.use("mcp") : Promise.resolve(null);
@@ -450,7 +461,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
   async function loadSmartPlusFlags(adv, rows, onProgress) {
     var ads = await paged("smart_plus_ad_get", { advertiser_id: adv, fields: ["secondary_status", "creative_list"] }, 100)
       .catch(function () { return []; });
-    if (!ads.length) return;
+    if (!ads.length) { state.scanInfo[adv] = { total: 0, skipped: 0, scanned: 0, missed: 0 }; return; }
     var matToCreative = {}, adStatus = {};
     ads.forEach(function (a) {
       adStatus[a.smart_plus_ad_id] = a.secondary_status || "";
@@ -464,7 +475,11 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       var sp = r.sp_ad || state.creativeToSpAd[r.ad_id];
       if (sp) adSpend[sp] = (adSpend[sp] || 0) + r.spend;
     });
-    var ids = ads.map(function (a) { return a.smart_plus_ad_id; })
+    var SKIP = { AD_STATUS_CAMPAIGN_DISABLE: 1, AD_STATUS_CAMPAIGN_DELETE: 1, AD_STATUS_ADGROUP_DELETE: 1, AD_STATUS_DELETE: 1 };
+    var live = ads.filter(function (a) { return !SKIP[a.secondary_status]; });
+    var info = { total: ads.length, skipped: ads.length - live.length, scanned: 0, missed: 0 };
+    state.scanInfo[adv] = info;
+    var ids = live.map(function (a) { return a.smart_plus_ad_id; })
       .sort(function (x, y) { return (adSpend[y] || 0) - (adSpend[x] || 0); });
     var done = 0, missed = [];
     async function scan(b) {
@@ -488,8 +503,11 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         }
       }
       done += b.length;
+      info.scanned = done;
       onProgress && onProgress(done, ids.length);
     });
+    info.missed = missed.length;
+    info.scanned = ids.length - missed.length;
     if (missed.length) state.scanMissed[adv] = missed;
   }
 
@@ -506,12 +524,28 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         adv: adv, ad_id: id, spend: isFinite(spend) ? spend : 0,
         currency: m.currency && m.currency !== "-" ? m.currency : "USD",
         video_id: a.video_id || null, sec: a.secondary_status || null, known: !!info[id],
-        sp_ad: a.smart_plus_ad_id || null
+        sp_ad: a.smart_plus_ad_id || null,
+        campOff: CAMP_OFF[a.secondary_status] === 1
       };
     });
     onRows(rows);
     var vids = Array.from(new Set(rows.map(function (r) { return r.video_id; }).filter(Boolean)));
     await Promise.all([vids.length ? loadVideos(adv, vids) : null, loadSmartPlusFlags(adv, rows, onScan)]);
+  }
+
+  function doneSummary() {
+    var g = groups().filter(function (x) { return !x.allOff; }), lines = ["Đã xong lúc " + new Date().toLocaleTimeString("vi-VN") + "."];
+    state.loaded[2].forEach(function (adv) {
+      var mine = g.filter(function (x) { return x.adv === adv; });
+      if (!mine.length && !state.scanInfo[adv]) return;
+      var bad = mine.filter(function (x) { return x.flagged; });
+      var si = state.scanInfo[adv];
+      var parts = [(state.names[adv] || adv) + ":", bad.length + " creative vi phạm policy"];
+      if (bad.length) parts.push("(" + bad.filter(function (x) { return x.spend > 0; }).length + " vẫn có spend)");
+      if (si && si.total) parts.push("· quét " + si.scanned + "/" + (si.total - si.skipped) + " ad Smart+ đang bật, bỏ qua " + si.skipped + " ad trong camp đã tắt/xóa");
+      lines.push(parts.join(" "));
+    });
+    return lines.join("\n");
   }
 
   var running = false;
@@ -527,7 +561,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     running = true; els.go.disabled = true; els.go.textContent = "Đang tải…";
     loadAdvList();
     var queue = advs.slice(), rows = [], failed = [], done = 0, fatal = null;
-    state.rows = []; state.failed = []; state.scanMissed = {}; state.loaded = [start, end, advs];
+    state.rows = []; state.failed = []; state.scanMissed = {}; state.scanInfo = {}; state.loaded = [start, end, advs];
     showStatus("Đang tải 0/" + advs.length + " tài khoản…");
     async function worker() {
       while (queue.length && !fatal) {
@@ -555,7 +589,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       if (fatal) showStatus(errText(fatal), true);
       else if (Object.keys(state.scanMissed).length) showStatus("Chưa quét được policy cho " + Object.keys(state.scanMissed).map(function (a) { return state.scanMissed[a].length + " ad ở " + a; }).join(", ") + ". Bấm “Xem creative” lần nữa để quét lại.", true);
       else if (failed.length) showStatus("Không tải được " + failed.length + " tài khoản:\n" + failed.map(function (f) { return f.adv + ": " + f.msg; }).join("\n"), true);
-      else showStatus(rows.length ? "" : "Không có ad nào trong khoảng ngày đã chọn.");
+      else showStatus(rows.length ? doneSummary() : "Không có ad nào trong khoảng ngày đã chọn.");
       await advListP; render();
     } finally {
       running = false; els.go.disabled = false; els.go.textContent = "Xem creative";
@@ -576,6 +610,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     if (PAUSED[r.sec]) return 2;
     return 1;
   }
+  var CAMP_OFF = { AD_STATUS_CAMPAIGN_DISABLE: 1, AD_STATUS_CAMPAIGN_DELETE: 1 };
   var STATUS_LABEL = ["đã xóa", "không phân phối", "đang tắt", "đang chạy"];
   var STATUS_CLASS = [" del", "", "", " on"];
 
@@ -601,10 +636,13 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       var key = r.adv + "|" + (state.group === "creative" && r.video_id ? "v:" + r.video_id : "a:" + r.ad_id);
       var g = map.get(key);
       if (!g) {
-        g = { adv: r.adv, currency: r.currency, video_id: r.video_id, ads: [], spend: 0, rank: 0, flags: [], flagAds: [], adOnly: [] };
+        g = { adv: r.adv, currency: r.currency, video_id: r.video_id, ads: [], spAds: [], spend: 0, rank: 0, flags: [], flagAds: [], adOnly: [], allOff: true };
         map.set(key, g);
       }
       g.ads.push(r.ad_id);
+      var sp = r.sp_ad || state.creativeToSpAd[r.ad_id];
+      if (sp && g.spAds.indexOf(sp) < 0) g.spAds.push(sp);
+      if (!r.campOff) g.allOff = false;
       g.spend += r.spend;
       g.rank = Math.max(g.rank, statusRank(r));
       var f = flagOf(r);
@@ -640,7 +678,8 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 
   // Accounts keep the order they were entered in; creatives sort by spend inside each account.
   function filtered(all) {
-    var min = parseFloat(els.minS.value), max = parseFloat(els.maxS.value), q = els.q.value.trim().toLowerCase();
+    var min = parseFloat(els.minS.value), max = parseFloat(els.maxS.value);
+    var qs = (els.q.value.toLowerCase().match(/[a-z0-9]+/g) || []);
     var order = {};
     state.loaded[2].forEach(function (a, i) { order[a] = i; });
     var dir = state.sortDir === "asc" ? 1 : -1;
@@ -649,7 +688,11 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
       if (els.onlyFlag.checked && !x.flagged) return false;
       if (isFinite(min) && x.spend < min) return false;
       if (isFinite(max) && x.spend > max) return false;
-      if (q && (x.idLabel + " " + x.adv + " " + (state.names[x.adv] || "") + " " + x.ads.join(" ")).toLowerCase().indexOf(q) < 0) return false;
+      if (!qs.length && !els.showOff.checked && x.allOff) return false;
+      if (qs.length) {
+        var hay = (x.idLabel + " " + (x.video_id || "") + " " + x.adv + " " + x.ads.join(" ") + " " + x.spAds.join(" ")).toLowerCase();
+        if (!qs.some(function (t) { return hay.indexOf(t) >= 0; })) return false;
+      }
       return true;
     }).sort(function (a, b) {
       return (order[a.adv] - order[b.adv]) || dir * (a.spend - b.spend);
@@ -658,7 +701,8 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 
   function render() {
     if (!state.loaded) return;
-    var all = groups();
+    var full = groups(), all = els.showOff.checked ? full : full.filter(function (x) { return !x.allOff; });
+    var hasQ = /[a-z0-9]/i.test(els.q.value);
     var on = all.filter(function (x) { return x.spend > 0; }).length;
     var flagged = all.filter(function (x) { return x.flagged; });
     var totals = {};
@@ -679,8 +723,17 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     $("sFlagSub").textContent = (flagged.length ? flagged.filter(function (x) { return x.spend > 0; }).length + " vẫn có spend · " : "") +
       (nBad ? "trong " + nBad + " ad" : "không có creative bị vi phạm");
 
-    var list = filtered(all);
+    var list = filtered(hasQ ? full : all);
     state.visible = list;
+    var qs = (els.q.value.toLowerCase().match(/[a-z0-9]+/g) || []);
+    els.qClear.hidden = !qs.length;
+    if (qs.length) {
+      var allHay = full.map(function (x) { return (x.idLabel + " " + (x.video_id || "") + " " + x.ads.join(" ") + " " + x.spAds.join(" ")).toLowerCase(); }).join(" ");
+      var miss = qs.filter(function (t) { return allHay.indexOf(t) < 0; });
+      els.qHint.hidden = false;
+      els.qHint.textContent = "Tìm thấy " + list.length + " dòng" + (miss.length ? " · không có trong dữ liệu đã tải: " + miss.join(", ") : "") +
+        " (tìm theo ID thì hiện cả camp đã tắt)";
+    } else { els.qHint.hidden = true; }
     els.exportBtn.textContent = "Xuất CSV (" + nf0.format(list.length) + " dòng)";
     els.exportBtn.disabled = !list.length;
 
@@ -764,7 +817,12 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
   });
   els.showZero.addEventListener("change", function () { sset("csv.zero", els.showZero.checked ? "1" : "0"); render(); });
   els.onlyFlag.addEventListener("change", render);
-  [els.minS, els.maxS, els.q].forEach(function (i) { i.addEventListener("input", render); });
+  [els.minS, els.maxS].forEach(function (i) { i.addEventListener("input", render); });
+  els.qGo.addEventListener("click", render);
+  els.q.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); render(); } });
+  els.q.addEventListener("input", function () { if (!els.q.value.trim()) render(); });
+  els.qClear.addEventListener("click", function () { els.q.value = ""; render(); });
+  els.showOff.addEventListener("change", render);
 
   // ---------- init ----------
   els.advs.value = sget("csv.advs") || sget("csv.adv") || "";
