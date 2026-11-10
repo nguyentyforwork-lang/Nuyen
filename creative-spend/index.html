@@ -247,7 +247,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
   };
 
   var state = {
-    rows: [], videos: {}, names: {}, reviews: {}, spFlags: {}, spAdFlags: {}, creativeToSpAd: {}, group: "creative", sortDir: "desc",
+    rows: [], videos: {}, names: {}, reviews: {}, spFlags: {}, spAdFlags: {}, creativeToSpAd: {}, scanMissed: {}, group: "creative", sortDir: "desc",
     loaded: null, failed: [], visible: []
   };
   var mcpP = (window.claude && window.claude.use) ? window.claude.use("mcp") : Promise.resolve(null);
@@ -446,11 +446,10 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
 
   // Upgraded Smart+: review results live per creative (ad material) inside each Smart+ ad.
   function uniq(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }); }
-  async function loadSmartPlusFlags(adv) {
-    var ads = await paged("smart_plus_ad_get", {
-      advertiser_id: adv, fields: ["secondary_status", "creative_list"],
-      filtering: { effective_statuses: ["PARTIAL_DELIVERY", "NOT_DELIVERED"] }
-    }, 100).catch(function () { return []; });
+  // Scan every Upgraded Smart+ ad, highest-spending first, so the top creatives are flagged first.
+  async function loadSmartPlusFlags(adv, rows, onProgress) {
+    var ads = await paged("smart_plus_ad_get", { advertiser_id: adv, fields: ["secondary_status", "creative_list"] }, 100)
+      .catch(function () { return []; });
     if (!ads.length) return;
     var matToCreative = {}, adStatus = {};
     ads.forEach(function (a) {
@@ -460,42 +459,41 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         if (c.smart_plus_creative_id) state.creativeToSpAd[c.smart_plus_creative_id] = a.smart_plus_ad_id;
       });
     });
-    await pool(chunks(ads.map(function (a) { return a.smart_plus_ad_id; }), 20), 4, async function (b) {
-      var d;
-      try {
-        d = await call("smart_plus_ad_review_info_get", { advertiser_id: adv, smart_plus_ad_ids: b });
-      } catch (e) {
-        // No review details: still flag ads whose status says review issue.
-        b.forEach(function (id) { if (FLAG_STATUS[adStatus[id]]) state.spAdFlags[id] = { label: FLAG_STATUS[adStatus[id]], reason: "" }; });
-        return;
-      }
-      (d.smart_plus_ad_review_infos || []).forEach(function (r) {
-        var bad = r && r.review_status && r.review_status !== "ALL_AVAILABLE";
-        var st = FLAG_STATUS[adStatus[r.smart_plus_ad_id]];
-        if (!bad && !st) return;
-        state.spAdFlags[r.smart_plus_ad_id] = {
-          label: st || (r.review_status === "PART_AVAILABLE" ? "Review issue · chạy một phần" : "Bị từ chối"),
-          reason: summarize(r.reject_info)
-        };
-      });
-      b.forEach(function (id) {
-        if (!state.spAdFlags[id] && FLAG_STATUS[adStatus[id]]) state.spAdFlags[id] = { label: FLAG_STATUS[adStatus[id]], reason: "" };
-      });
+    var adSpend = {};
+    rows.forEach(function (r) {
+      var sp = r.sp_ad || state.creativeToSpAd[r.ad_id];
+      if (sp) adSpend[sp] = (adSpend[sp] || 0) + r.spend;
+    });
+    var ids = ads.map(function (a) { return a.smart_plus_ad_id; })
+      .sort(function (x, y) { return (adSpend[y] || 0) - (adSpend[x] || 0); });
+    var done = 0, missed = [];
+    async function scan(b) {
+      var d = await call("smart_plus_ad_review_info_get", { advertiser_id: adv, smart_plus_ad_ids: b });
       (d.material_review_infos || []).forEach(function (m) {
         if (!m || m.review_status === "ALL_AVAILABLE") return;
         var cid = matToCreative[m.ad_material_id];
         if (!cid) return;
         state.spFlags[cid] = {
           label: m.review_status === "PART_AVAILABLE" ? "Duyệt một phần" : "Bị từ chối",
-          reason: "",
-          adId: m.smart_plus_ad_id,
-          kind: "creative"
+          reason: "", adId: m.smart_plus_ad_id, kind: "creative"
         };
       });
+    }
+    await pool(chunks(ids, 20), 4, async function (b) {
+      try { await scan(b); }
+      catch (e) {
+        // Retry once in smaller pieces so one bad response does not hide flags.
+        for (var i = 0; i < b.length; i += 5) {
+          try { await scan(b.slice(i, i + 5)); } catch (e2) { missed = missed.concat(b.slice(i, i + 5)); }
+        }
+      }
+      done += b.length;
+      onProgress && onProgress(done, ids.length);
     });
+    if (missed.length) state.scanMissed[adv] = missed;
   }
 
-  async function loadAccount(adv, start, end) {
+  async function loadAccount(adv, start, end, onRows, onScan) {
     var reportP = loadReport(adv, start, end);
     var adsP = loadAds(adv), delP = loadAds(adv, { primary_status: "STATUS_DELETE" });
     var report = await reportP;
@@ -511,10 +509,9 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
         sp_ad: a.smart_plus_ad_id || null
       };
     });
+    onRows(rows);
     var vids = Array.from(new Set(rows.map(function (r) { return r.video_id; }).filter(Boolean)));
-    // Review details only for ads whose status already says there is a review problem.
-    await Promise.all([vids.length ? loadVideos(adv, vids) : null, loadSmartPlusFlags(adv)]);
-    return rows;
+    await Promise.all([vids.length ? loadVideos(adv, vids) : null, loadSmartPlusFlags(adv, rows, onScan)]);
   }
 
   var running = false;
@@ -530,12 +527,19 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     running = true; els.go.disabled = true; els.go.textContent = "Đang tải…";
     loadAdvList();
     var queue = advs.slice(), rows = [], failed = [], done = 0, fatal = null;
-    state.rows = []; state.failed = []; state.loaded = [start, end, advs];
+    state.rows = []; state.failed = []; state.scanMissed = {}; state.loaded = [start, end, advs];
     showStatus("Đang tải 0/" + advs.length + " tài khoản…");
     async function worker() {
       while (queue.length && !fatal) {
         var adv = queue.shift();
-        try { rows = rows.concat(await loadAccount(adv, start, end)); }
+        try {
+          await loadAccount(adv, start, end, function (r) {
+            rows = rows.concat(r); state.rows = rows; render();
+          }, function (n, total) {
+            showStatus("Đang quét policy " + adv + ": " + n + "/" + total + " ad Smart+ (spend cao → thấp)…");
+            render();
+          });
+        }
         catch (err) {
           if (err && FATAL[err.code]) { fatal = err; break; }
           failed.push({ adv: adv, msg: errText(err) });
@@ -549,6 +553,7 @@ tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
     try {
       await Promise.all([worker(), worker(), worker()]);
       if (fatal) showStatus(errText(fatal), true);
+      else if (Object.keys(state.scanMissed).length) showStatus("Chưa quét được policy cho " + Object.keys(state.scanMissed).map(function (a) { return state.scanMissed[a].length + " ad ở " + a; }).join(", ") + ". Bấm “Xem creative” lần nữa để quét lại.", true);
       else if (failed.length) showStatus("Không tải được " + failed.length + " tài khoản:\n" + failed.map(function (f) { return f.adv + ": " + f.msg; }).join("\n"), true);
       else showStatus(rows.length ? "" : "Không có ad nào trong khoảng ngày đã chọn.");
       await advListP; render();
