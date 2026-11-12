@@ -1,0 +1,31 @@
+{
+  "name": "nuyen",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "mock": "MOCK_MODE=1 node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyentyforwork-lang/Nuyen.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nguyentyforwork-lang/Nuyen/issues"
+  },
+  "homepage": "https://github.com/nguyentyforwork-lang/Nuyen#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@fal-ai/client": "^1.10.1",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
+    "multer": "^2.5.0"
+  },
+  "type": "module"
+}
