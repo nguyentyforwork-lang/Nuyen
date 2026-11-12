@@ -1,0 +1,914 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nuyen Sub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Roboto:wght@500;700&family=Montserrat:wght@600;800&display=swap">
+<style>
+/* Layout: editing-suite — preview + style on the left, cue list on the right; stacks on phones */
+:root {
+  --bg: #eef0f3;
+  --panel: #ffffff;
+  --sunk: #e3e6eb;
+  --line: #d3d8df;
+  --fg: #1a1f27;
+  --muted: #5d6673;
+  --accent: #e8b30b;
+  --accent-ink: #1a1f27;
+  --active: #fff4cc;
+  --danger: #c4312b;
+  --ok: #1f8a4c;
+  --font-ui: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 8px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151a; --panel: #1a1e25; --sunk: #0d1014; --line: #2b313b;
+    --fg: #e7eaef; --muted: #98a1ad; --accent: #f2c230; --accent-ink: #12151a;
+    --active: #3a3215; --danger: #ff6b62; --ok: #4cc47f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151a; --panel: #1a1e25; --sunk: #0d1014; --line: #2b313b;
+  --fg: #e7eaef; --muted: #98a1ad; --accent: #f2c230; --accent-ink: #12151a;
+  --active: #3a3215; --danger: #ff6b62; --ok: #4cc47f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg); font: 14px/1.5 var(--font-ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 40px;
+}
+[hidden] { display: none !important; }
+header.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; max-width: 1400px; margin: 0 auto 16px; }
+.logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -0.01em; }
+.logo-mark { width: 30px; height: 22px; border-radius: 4px; background: var(--fg); position: relative; }
+.logo-mark::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 5px; height: 3px; border-radius: 2px; background: var(--accent); box-shadow: 0 -5px 0 -0px var(--accent); transform: scaleX(.85); }
+.tag { color: var(--muted); font-size: 13px; }
+.spacer { flex: 1; }
+main { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-width: 0; }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; font-weight: 700; }
+button, .btn {
+  font: 600 14px var(--font-ui); border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+  padding: 8px 14px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+}
+button:hover:not(:disabled), .btn:hover { border-color: var(--muted); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.primary:hover:not(:disabled) { filter: brightness(1.05); border-color: var(--accent); }
+button.ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 4px 8px; }
+button.ghost:hover:not(:disabled) { color: var(--fg); border-color: var(--line); }
+button.danger:hover:not(:disabled) { color: var(--danger); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; min-width: 0; }
+select, input[type="number"], input[type="text"], textarea {
+  font: 14px var(--font-ui); color: var(--fg); background: var(--sunk); border: 1px solid var(--line);
+  border-radius: 6px; padding: 7px 9px; width: 100%; min-width: 0;
+}
+input[type="color"] { width: 100%; height: 36px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); padding: 2px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Drop zone / stage */
+.stage { position: relative; background: #000; border-radius: 6px; overflow: hidden; }
+.stage video { display: block; width: 100%; max-height: 62vh; background: #000; }
+.stage canvas.overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+.drop {
+  border: 2px dashed var(--line); border-radius: var(--r); padding: 48px 20px; text-align: center; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; background: var(--sunk);
+}
+.drop.over { border-color: var(--accent); background: var(--active); }
+.drop strong { font-size: 18px; }
+.drop .hint { color: var(--muted); font-size: 13px; max-width: 46ch; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; width: 100%; max-width: 560px; }
+.steps div { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font-size: 12px; color: var(--muted); text-align: left; }
+.steps b { display: block; color: var(--fg); font-size: 13px; }
+@media (max-width: 520px) { .steps { grid-template-columns: minmax(0, 1fr); } }
+.fileinfo { font-size: 13px; color: var(--muted); margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-variant-numeric: tabular-nums; }
+.fileinfo b { color: var(--fg); overflow-wrap: anywhere; }
+
+/* progress */
+.prog { margin-top: 12px; }
+.bar { height: 8px; background: var(--sunk); border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.prog .msg { font-size: 13px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+.err { color: var(--danger); }
+
+/* cues */
+.cues-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.cues-head h2 { margin: 0; }
+.count { font: 500 12px var(--font-mono); background: var(--sunk); padding: 2px 8px; border-radius: 10px; color: var(--muted); }
+.cues { display: flex; flex-direction: column; gap: 6px; max-height: calc(100vh - 160px); overflow-y: auto; padding-right: 4px; }
+@media (max-width: 900px) { .cues { max-height: 70vh; } }
+.cue { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.cue.on { background: var(--active); border-color: var(--accent); }
+.cue .idx { font: 500 12px var(--font-mono); color: var(--muted); padding-top: 6px; min-width: 2ch; text-align: right; }
+.cue .times { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.cue .times input { font: 12px var(--font-mono); width: 11ch; padding: 3px 6px; }
+.cue .times span { color: var(--muted); font-size: 12px; }
+.cue textarea { resize: vertical; min-height: 36px; font-size: 14px; padding: 6px 8px; field-sizing: content; }
+.cue .acts { display: flex; flex-direction: column; gap: 2px; }
+.empty { color: var(--muted); font-size: 13px; padding: 24px 8px; text-align: center; border: 1px dashed var(--line); border-radius: 6px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 6px 10px; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+details summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--muted); }
+details[open] summary { margin-bottom: 10px; }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 6px; font-weight: 600; z-index: 20; max-width: calc(100% - 32px); }
+.out-link { margin-top: 10px; }
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo"><span class="logo-mark" aria-hidden="true"></span>Nuyen Sub</div>
+  <span class="tag">Tự tạo phụ đề cho video bằng AI, chạy ngay trong trình duyệt. Video không bị tải lên đâu cả.</span>
+  <span class="spacer"></span>
+  <button class="ghost" id="themeBtn" type="button" title="Đổi giao diện sáng/tối">Sáng / Tối</button>
+</header>
+
+<main>
+  <div class="col">
+    <!-- 1. Video -->
+    <section class="panel">
+      <h2>1 · Video</h2>
+      <input type="file" id="fileInput" accept="video/*,audio/*" hidden>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Chọn video">
+        <strong>Kéo thả video vào đây</strong>
+        <span class="hint">hoặc bấm để chọn file (MP4, MOV, WEBM, MKV…). File chỉ được xử lý trên máy bạn.</span>
+        <div class="steps">
+          <div><b>Chọn video</b>Tải video từ máy</div>
+          <div><b>Tạo phụ đề</b>AI nghe và ghi lời</div>
+          <div><b>Xuất</b>Video có sub hoặc file .srt</div>
+        </div>
+      </div>
+      <div id="stageWrap" hidden>
+        <div class="stage" id="stage">
+          <video id="video" controls playsinline></video>
+          <canvas class="overlay" id="overlay"></canvas>
+        </div>
+        <div class="fileinfo">
+          <span>File: <b id="fileName">–</b></span>
+          <span id="fileMeta"></span>
+          <span class="spacer"></span>
+          <button class="ghost" id="changeVideo" type="button">Đổi video khác</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Generate -->
+    <section class="panel" id="genPanel">
+      <h2>2 · Tạo phụ đề tự động</h2>
+      <div class="grid">
+        <label class="f">Ngôn ngữ trong video
+          <select id="lang">
+            <option value="vietnamese" selected>Tiếng Việt</option>
+            <option value="english">Tiếng Anh</option>
+            <option value="">Tự nhận diện</option>
+            <option value="chinese">Tiếng Trung</option>
+            <option value="japanese">Tiếng Nhật</option>
+            <option value="korean">Tiếng Hàn</option>
+            <option value="thai">Tiếng Thái</option>
+            <option value="indonesian">Tiếng Indonesia</option>
+            <option value="french">Tiếng Pháp</option>
+            <option value="german">Tiếng Đức</option>
+            <option value="spanish">Tiếng Tây Ban Nha</option>
+          </select>
+        </label>
+        <label class="f">Phụ đề ra
+          <select id="task">
+            <option value="transcribe" selected>Giữ nguyên ngôn ngữ gốc</option>
+            <option value="translate">Dịch sang tiếng Anh</option>
+          </select>
+        </label>
+        <label class="f">Chất lượng AI
+          <select id="model">
+            <option value="onnx-community/whisper-tiny">Nhanh (~40 MB)</option>
+            <option value="onnx-community/whisper-base" selected>Cân bằng (~80 MB)</option>
+            <option value="onnx-community/whisper-small">Chính xác (~250 MB, chậm)</option>
+          </select>
+        </label>
+        <label class="f">Tối đa ký tự / câu sub
+          <input type="number" id="maxChars" min="15" max="120" value="42">
+        </label>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="primary" id="genBtn" type="button" disabled>Tạo phụ đề</button>
+        <button id="stopGen" type="button" hidden>Dừng</button>
+        <span class="spacer"></span>
+        <button id="importBtn" type="button">Nhập file .srt / .vtt</button>
+        <input type="file" id="srtInput" accept=".srt,.vtt,text/plain" hidden>
+      </div>
+      <div class="prog" id="genProg" hidden>
+        <div class="bar"><i id="genBar"></i></div>
+        <div class="msg" id="genMsg"></div>
+      </div>
+      <p class="note">Lần đầu sẽ tải mô hình AI về máy (lưu lại cho lần sau). Dùng Chrome hoặc Edge trên máy tính để chạy nhanh nhất. Tiếng Việt nên chọn “Cân bằng” hoặc “Chính xác”.</p>
+    </section>
+
+    <!-- 3. Style -->
+    <section class="panel">
+      <h2>3 · Kiểu chữ phụ đề</h2>
+      <div class="grid">
+        <label class="f">Font
+          <select id="sFont">
+            <option value="Be Vietnam Pro">Be Vietnam Pro</option>
+            <option value="Roboto">Roboto</option>
+            <option value="Montserrat">Montserrat</option>
+            <option value="Arial">Arial</option>
+          </select>
+        </label>
+        <label class="f">Cỡ chữ <span id="sSizeVal" style="font-weight:400"></span>
+          <input type="range" id="sSize" min="2" max="12" step="0.25" value="5">
+        </label>
+        <label class="f">Vị trí (từ dưới lên) <span id="sPosVal" style="font-weight:400"></span>
+          <input type="range" id="sPos" min="2" max="90" step="1" value="8">
+        </label>
+        <label class="f">Màu chữ
+          <input type="color" id="sColor" value="#ffffff">
+        </label>
+        <label class="f">Kiểu nền
+          <select id="sBg">
+            <option value="outline" selected>Viền đen</option>
+            <option value="box">Hộp nền</option>
+            <option value="none">Không</option>
+          </select>
+        </label>
+        <label class="f">Màu viền / nền
+          <input type="color" id="sBgColor" value="#000000">
+        </label>
+        <label class="f">Độ đậm
+          <select id="sWeight">
+            <option value="800">Rất đậm</option>
+            <option value="700" selected>Đậm</option>
+            <option value="500">Thường</option>
+          </select>
+        </label>
+        <label class="f">Chữ hoa
+          <select id="sUpper">
+            <option value="0" selected>Giữ nguyên</option>
+            <option value="1">VIẾT HOA HẾT</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <!-- 4. Export -->
+    <section class="panel">
+      <h2>4 · Xuất file</h2>
+      <div class="row">
+        <button class="primary" id="exportVideo" type="button" disabled>Xuất video có phụ đề</button>
+        <button id="cancelExport" type="button" hidden>Huỷ</button>
+        <button id="exportSrt" type="button" disabled>Tải .srt</button>
+        <button id="exportVtt" type="button" disabled>Tải .vtt</button>
+      </div>
+      <div class="prog" id="expProg" hidden>
+        <div class="bar"><i id="expBar"></i></div>
+        <div class="msg" id="expMsg"></div>
+      </div>
+      <div class="out-link" id="outLink"></div>
+      <p class="note">Xuất video chạy theo thời gian thực (video 1 phút mất khoảng 1 phút). Giữ tab này mở trên màn hình trong lúc xuất. Chrome/Edge mới ra file .mp4, trình duyệt khác ra .webm.</p>
+    </section>
+  </div>
+
+  <!-- Cue list -->
+  <section class="panel">
+    <div class="cues-head">
+      <h2>Phụ đề</h2>
+      <span class="count" id="cueCount">0</span>
+      <span class="spacer"></span>
+      <button type="button" id="addCue" title="Thêm câu tại vị trí đang phát">+ Thêm câu</button>
+    </div>
+    <details style="margin-bottom:12px">
+      <summary>Công cụ</summary>
+      <div class="row">
+        <label class="f" style="flex-direction:row;align-items:center;gap:6px">Dời toàn bộ
+          <input type="number" id="shiftVal" step="0.1" value="0" style="width:8ch"> giây
+        </label>
+        <button type="button" id="shiftBtn">Áp dụng</button>
+        <button type="button" id="followBtn" aria-pressed="true">Tự cuộn theo video</button>
+        <button type="button" class="danger" id="clearCues">Xoá hết</button>
+      </div>
+    </details>
+    <div class="cues" id="cues"></div>
+  </section>
+</main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const SR = 16000;
+const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
+
+/* ---------- theme ---------- */
+const root = document.documentElement;
+try { const t = localStorage.getItem('nuyen-theme'); if (t) root.dataset.theme = t; } catch {}
+$('themeBtn').onclick = () => {
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('nuyen-theme', root.dataset.theme); } catch {}
+};
+
+/* ---------- state ---------- */
+let cues = [];          // {id, start, end, text}
+let file = null, fileURL = null;
+let nextId = 1;
+let follow = true;
+const video = $('video');
+
+function toast(msg, ms = 2600) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), ms);
+}
+
+/* ---------- time helpers ---------- */
+function fmt(t, sep = ',') {
+  t = Math.max(0, t || 0);
+  const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = Math.floor(t % 60), ms = Math.round((t - Math.floor(t)) * 1000);
+  const p = (n, l = 2) => String(n).padStart(l, '0');
+  if (ms === 1000) return fmt(Math.ceil(t), sep);
+  return `${p(h)}:${p(m)}:${p(s)}${sep}${p(ms, 3)}`;
+}
+function fmtShort(t) {
+  t = Math.max(0, t || 0);
+  const m = Math.floor(t / 60), s = t - m * 60;
+  return `${String(m).padStart(2, '0')}:${s.toFixed(2).padStart(5, '0')}`;
+}
+function parseTime(str) {
+  str = String(str).trim().replace(',', '.');
+  const parts = str.split(':').map(Number);
+  if (parts.some(isNaN)) return NaN;
+  return parts.reduce((a, v) => a * 60 + v, 0);
+}
+
+/* ---------- file loading ---------- */
+const drop = $('drop');
+drop.onclick = () => $('fileInput').click();
+drop.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('fileInput').click(); } };
+$('changeVideo').onclick = () => $('fileInput').click();
+$('fileInput').onchange = (e) => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; };
+['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'drop' || e.target === drop) drop.classList.remove('over'); }));
+document.addEventListener('drop', (e) => {
+  const f = [...(e.dataTransfer?.files || [])];
+  const v = f.find(x => /^(video|audio)\//.test(x.type) || /\.(mp4|mov|mkv|webm|m4v|avi|mp3|wav|m4a)$/i.test(x.name));
+  const s = f.find(x => /\.(srt|vtt)$/i.test(x.name));
+  if (v) loadFile(v);
+  if (s) importSubs(s);
+});
+
+function loadFile(f) {
+  file = f;
+  if (fileURL) URL.revokeObjectURL(fileURL);
+  fileURL = URL.createObjectURL(f);
+  video.src = fileURL;
+  $('fileName').textContent = f.name;
+  $('fileMeta').textContent = (f.size / 1048576).toFixed(1) + ' MB';
+  drop.hidden = true; $('stageWrap').hidden = false;
+  $('genBtn').disabled = false;
+  $('outLink').innerHTML = '';
+  updateButtons();
+}
+video.addEventListener('loadedmetadata', () => {
+  $('fileMeta').textContent = `${(file.size / 1048576).toFixed(1)} MB · ${fmtShort(video.duration)} · ${video.videoWidth}×${video.videoHeight}`;
+  sizeOverlay();
+});
+
+/* ---------- subtitle rendering (shared by preview + export) ---------- */
+const style = {};
+function readStyle() {
+  style.font = $('sFont').value;
+  style.size = +$('sSize').value;   // % of video height
+  style.pos = +$('sPos').value;     // % from bottom
+  style.color = $('sColor').value;
+  style.bg = $('sBg').value;
+  style.bgColor = $('sBgColor').value;
+  style.weight = $('sWeight').value;
+  style.upper = $('sUpper').value === '1';
+  $('sSizeVal').textContent = style.size + '%';
+  $('sPosVal').textContent = style.pos + '%';
+  try { localStorage.setItem('nuyen-style', JSON.stringify(style)); } catch {}
+}
+try {
+  const s = JSON.parse(localStorage.getItem('nuyen-style') || 'null');
+  if (s) {
+    const map = { sFont: 'font', sSize: 'size', sPos: 'pos', sColor: 'color', sBg: 'bg', sBgColor: 'bgColor', sWeight: 'weight' };
+    for (const [id, k] of Object.entries(map)) if (s[k] != null) $(id).value = s[k];
+    $('sUpper').value = s.upper ? '1' : '0';
+  }
+} catch {}
+readStyle();
+['sFont', 'sSize', 'sPos', 'sColor', 'sBg', 'sBgColor', 'sWeight', 'sUpper'].forEach(id => $(id).addEventListener('input', () => { readStyle(); drawOverlay(true); }));
+$('sFont').addEventListener('change', () => document.fonts.load(`${style.weight} 20px "${style.font}"`).then(() => drawOverlay(true)));
+
+function wrapLines(ctx, text, maxW) {
+  const out = [];
+  for (const para of text.split(/\n/)) {
+    const words = para.split(/\s+/).filter(Boolean);
+    let line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (ctx.measureText(test).width <= maxW || !line) line = test;
+      else { out.push(line); line = w; }
+    }
+    if (line) out.push(line);
+  }
+  return out;
+}
+function drawSub(ctx, text, W, H) {
+  if (!text) return;
+  if (style.upper) text = text.toLocaleUpperCase('vi');
+  const fs = Math.max(8, H * style.size / 100);
+  ctx.font = `${style.weight} ${fs}px "${style.font}", "Be Vietnam Pro", Arial, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  const lines = wrapLines(ctx, text, W * 0.88);
+  const lh = fs * 1.25;
+  const bottom = H - H * style.pos / 100;
+  const x = W / 2;
+  lines.forEach((ln, i) => {
+    const y = bottom - (lines.length - 1 - i) * lh;
+    if (style.bg === 'box') {
+      const w = ctx.measureText(ln).width, padX = fs * 0.35, padY = fs * 0.18;
+      ctx.fillStyle = hexA(style.bgColor, 0.72);
+      ctx.fillRect(x - w / 2 - padX, y - fs * 0.92 - padY, w + padX * 2, lh + padY * 0.4);
+    } else if (style.bg === 'outline') {
+      ctx.strokeStyle = style.bgColor; ctx.lineWidth = Math.max(2, fs * 0.16);
+      ctx.strokeText(ln, x, y);
+    }
+    ctx.fillStyle = style.color;
+    ctx.fillText(ln, x, y);
+  });
+}
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+}
+function cueAt(t) {
+  // cues kept sorted
+  let lo = 0, hi = cues.length - 1, ans = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (cues[mid].start <= t) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  if (ans != null && t < cues[ans].end) return ans;
+  return -1;
+}
+
+/* preview overlay: canvas sized to the video's drawn rectangle */
+const overlay = $('overlay'), octx = overlay.getContext('2d');
+let videoRect = { x: 0, y: 0, w: 0, h: 0 };
+function sizeOverlay() {
+  const box = video.getBoundingClientRect();
+  const vw = video.videoWidth || 16, vh = video.videoHeight || 9;
+  const scale = Math.min(box.width / vw, box.height / vh);
+  const w = vw * scale, h = vh * scale;
+  videoRect = { x: (box.width - w) / 2, y: (box.height - h) / 2, w, h };
+  const dpr = window.devicePixelRatio || 1;
+  overlay.style.left = videoRect.x + 'px'; overlay.style.top = videoRect.y + 'px';
+  overlay.style.width = w + 'px'; overlay.style.height = h + 'px';
+  overlay.width = Math.round(w * dpr); overlay.height = Math.round(h * dpr);
+  drawOverlay(true);
+}
+new ResizeObserver(sizeOverlay).observe(video);
+let lastIdx = -2, lastText = null;
+function drawOverlay(force) {
+  const idx = cueAt(video.currentTime);
+  const text = idx >= 0 ? cues[idx].text : '';
+  if (!force && idx === lastIdx && text === lastText) return;
+  lastIdx = idx; lastText = text;
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  drawSub(octx, text, overlay.width, overlay.height);
+  highlight(idx);
+}
+(function loop() { if (!video.paused || video.seeking) drawOverlay(false); requestAnimationFrame(loop); })();
+video.addEventListener('seeked', () => drawOverlay(false));
+video.addEventListener('timeupdate', () => drawOverlay(false));
+
+/* ---------- cue list UI ---------- */
+const list = $('cues');
+function sortCues() { cues.sort((a, b) => a.start - b.start); }
+function render() {
+  sortCues();
+  $('cueCount').textContent = cues.length;
+  list.innerHTML = '';
+  if (!cues.length) {
+    list.innerHTML = '<div class="empty">Chưa có phụ đề. Chọn video rồi bấm <b>Tạo phụ đề</b>, hoặc nhập file .srt có sẵn.</div>';
+  }
+  const frag = document.createDocumentFragment();
+  cues.forEach((c, i) => {
+    const el = document.createElement('div');
+    el.className = 'cue'; el.dataset.id = c.id;
+    el.innerHTML = `
+      <div class="idx">${i + 1}</div>
+      <div>
+        <div class="times">
+          <input type="text" data-k="start" value="${fmtShort(c.start)}" aria-label="Bắt đầu">
+          <span>→</span>
+          <input type="text" data-k="end" value="${fmtShort(c.end)}" aria-label="Kết thúc">
+          <button class="ghost" data-a="play" type="button" title="Phát đoạn này">▶</button>
+        </div>
+        <textarea rows="1" aria-label="Nội dung câu ${i + 1}"></textarea>
+      </div>
+      <div class="acts">
+        <button class="ghost" data-a="split" type="button" title="Thêm câu ngay sau">＋</button>
+        <button class="ghost" data-a="merge" type="button" title="Gộp với câu sau">⇣</button>
+        <button class="ghost danger" data-a="del" type="button" title="Xoá câu">✕</button>
+      </div>`;
+    el.querySelector('textarea').value = c.text;
+    frag.appendChild(el);
+  });
+  list.appendChild(frag);
+  lastIdx = -2; drawOverlay(true);
+  updateButtons();
+}
+function updateButtons() {
+  const has = cues.length > 0;
+  $('exportSrt').disabled = !has; $('exportVtt').disabled = !has;
+  $('exportVideo').disabled = !has || !file || exporting;
+}
+const byId = (id) => cues.find(c => c.id === +id);
+list.addEventListener('input', (e) => {
+  const el = e.target.closest('.cue'); if (!el) return;
+  const c = byId(el.dataset.id);
+  if (e.target.tagName === 'TEXTAREA') { c.text = e.target.value; lastIdx = -2; drawOverlay(true); }
+});
+list.addEventListener('change', (e) => {
+  const el = e.target.closest('.cue'); if (!el || e.target.tagName !== 'INPUT') return;
+  const c = byId(el.dataset.id);
+  const v = parseTime(e.target.value);
+  if (isNaN(v)) { e.target.value = fmtShort(c[e.target.dataset.k]); toast('Sai định dạng thời gian. Ví dụ: 01:23.50'); return; }
+  c[e.target.dataset.k] = v;
+  if (c.end <= c.start) c.end = c.start + 0.5;
+  render();
+});
+list.addEventListener('focusin', (e) => {
+  const el = e.target.closest('.cue'); if (!el) return;
+  const c = byId(el.dataset.id);
+  if (video.src && video.paused && (video.currentTime < c.start || video.currentTime >= c.end)) video.currentTime = c.start + 0.01;
+});
+list.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  const el = b.closest('.cue'); const c = byId(el.dataset.id); const i = cues.indexOf(c);
+  const a = b.dataset.a;
+  if (a === 'play') { if (video.src) { video.currentTime = c.start + 0.01; video.play(); playUntil = c.end; } }
+  if (a === 'del') { cues.splice(i, 1); render(); }
+  if (a === 'merge' && cues[i + 1]) { c.text = (c.text + ' ' + cues[i + 1].text).trim(); c.end = cues[i + 1].end; cues.splice(i + 1, 1); render(); }
+  if (a === 'split') {
+    const nextStart = cues[i + 1] ? cues[i + 1].start : c.end + 2;
+    const s = c.end, e2 = Math.max(s + 0.5, Math.min(s + 2, nextStart));
+    cues.push({ id: nextId++, start: s, end: e2, text: '' }); render(); focusCue(cues.length && cues.find(x => x.start === s && x.text === ''));
+  }
+});
+let playUntil = null;
+video.addEventListener('timeupdate', () => { if (playUntil != null && video.currentTime >= playUntil) { video.pause(); playUntil = null; } });
+video.addEventListener('seeking', () => { if (playUntil != null && video.paused) playUntil = null; });
+function focusCue(c) {
+  if (!c) return;
+  const el = list.querySelector(`.cue[data-id="${c.id}"] textarea`);
+  if (el) { el.focus(); el.scrollIntoView({ block: 'center' }); }
+}
+let hiId = null;
+function highlight(idx) {
+  const id = idx >= 0 ? cues[idx].id : null;
+  if (id === hiId) return;
+  list.querySelector('.cue.on')?.classList.remove('on');
+  hiId = id;
+  if (id == null) return;
+  const el = list.querySelector(`.cue[data-id="${id}"]`);
+  if (!el) return;
+  el.classList.add('on');
+  if (follow && !video.paused && !list.contains(document.activeElement)) {
+    const lr = list.getBoundingClientRect(), er = el.getBoundingClientRect();
+    if (er.top < lr.top || er.bottom > lr.bottom) list.scrollTop += er.top - lr.top - lr.height / 3;
+  }
+}
+$('addCue').onclick = () => {
+  const t = video.src ? video.currentTime : (cues.length ? cues[cues.length - 1].end : 0);
+  const c = { id: nextId++, start: t, end: t + 2, text: '' };
+  cues.push(c); render(); focusCue(c);
+};
+$('shiftBtn').onclick = () => {
+  const d = parseFloat($('shiftVal').value) || 0;
+  if (!d) return;
+  cues.forEach(c => { c.start = Math.max(0, c.start + d); c.end = Math.max(c.start + 0.2, c.end + d); });
+  render(); toast(`Đã dời ${d > 0 ? '+' : ''}${d}s`);
+};
+$('followBtn').onclick = (e) => { follow = !follow; e.currentTarget.setAttribute('aria-pressed', follow); e.currentTarget.textContent = follow ? 'Tự cuộn theo video' : 'Không tự cuộn'; };
+$('clearCues').onclick = (e) => {
+  const b = e.currentTarget;
+  if (b.dataset.confirm) { cues = []; render(); delete b.dataset.confirm; b.textContent = 'Xoá hết'; return; }
+  b.dataset.confirm = '1'; b.textContent = 'Bấm lần nữa để xoá';
+  setTimeout(() => { delete b.dataset.confirm; b.textContent = 'Xoá hết'; }, 3000);
+};
+
+/* ---------- SRT / VTT ---------- */
+function parseSubs(text) {
+  text = text.replace(/\r/g, '').replace(/^﻿/, '');
+  const out = [];
+  const re = /(\d{1,2}:)?(\d{1,2}):(\d{1,2})[,.](\d{1,3})\s*-->\s*(\d{1,2}:)?(\d{1,2}):(\d{1,2})[,.](\d{1,3})[^\n]*\n([\s\S]*?)(?=\n\s*\n|$)/g;
+  let m;
+  const t = (h, mi, s, ms) => (parseInt(h || '0') * 3600) + (+mi) * 60 + (+s) + (+ms.padEnd(3, '0')) / 1000;
+  while ((m = re.exec(text))) {
+    const body = m[9].replace(/<[^>]+>/g, '').trim();
+    out.push({ id: nextId++, start: t(m[1]?.slice(0, -1), m[2], m[3], m[4]), end: t(m[5]?.slice(0, -1), m[6], m[7], m[8]), text: body });
+  }
+  return out;
+}
+function toSRT() { sortCues(); return cues.map((c, i) => `${i + 1}\n${fmt(c.start)} --> ${fmt(c.end)}\n${c.text}\n`).join('\n'); }
+function toVTT() { sortCues(); return 'WEBVTT\n\n' + cues.map((c) => `${fmt(c.start, '.')} --> ${fmt(c.end, '.')}\n${c.text}\n`).join('\n'); }
+async function importSubs(f) {
+  const parsed = parseSubs(await f.text());
+  if (!parsed.length) { toast('Không đọc được phụ đề trong file này.'); return; }
+  cues = parsed; render(); toast(`Đã nhập ${parsed.length} câu phụ đề`);
+}
+$('importBtn').onclick = () => $('srtInput').click();
+$('srtInput').onchange = (e) => { if (e.target.files[0]) importSubs(e.target.files[0]); e.target.value = ''; };
+function baseName() { return file ? file.name.replace(/\.[^.]+$/, '') : 'phude'; }
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+$('exportSrt').onclick = () => download(new Blob(['﻿' + toSRT()], { type: 'text/plain;charset=utf-8' }), baseName() + '.srt');
+$('exportVtt').onclick = () => download(new Blob([toVTT()], { type: 'text/vtt;charset=utf-8' }), baseName() + '.vtt');
+
+/* ---------- AI transcription (Whisper in a Web Worker) ---------- */
+const workerSrc = `
+import { pipeline, env } from '${TRANSFORMERS_URL}';
+env.allowLocalModels = false;
+try { if (!('caches' in self)) env.useBrowserCache = false; } catch (e) { env.useBrowserCache = false; }
+let asr = null, key = '';
+async function load(model, device) {
+  if (asr && key === model + device) return;
+  asr = null;
+  const dtype = device === 'webgpu' ? { encoder_model: 'fp32', decoder_model_merged: 'q4' } : 'q8';
+  asr = await pipeline('automatic-speech-recognition', model, {
+    device, dtype, progress_callback: (p) => postMessage({ type: 'dl', p })
+  });
+  key = model + device;
+}
+self.onmessage = async (e) => {
+  const { model, language, task, windows, audio } = e.data;
+  let device = e.data.device;
+  try {
+    try { await load(model, device); }
+    catch (err) {
+      if (device !== 'webgpu') throw err;
+      postMessage({ type: 'status', msg: 'WebGPU không chạy được, chuyển sang CPU…' });
+      device = 'wasm'; await load(model, device);
+    }
+    postMessage({ type: 'ready', device });
+    for (let i = 0; i < windows.length; i++) {
+      const [s, en] = windows[i];
+      const slice = audio.subarray(Math.round(s * ${SR}), Math.round(en * ${SR}));
+      const opts = { return_timestamps: true, task };
+      if (language) opts.language = language;
+      const out = await asr(slice, opts);
+      const len = en - s;
+      let chunks = (out.chunks || []).map(c => {
+        const a = Math.min(len, Math.max(0, c.timestamp[0] ?? 0));
+        const b = Math.min(len, Math.max(a + 0.2, c.timestamp[1] ?? len));
+        return { start: s + a, end: s + b, text: (c.text || '').trim() };
+      }).filter(c => c.text);
+      if (!chunks.length && (out.text || '').trim()) chunks = [{ start: s, end: en, text: out.text.trim() }];
+      postMessage({ type: 'chunk', i, n: windows.length, chunks });
+    }
+    postMessage({ type: 'done' });
+  } catch (err) {
+    postMessage({ type: 'error', msg: String(err && err.message || err) });
+  }
+};`;
+let worker = null;
+function getWorker() {
+  if (!worker) worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' })), { type: 'module' });
+  return worker;
+}
+
+async function decodeAudio(f) {
+  const buf = await f.arrayBuffer();
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  let ctx;
+  try { ctx = new Ctx({ sampleRate: SR }); } catch { ctx = new Ctx(); }
+  const ab = await ctx.decodeAudioData(buf);
+  ctx.close?.();
+  // downmix + resample to 16 kHz mono
+  const off = new OfflineAudioContext(1, Math.ceil(ab.duration * SR), SR);
+  const src = off.createBufferSource(); src.buffer = ab; src.connect(off.destination); src.start();
+  const r = await off.startRendering();
+  return r.getChannelData(0);
+}
+
+// Split audio into ≤30 s windows, cutting at the quietest moment; skip silent windows.
+function planWindows(audio) {
+  const frame = SR * 0.02, n = Math.floor(audio.length / frame);
+  const rms = new Float32Array(n);
+  let peak = 0;
+  for (let i = 0; i < n; i++) {
+    let s = 0; const o = i * frame;
+    for (let j = 0; j < frame; j++) { const v = audio[o + j]; s += v * v; }
+    rms[i] = Math.sqrt(s / frame); if (rms[i] > peak) peak = rms[i];
+  }
+  const dur = audio.length / SR;
+  const smooth = (i) => { let s = 0, c = 0; for (let k = i - 7; k <= i + 7; k++) if (k >= 0 && k < n) { s += rms[k]; c++; } return s / c; };
+  const wins = [];
+  let pos = 0;
+  while (pos < dur - 0.3) {
+    let end;
+    if (dur - pos <= 30) end = dur;
+    else {
+      let best = Infinity, bi = Math.floor((pos + 29) / 0.02);
+      for (let i = Math.floor((pos + 18) / 0.02); i < Math.floor((pos + 29.5) / 0.02); i++) {
+        const v = smooth(i); if (v < best) { best = v; bi = i; }
+      }
+      end = bi * 0.02;
+    }
+    let mx = 0;
+    for (let i = Math.floor(pos / 0.02); i < Math.min(n, Math.floor(end / 0.02)); i++) mx = Math.max(mx, rms[i]);
+    if (mx > Math.max(0.004, peak * 0.03)) wins.push([pos, end]);
+    pos = end;
+  }
+  return wins;
+}
+
+// Break long segments into readable subtitle lines, timed by character share.
+function splitLong(seg, maxChars) {
+  const words = seg.text.split(/\s+/).filter(Boolean);
+  if (seg.text.length <= maxChars) return [seg];
+  const parts = []; let cur = '';
+  for (const w of words) {
+    const t = cur ? cur + ' ' + w : w;
+    if (t.length > maxChars && cur) { parts.push(cur); cur = w; } else cur = t;
+  }
+  if (cur) parts.push(cur);
+  // avoid a tiny orphan at the end
+  if (parts.length > 1 && parts[parts.length - 1].length < maxChars * 0.25) {
+    const last = parts.pop(); parts[parts.length - 1] += ' ' + last;
+  }
+  const total = parts.reduce((a, p) => a + p.length, 0), dur = seg.end - seg.start;
+  let t = seg.start;
+  return parts.map(p => { const d = dur * p.length / total; const c = { start: t, end: t + d, text: p }; t += d; return c; });
+}
+
+let genRunning = false;
+$('genBtn').onclick = async () => {
+  if (!file || genRunning) return;
+  if (cues.length && !$('genBtn').dataset.confirm) {
+    $('genBtn').dataset.confirm = '1'; $('genBtn').textContent = 'Bấm lần nữa: thay phụ đề hiện có';
+    setTimeout(() => { delete $('genBtn').dataset.confirm; $('genBtn').textContent = 'Tạo phụ đề'; }, 4000);
+    return;
+  }
+  delete $('genBtn').dataset.confirm; $('genBtn').textContent = 'Tạo phụ đề';
+  genRunning = true;
+  $('genBtn').disabled = true; $('stopGen').hidden = false; $('genProg').hidden = false;
+  const bar = $('genBar'), msg = $('genMsg');
+  msg.classList.remove('err');
+  const setP = (p, m) => { bar.style.width = (p * 100).toFixed(1) + '%'; if (m) msg.textContent = m; };
+  setP(0, 'Đang tách âm thanh từ video…');
+  let audio;
+  try { audio = await decodeAudio(file); }
+  catch (err) { fail('Không đọc được âm thanh của video này. Thử đổi sang file MP4 hoặc kiểm tra video có tiếng.'); return; }
+  const wins = planWindows(audio);
+  if (!wins.length) { fail('Không phát hiện giọng nói trong video.'); return; }
+  const maxChars = Math.max(15, +$('maxChars').value || 42);
+  const device = navigator.gpu ? 'webgpu' : 'wasm';
+  cues = []; render();
+  const w = getWorker();
+  const files = {};
+  const t0 = performance.now();
+  let tReady = 0;
+  w.onmessage = (e) => {
+    const d = e.data;
+    if (d.type === 'dl') {
+      const p = d.p;
+      if (p.status === 'progress' && p.total) {
+        files[p.file] = [p.loaded, p.total];
+        const vals = Object.values(files), L = vals.reduce((a, v) => a + v[0], 0), T = vals.reduce((a, v) => a + v[1], 0);
+        setP(L / T, `Đang tải mô hình AI (chỉ lần đầu)… ${(L / 1048576).toFixed(0)} / ${(T / 1048576).toFixed(0)} MB`);
+      } else if (p.status === 'initiate' && !Object.keys(files).length) setP(0, 'Đang chuẩn bị mô hình AI…');
+    } else if (d.type === 'status') { msg.textContent = d.msg; }
+    else if (d.type === 'ready') { tReady = performance.now(); setP(0, `Đang nghe và ghi lời… (${d.device === 'webgpu' ? 'GPU' : 'CPU'})`); }
+    else if (d.type === 'chunk') {
+      for (const c of d.chunks) for (const s of splitLong(c, maxChars)) cues.push({ id: nextId++, ...s });
+      render();
+      const done = d.i + 1, el = (performance.now() - tReady) / 1000;
+      const eta = el / done * (d.n - done);
+      setP(done / d.n, `Đang nghe và ghi lời… ${done}/${d.n} đoạn · còn khoảng ${Math.ceil(eta)}s`);
+    } else if (d.type === 'done') {
+      finish(); setP(1, `Xong! ${cues.length} câu phụ đề trong ${Math.round((performance.now() - t0) / 1000)}s. Kiểm tra và sửa lại ở danh sách bên phải nếu cần.`);
+    } else if (d.type === 'error') {
+      fail('Lỗi AI: ' + d.msg + '. Thử chọn chất lượng “Nhanh” hoặc tải lại trang.');
+    }
+  };
+  w.onerror = (e) => fail('Không khởi chạy được AI (' + (e.message || 'lỗi tải thư viện') + '). Kiểm tra kết nối mạng rồi thử lại.');
+  w.postMessage({ model: $('model').value, language: $('lang').value, task: $('task').value, windows: wins, audio, device });
+};
+function finish() { genRunning = false; $('genBtn').disabled = !file; $('stopGen').hidden = true; updateButtons(); }
+function fail(m) { finish(); $('genMsg').textContent = m; $('genMsg').classList.add('err'); }
+$('stopGen').onclick = () => {
+  if (worker) { worker.terminate(); worker = null; }
+  finish(); $('genMsg').textContent = `Đã dừng. Giữ lại ${cues.length} câu đã tạo.`;
+};
+
+/* ---------- burn-in export (canvas + MediaRecorder) ---------- */
+let exporting = false, cancelExport = null;
+function pickMime() {
+  const c = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  return c.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
+}
+$('exportVideo').onclick = async () => {
+  if (!file || !cues.length || exporting) return;
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) { toast('Trình duyệt này không hỗ trợ xuất video. Hãy dùng Chrome hoặc Edge.'); return; }
+  await document.fonts.load(`${style.weight} 40px "${style.font}"`).catch(() => {});
+  exporting = true; updateButtons();
+  video.pause();
+  $('cancelExport').hidden = false; $('expProg').hidden = false; $('outLink').innerHTML = '';
+  const bar = $('expBar'), msg = $('expMsg');
+  msg.classList.remove('err');
+  const v = document.createElement('video');
+  v.src = fileURL; v.playsInline = true; v.preload = 'auto';
+  await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('load')); });
+  const W = v.videoWidth || 1280, H = v.videoHeight || 720;
+  const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const stream = canvas.captureStream(30);
+  let actx = null;
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = actx.createMediaElementSource(v);
+    const dest = actx.createMediaStreamDestination();
+    src.connect(dest);
+    dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+  } catch { /* video without audio */ }
+  const mime = pickMime();
+  const bps = Math.min(16e6, Math.max(3e6, W * H * 30 * 0.12));
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: bps } : { videoBitsPerSecond: bps });
+  const parts = [];
+  rec.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
+  let cancelled = false, raf = 0;
+  const draw = () => {
+    ctx.drawImage(v, 0, 0, W, H);
+    const i = cueAt(v.currentTime);
+    if (i >= 0) drawSub(ctx, cues[i].text, W, H);
+    bar.style.width = (v.currentTime / v.duration * 100).toFixed(1) + '%';
+    msg.textContent = `Đang xuất… ${fmtShort(v.currentTime)} / ${fmtShort(v.duration)}`;
+  };
+  const tick = () => { draw(); if (!v.ended && !cancelled) schedule(); };
+  const schedule = () => { if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(tick); else raf = requestAnimationFrame(tick); };
+  const stopped = new Promise(res => (rec.onstop = res));
+  cancelExport = () => { cancelled = true; v.pause(); if (rec.state !== 'inactive') rec.stop(); };
+  v.onended = () => { draw(); setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, 250); };
+  v.currentTime = 0;
+  draw();
+  rec.start(1000);
+  if (actx && actx.state === 'suspended') await actx.resume();
+  try { await v.play(); } catch (err) { cancelExport(); }
+  schedule();
+  await stopped;
+  cancelAnimationFrame(raf);
+  actx?.close?.();
+  stream.getTracks().forEach(t => t.stop());
+  exporting = false; cancelExport = null; $('cancelExport').hidden = true; updateButtons();
+  if (cancelled) { msg.textContent = 'Đã huỷ xuất video.'; bar.style.width = '0'; return; }
+  const type = rec.mimeType || mime || 'video/webm';
+  const ext = type.includes('mp4') ? 'mp4' : 'webm';
+  const blob = new Blob(parts, { type: type.split(';')[0] });
+  const name = `${baseName()}-sub.${ext}`;
+  bar.style.width = '100%';
+  msg.textContent = `Xong! ${name} · ${(blob.size / 1048576).toFixed(1)} MB`;
+  const a = document.createElement('a');
+  a.className = 'btn primary'; a.href = URL.createObjectURL(blob); a.download = name; a.textContent = 'Tải video về máy';
+  $('outLink').innerHTML = ''; $('outLink').appendChild(a);
+  a.click();
+};
+$('cancelExport').onclick = () => cancelExport && cancelExport();
+document.addEventListener('visibilitychange', () => { if (exporting && document.hidden) toast('Đang xuất video: giữ tab này mở để không bị gián đoạn', 4000); });
+
+/* ---------- keyboard ---------- */
+document.addEventListener('keydown', (e) => {
+  if (e.target.closest('input, textarea, select')) return;
+  if (e.code === 'Space' && video.src) { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+});
+
+render();
+// expose for debugging
+window.__nuyen = { get cues() { return cues; }, set cues(v) { cues = v; render(); }, parseSubs, toSRT, planWindows, splitLong };
+})();
+</script>
+</body>
+</html>
