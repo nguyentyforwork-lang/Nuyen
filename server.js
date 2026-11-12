@@ -322,6 +322,22 @@ function mockVideo(job, video, out) {
 
 // ---------- HTTP ----------
 const app = express();
+app.set('trust proxy', true);
+
+// Bảo vệ bằng mật khẩu khi deploy công khai (đặt APP_PASSWORD). Tên đăng nhập bất kỳ.
+const APP_PASSWORD = process.env.APP_PASSWORD;
+if (APP_PASSWORD) {
+  app.use((req, res, next) => {
+    if (req.path === '/healthz') return next();
+    const [scheme, encoded] = (req.headers.authorization || '').split(' ');
+    const pass = scheme === 'Basic' && encoded ? Buffer.from(encoded, 'base64').toString().split(':').slice(1).join(':') : '';
+    const a = Buffer.from(pass), b = Buffer.from(APP_PASSWORD);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return next();
+    res.set('WWW-Authenticate', 'Basic realm="Nuyen Video Gen", charset="UTF-8"').status(401).send('Cần mật khẩu');
+  });
+}
+app.get('/healthz', (req, res) => res.send('ok'));
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 

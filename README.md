@@ -46,3 +46,17 @@ Video và trạng thái lưu trong thư mục `data/`.
 - Veo tạo clip tối đa ~8 giây; video gốc dài hơn sẽ được tóm thành 1 cảnh 8 giây.
 - Video tạo bằng text-to-video nên khớp concept chứ không giống từng khung hình gốc.
 - Một số prompt có thể bị bộ lọc an toàn của Google chặn (vd: trẻ em, người nổi tiếng) — sửa prompt rồi bấm "Tạo lại".
+
+## Deploy lên web (Render)
+
+Repo đã có sẵn `render.yaml`.
+
+1. Vào https://dashboard.render.com → **New** → **Blueprint**, kết nối GitHub và chọn repo này (chọn nhánh chứa code).
+2. Render hỏi 2 biến môi trường:
+   - `GEMINI_API_KEY`: key Gemini của bạn.
+   - `APP_PASSWORD`: mật khẩu vào web (trình duyệt sẽ hỏi; tên đăng nhập gõ gì cũng được).
+3. Bấm **Apply** → khoảng 2–3 phút sau bạn có link dạng `https://nuyen-video-gen.onrender.com`.
+
+Gói `starter` (~7 USD/tháng) kèm ổ đĩa 5 GB để giữ video qua các lần khởi động lại. Có thể đổi sang `free` trong `render.yaml` (bỏ phần `disk`), nhưng khi đó server ngủ sau 15 phút không dùng và video cũ sẽ mất (nhớ tải về ngay).
+
+Muốn host ở chỗ khác (Railway, Fly.io, VPS…) thì dùng `Dockerfile` có sẵn.

@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: nuyen-video-gen
+    runtime: node
+    plan: starter
+    buildCommand: npm ci
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: VEO_MODEL
+        value: veo-3.1-fast-generate-preview
+      - key: CONCURRENCY
+        value: "3"
+    disk:
+      name: data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 5
