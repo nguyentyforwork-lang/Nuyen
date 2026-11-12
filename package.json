@@ -1,0 +1,27 @@
+{
+  "name": "nuyen-video-gen",
+  "version": "1.0.0",
+  "description": "Upload 1 video -> 10 biến thể đổi nhân vật + Hero/Hook/Promise",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyentyforwork-lang/Nuyen.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nguyentyforwork-lang/Nuyen/issues"
+  },
+  "homepage": "https://github.com/nguyentyforwork-lang/Nuyen#readme",
+  "dependencies": {
+    "@google/genai": "^3.2.0",
+    "archiver": "^8.0.0",
+    "express": "^5.3.0",
+    "multer": "^2.5.0"
+  },
+  "type": "commonjs"
+}

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nuyen Video Gen</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Nuyen <span>Video Gen</span></div>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <main>
+    <!-- Bước 1: upload -->
+    <section id="uploadView" class="card">
+      <h1>Upload 1 video concept</h1>
+      <p class="muted">Hệ thống sẽ phân tích concept và tạo <b>10 video giữ nguyên concept, chỉ đổi nhân vật</b>, cùng <b>3 video Hook · Hero · Promise</b> riêng biệt.</p>
+
+      <form id="form">
+        <label class="drop" id="drop">
+          <input type="file" id="file" name="video" accept="video/*" hidden>
+          <div class="drop-empty" id="dropEmpty">
+            <div class="drop-icon">⬆</div>
+            <div><b>Kéo thả video vào đây</b> hoặc bấm để chọn</div>
+            <div class="muted small">MP4 / MOV / WEBM</div>
+          </div>
+          <video id="preview" class="hidden" muted playsinline controls></video>
+        </label>
+
+        <div class="row">
+          <div class="field">
+            <span>Tỉ lệ khung hình</span>
+            <div class="seg">
+              <label><input type="radio" name="aspectRatio" value="9:16" checked><span>9:16 dọc</span></label>
+              <label><input type="radio" name="aspectRatio" value="16:9"><span>16:9 ngang</span></label>
+            </div>
+          </div>
+          <label class="field grow">
+            <span>Gợi ý nhân vật (không bắt buộc)</span>
+            <input type="text" name="characterHint" placeholder="VD: người Việt Nam, 20–45 tuổi, cả nam và nữ">
+          </label>
+        </div>
+
+        <button type="submit" class="btn primary big" id="submit" disabled>Tạo 13 video</button>
+        <p class="error" id="formError"></p>
+      </form>
+
+      <div id="history"></div>
+    </section>
+
+    <!-- Bước 2: kết quả -->
+    <section id="jobView" class="hidden">
+      <div class="job-head card">
+        <video id="inputVideo" muted playsinline controls></video>
+        <div class="job-info">
+          <div class="row between">
+            <h2>Concept</h2>
+            <button class="btn ghost" id="newJob">+ Video mới</button>
+          </div>
+          <div id="statusLine" class="status-line"></div>
+          <p id="concept" class="concept"></p>
+          <div class="progress"><div id="progressBar"></div></div>
+        </div>
+      </div>
+
+      <div class="group-head">
+        <h2>10 video · đổi nhân vật</h2>
+        <a class="btn" id="zipVariants">⬇ Tải tất cả (.zip)</a>
+      </div>
+      <div class="grid" id="variants"></div>
+
+      <div class="group-head">
+        <h2>Hook · Hero · Promise</h2>
+        <a class="btn" id="zipStructure">⬇ Tải 3 video (.zip)</a>
+      </div>
+      <div class="grid three" id="structure"></div>
+    </section>
+  </main>
+
+  <template id="cardTpl">
+    <article class="vcard">
+      <div class="vbox"><div class="vstate"></div></div>
+      <div class="vbody">
+        <div class="vtitle"></div>
+        <div class="vsub muted small"></div>
+        <details>
+          <summary class="small">Prompt</summary>
+          <textarea class="vprompt" rows="6"></textarea>
+        </details>
+        <div class="verror error small"></div>
+        <div class="vactions">
+          <a class="btn primary dl">⬇ Download</a>
+          <button class="btn ghost retry">↻ Tạo lại</button>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
