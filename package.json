@@ -1,0 +1,26 @@
+{
+  "name": "faceswap-studio",
+  "version": "1.0.0",
+  "description": "Upload video, thay mặt bằng mặt AI tạo từ prompt",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyentyforwork-lang/Nuyen.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nguyentyforwork-lang/Nuyen/issues"
+  },
+  "homepage": "https://github.com/nguyentyforwork-lang/Nuyen#readme",
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "express": "^4.22.3",
+    "multer": "^1.4.4"
+  },
+  "type": "module"
+}

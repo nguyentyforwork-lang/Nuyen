@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Face Swap Studio</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+    --line: #e3e2dc; --accent: #2f5bea; --accent-text: #fff; --ok: #1f8a4c; --err: #c23b2e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413; --card: #1e1e1c; --text: #ecebe6; --muted: #9c9b94;
+      --line: #33332f; --accent: #6d8dff; --accent-text: #0d0d0c; --ok: #4cc47e; --err: #ff7a6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 16px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .banner { background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid var(--line);
+    padding: 10px 14px; border-radius: 10px; margin-bottom: 18px; font-size: 14px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+    display: flex; flex-direction: column; gap: 12px; }
+  .card h2 { font-size: 16px; margin: 0; display: flex; gap: 8px; align-items: center; }
+  .step { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--accent-text);
+    display: inline-grid; place-items: center; font-size: 13px; }
+  .drop { border: 2px dashed var(--line); border-radius: 12px; padding: 22px; text-align: center;
+    color: var(--muted); cursor: pointer; }
+  .drop.over { border-color: var(--accent); color: var(--text); }
+  .media { width: 100%; aspect-ratio: 9/12; object-fit: contain; background: #000; border-radius: 10px; display: none; }
+  .media.show { display: block; }
+  textarea { width: 100%; min-height: 110px; resize: vertical; padding: 10px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line);
+    background: transparent; color: var(--text); cursor: pointer; }
+  .chip:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-text); border: 0; border-radius: 10px;
+    padding: 11px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.primary:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 12px; font: inherit; cursor: pointer; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .status { font-size: 14px; min-height: 20px; }
+  .status.err { color: var(--err); } .status.ok { color: var(--ok); }
+  .history { display: flex; gap: 6px; flex-wrap: wrap; }
+  .history img { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; cursor: pointer; border: 2px solid transparent; }
+  .history img.sel { border-color: var(--accent); }
+  details { font-size: 13px; color: var(--muted); }
+  pre { white-space: pre-wrap; font-size: 12px; margin: 6px 0 0; }
+  label.consent { font-size: 13px; display: flex; gap: 8px; align-items: flex-start; }
+  a.dl { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Face Swap Studio</h1>
+  <p class="sub">Tải video lên → viết prompt tạo khuôn mặt AI (sửa thoải mái) → ghép mặt AI vào video.</p>
+  <div id="demo" class="banner" hidden>
+    Đang chạy <b>chế độ DEMO</b> (chưa có <code>REPLICATE_API_TOKEN</code>): ảnh mặt là ảnh mẫu và video trả về là video gốc. Thêm token vào file <code>.env</code> để chạy AI thật.
+  </div>
+
+  <div class="grid">
+    <!-- Bước 1 -->
+    <section class="card">
+      <h2><span class="step">1</span> Video gốc</h2>
+      <div id="drop" class="drop">Kéo thả video vào đây hoặc bấm để chọn<br><span class="muted">MP4 / MOV / WEBM, tối đa 200MB</span></div>
+      <input id="videoInput" type="file" accept="video/*" hidden>
+      <video id="videoPreview" class="media" controls playsinline></video>
+      <div class="muted" id="videoInfo"></div>
+    </section>
+
+    <!-- Bước 2 -->
+    <section class="card">
+      <h2><span class="step">2</span> Mặt AI</h2>
+      <textarea id="prompt">Vietnamese woman, around 25 years old, long black hair, friendly natural smile, light makeup</textarea>
+      <div class="chips" id="chips"></div>
+      <div class="row">
+        <button class="primary" id="genFace">Tạo mặt AI</button>
+        <button class="ghost" id="uploadFaceBtn">Hoặc tải ảnh mặt</button>
+        <input id="faceInput" type="file" accept="image/*" hidden>
+      </div>
+      <img id="facePreview" class="media" alt="Mặt AI" style="aspect-ratio:1/1">
+      <div class="history" id="history"></div>
+      <div class="status" id="faceStatus"></div>
+      <details><summary>Prompt đầy đủ gửi cho AI</summary><pre id="fullPrompt"></pre></details>
+    </section>
+
+    <!-- Bước 3 -->
+    <section class="card">
+      <h2><span class="step">3</span> Kết quả</h2>
+      <label class="consent"><input type="checkbox" id="consent">
+        <span>Tôi có quyền dùng video này và sẽ ghi rõ nội dung được tạo bằng AI khi đăng tải. Không dùng để mạo danh người thật.</span></label>
+      <button class="primary" id="swap" disabled>Ghép mặt vào video</button>
+      <div class="status" id="swapStatus"></div>
+      <video id="result" class="media" controls playsinline></video>
+      <a id="download" class="dl" hidden download="faceswap.mp4">Tải video về</a>
+      <details id="logsBox" hidden><summary>Log xử lý</summary><pre id="logs"></pre></details>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const state = { video: null, faceUrl: null, faceFile: null };
+
+const CHIPS = [
+  'nam giới 30 tuổi', 'tóc ngắn', 'đeo kính', 'da rám nắng', 'cười tươi',
+  'trang điểm nhẹ', 'tóc xoăn', 'râu quai nón', 'phong cách Hàn Quốc', 'người châu Âu',
+];
+const CHIP_EN = {
+  'nam giới 30 tuổi': 'man around 30 years old', 'tóc ngắn': 'short hair', 'đeo kính': 'wearing glasses',
+  'da rám nắng': 'tanned skin', 'cười tươi': 'big bright smile', 'trang điểm nhẹ': 'light natural makeup',
+  'tóc xoăn': 'curly hair', 'râu quai nón': 'full beard', 'phong cách Hàn Quốc': 'Korean style look',
+  'người châu Âu': 'European',
+};
+for (const c of CHIPS) {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = '+ ' + c;
+  b.onclick = () => { const t = $('prompt'); t.value = t.value.trim().replace(/,?$/, ', ') + CHIP_EN[c]; t.focus(); };
+  $('chips').appendChild(b);
+}
+
+fetch('/api/config').then(r => r.json()).then(c => { $('demo').hidden = !c.demo; });
+
+function setStatus(el, msg, kind = '') { el.textContent = msg; el.className = 'status ' + kind; }
+function refreshSwap() { $('swap').disabled = !(state.video && (state.faceUrl || state.faceFile) && $('consent').checked); }
+$('consent').onchange = refreshSwap;
+
+// ---- Video ----
+const drop = $('drop');
+drop.onclick = () => $('videoInput').click();
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); setVideo(e.dataTransfer.files[0]); };
+$('videoInput').onchange = (e) => setVideo(e.target.files[0]);
+function setVideo(file) {
+  if (!file || !file.type.startsWith('video/')) return alert('Vui lòng chọn file video.');
+  state.video = file;
+  const v = $('videoPreview'); v.src = URL.createObjectURL(file); v.classList.add('show');
+  $('videoInfo').textContent = `${file.name} · ${(file.size / 1048576).toFixed(1)} MB`;
+  refreshSwap();
+}
+
+// ---- Face ----
+function selectFace(url, file = null) {
+  state.faceUrl = file ? null : url; state.faceFile = file;
+  const img = $('facePreview'); img.src = url; img.classList.add('show');
+  document.querySelectorAll('#history img').forEach(i => i.classList.toggle('sel', i.dataset.url === url));
+  refreshSwap();
+}
+function addHistory(url, file = null) {
+  const img = document.createElement('img'); img.src = url; img.dataset.url = url;
+  img.title = 'Chọn mặt này'; img.onclick = () => selectFace(url, file);
+  $('history').prepend(img);
+}
+$('genFace').onclick = async () => {
+  const prompt = $('prompt').value.trim();
+  if (!prompt) return setStatus($('faceStatus'), 'Hãy nhập prompt.', 'err');
+  $('genFace').disabled = true; setStatus($('faceStatus'), 'Đang tạo mặt AI…');
+  try {
+    const r = await fetch('/api/face', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error);
+    $('fullPrompt').textContent = d.fullPrompt;
+    addHistory(d.url); selectFace(d.url);
+    setStatus($('faceStatus'), 'Xong. Chưa ưng thì sửa prompt rồi bấm tạo lại.', 'ok');
+  } catch (e) { setStatus($('faceStatus'), 'Lỗi: ' + e.message, 'err'); }
+  $('genFace').disabled = false;
+};
+$('uploadFaceBtn').onclick = () => $('faceInput').click();
+$('faceInput').onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const url = URL.createObjectURL(f); addHistory(url, f); selectFace(url, f);
+  setStatus($('faceStatus'), 'Đã dùng ảnh mặt của bạn.', 'ok');
+};
+
+// ---- Swap ----
+$('swap').onclick = async () => {
+  $('swap').disabled = true; $('download').hidden = true; $('result').classList.remove('show');
+  setStatus($('swapStatus'), 'Đang tải video lên…');
+  const fd = new FormData();
+  fd.append('video', state.video);
+  if (state.faceFile) fd.append('face', state.faceFile); else fd.append('faceUrl', state.faceUrl);
+  fd.append('consent', String($('consent').checked));
+  try {
+    const r = await fetch('/api/swap', { method: 'POST', body: fd });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error);
+    await poll(d.id);
+  } catch (e) { setStatus($('swapStatus'), 'Lỗi: ' + e.message, 'err'); }
+  refreshSwap();
+};
+async function poll(id) {
+  const t0 = Date.now();
+  while (true) {
+    const r = await fetch('/api/swap/' + encodeURIComponent(id));
+    const d = await r.json(); if (!r.ok) throw new Error(d.error);
+    if (d.logs) { $('logsBox').hidden = false; $('logs').textContent = d.logs; }
+    if (d.status === 'succeeded') {
+      const v = $('result'); v.src = d.output; v.classList.add('show');
+      $('download').href = d.output; $('download').hidden = false;
+      return setStatus($('swapStatus'), 'Hoàn tất!', 'ok');
+    }
+    if (d.status === 'failed' || d.status === 'canceled') throw new Error(d.error || d.status);
+    setStatus($('swapStatus'), `Đang ghép mặt… (${Math.round((Date.now() - t0) / 1000)}s) — video dài sẽ mất vài phút`);
+    await new Promise(r => setTimeout(r, 3000));
+  }
+}
+</script>
+</body>
+</html>
