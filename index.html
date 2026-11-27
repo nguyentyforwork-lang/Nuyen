@@ -398,6 +398,7 @@
   .tabs .tab-add { font-weight: 500; font-size: 14px; color: var(--camp-text); }
   .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
   .save-state { font-size: 13px; color: var(--muted); }
+  .net-state { font-size: 13px; font-weight: 600; color: var(--warn-text); background: var(--warn-bg); border-radius: 8px; padding: 4px 10px; }
   .save-state.saved { color: var(--up); }
   .save-state.error { color: var(--down); font-weight: 600; }
   .acc-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -466,6 +467,7 @@
     </div>
     <span class="range-label" id="rangeLabel"></span>
     <span class="spacer"></span>
+    <span class="net-state" id="netState" role="status" hidden></span>
     <span class="save-state" id="saveState" role="status"></span>
     <button class="tb edit-only" data-act="save" id="saveBtn">Lưu</button>
     <button class="tb" data-act="refresh" id="refreshBtn">Làm mới</button>
@@ -755,40 +757,49 @@ const ERR_TEXT = {
   blocked_by_policy: `Tổ chức của bạn đang chặn ${SERVER} cho trang này.`,
   approval_required: `Tổ chức yêu cầu duyệt từng lần gọi ${SERVER}, trang này chưa hỗ trợ.`,
   server_unavailable: "TikTok không phản hồi. Đợi một lát rồi bấm Làm mới.",
-  tt_rate_limited: "TikTok đang giới hạn số lần gọi (rate limit). Đợi 1–2 phút rồi bấm Làm mới.",
+  tt_rate_limited: "TikTok đang giới hạn số lần gọi (rate limit). Trang sẽ tự kéo lại sau 1 phút.",
   rate_limited: "Trang gọi TikTok quá nhanh. Đợi 1 phút rồi bấm Làm mới.",
 };
 const PAGE_LEVEL = new Set(["server_not_connected", "needs_reauth", "selection_required", "not_in_manifest", "consent_required", "blocked_by_policy", "approval_required"]);
 const errText = e => ERR_TEXT[e?.code] || e?.message || "Không kéo được số liệu.";
 
-// Hàng đợi: TikTok giới hạn số request/giây → tối đa 2 request cùng lúc, mỗi request bắt đầu cách nhau ≥ 300 ms.
-// Gặp rate limit thì tt() tự chờ rồi gọi lại.
-const Q = { active: 0, next: 0, waiters: [] };
-const Q_MAX = 2, Q_GAP = 300;
+// Hàng đợi tự điều tốc: bình thường 2 request cùng lúc, cách nhau ≥ 300 ms. Gặp rate limit → chậm lại
+// (1 request, cách nhau 1.5 s) trong 2 phút rồi tự nhanh lại. tt() tự chờ và gọi lại, không báo lỗi ngay.
+const Q = { active: 0, next: 0, waiters: [], max: 2, gap: 300, slowUntil: 0 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+function slowDown(waitMs) {
+  Q.max = 1; Q.gap = 1500; Q.slowUntil = Date.now() + 120000;
+  Q.next = Math.max(Q.next, Date.now() + waitMs);
+  setNet(`TikTok đang giới hạn tốc độ · trang tự chậm lại và thử lại sau ${Math.round(waitMs / 1000)}s`);
+}
 async function acquireSlot() {
-  while (Q.active >= Q_MAX) await new Promise(r => Q.waiters.push(r));
+  if (Q.slowUntil && Date.now() > Q.slowUntil) { Q.max = 2; Q.gap = 300; Q.slowUntil = 0; setNet(""); }
+  while (Q.active >= Q.max) await new Promise(r => Q.waiters.push(r));
   Q.active++;
   const now = Date.now(), at = Math.max(now, Q.next);
-  Q.next = at + Q_GAP;
+  Q.next = at + Q.gap;
   if (at > now) await sleep(at - now);
 }
 function releaseSlot() { Q.active--; const w = Q.waiters.shift(); if (w) w(); }
+function setNet(text) { const el = document.getElementById("netState"); if (el) { el.textContent = text; el.hidden = !text; } }
 const RATE_RE = /rate.?limit|too many|too frequent|frequently|qps|exceed/i;
 const RATE_CODES = new Set([40100, 40133, 50002]);
 
+const RATE_TRIES = 6;   // ~3 + 6 + 12 + 24 + 30 s chờ tối đa trước khi chịu thua
 async function tt(tool, input, refresh) {
-  // Khoảng ngày có hôm nay: số còn chạy → chỉ dùng lại trong 1 phút; ngày cũ: 5 phút
+  // Report có hôm nay (số còn chạy): dùng lại trong 1 phút; ngày cũ, danh sách camp, ad group, tên tài khoản:
+  // 5 phút (tối đa cho phép) → làm mới tự động không gọi lại những thứ ít đổi
   const live = (range?.end || "") >= ymd(addDays(new Date(), -1));
-  const opts = { cache: { staleTime: live ? 60000 : 300000, gcTime: 3600000, refresh: !!refresh } };
+  const fresh = tool === "report_integrated_get" && live ? 60000 : 300000;
+  const opts = { cache: { staleTime: fresh, gcTime: 3600000, refresh: !!refresh } };
   for (let attempt = 0; ; attempt++) {
-    const backoff = () => sleep(Math.min(16000, 2000 * 2 ** attempt) + Math.random() * 1000);
+    const wait = () => Math.min(30000, 3000 * 2 ** attempt) + Math.random() * 1500;
     await acquireSlot();
     let res, err;
     try { res = await mcp.callTool(SERVER, tool, input, opts); } catch (e) { err = e; } finally { releaseSlot(); }
     if (err) {
       const limited = err.code === "rate_limited" || (err.code === "tool_error" && RATE_RE.test(err.message || ""));
-      if (limited && attempt < 3) { await (err.retryAfterMs ? sleep(Math.min(err.retryAfterMs, 30000)) : backoff()); continue; }
+      if (limited && attempt < RATE_TRIES) { const w = err.retryAfterMs ? Math.min(err.retryAfterMs, 30000) : wait(); slowDown(w); await sleep(w); continue; }
       if (limited) throw { code: "tt_rate_limited", message: err.message };
       if (err.retryable && attempt < 1) { await sleep(Math.min(err.retryAfterMs || 0, 10000) + 800 + Math.random() * 1200); continue; }
       throw err;
@@ -798,7 +809,7 @@ async function tt(tool, input, refresh) {
     if (!p || typeof p !== "object") throw { code: "bad_payload", message: "TikTok trả về dữ liệu không đọc được." };
     if (p.code !== undefined && Number(p.code) !== 0) {
       const limited = RATE_CODES.has(Number(p.code)) || RATE_RE.test(p.message || "");
-      if (limited && attempt < 3) { refresh = true; await backoff(); continue; }
+      if (limited && attempt < RATE_TRIES) { opts.cache.refresh = true; const w = wait(); slowDown(w); await sleep(w); continue; }
       if (limited) throw { code: "tt_rate_limited", message: p.message };
       throw { code: "api_error", message: `TikTok: ${p.message || "lỗi " + p.code}` };
     }
@@ -863,12 +874,12 @@ async function fetchAccount(acc, kw, win, refresh) {
   // sót dòng khi số đang chạy. Report theo ngày (nhiều trang) chỉ dùng cho biểu đồ / bảng theo ngày / max budget.
   const [cur, prev, trend, camps] = await Promise.all([
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end, order_field: "spend" }, refresh),
-    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end, order_field: "spend" }, refresh),
+    prevCovered(win) ? null : allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end, order_field: "spend" }, refresh),
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end, order_field: "spend" }, refresh),
     campaignList(acc, kw, refresh),
   ]);
   return {
-    cur: cur.rows, prev: prev.rows,
+    cur: cur.rows, prev: prev ? prev.rows : prevFromTrend(trend.rows, win),
     trend: trend.rows, camps: camps.rows, storedAt: cur.storedAt, curRange: { ...win.cur },
   };
 }
@@ -882,7 +893,7 @@ async function fetchBatch(accs, kw, win, refresh) {
   const base = { advertiser_ids: accs, report_type: "BASIC", data_level: "AUCTION_CAMPAIGN", filtering, order_field: "spend" };
   const [cur, prev, trend, ...camps] = await Promise.all([
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.cur.start, end_date: win.cur.end }, refresh),
-    allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end }, refresh),
+    prevCovered(win) ? null : allPages("report_integrated_get", { ...base, dimensions: ["campaign_id"], metrics: ["campaign_name", "spend"], start_date: win.prev.start, end_date: win.prev.end }, refresh),
     allPages("report_integrated_get", { ...base, dimensions: ["campaign_id", "stat_time_day"], metrics: ["campaign_name", "spend", M_IAA], start_date: win.trend.start, end_date: win.trend.end }, refresh),
     ...accs.map(acc => campaignList(acc, kw, refresh)),
   ]);
@@ -891,11 +902,14 @@ async function fetchBatch(accs, kw, win, refresh) {
     for (const r of rows) by.get(String(r.metrics?.advertiser_id || ""))?.push(r);
     return by;
   };
-  const c = split(cur.rows), p = split(prev.rows), t = split(trend.rows);
+  const c = split(cur.rows), t = split(trend.rows), p = prev ? split(prev.rows) : null;
   return new Map(accs.map((acc, i) => [acc, {
-    cur: c.get(acc), prev: p.get(acc), trend: t.get(acc), camps: camps[i].rows, storedAt: cur.storedAt, curRange: { ...win.cur },
+    cur: c.get(acc), prev: p ? p.get(acc) : prevFromTrend(t.get(acc), win), trend: t.get(acc), camps: camps[i].rows, storedAt: cur.storedAt, curRange: { ...win.cur },
   }]));
 }
+// Kỳ trước nằm trọn trong report theo ngày (khi xem ≤ 15 ngày) → lấy spend kỳ trước từ đó, khỏi gọi thêm report
+const prevCovered = win => win.trend.start <= win.prev.start && win.trend.end >= win.prev.end;
+const prevFromTrend = (rows, win) => (rows || []).filter(r => { const d = String(r.dimensions?.stat_time_day || "").slice(0, 10); return d >= win.prev.start && d <= win.prev.end; });
 function campaignList(acc, kw, refresh) {
   return allPages("campaign_get", { advertiser_id: acc, ...(kw ? { filtering: { campaign_name: kw } } : {}), fields: ["campaign_id", "campaign_name", "budget", "budget_mode", "operation_status", "roas_bid", "create_time", "campaign_type", "is_advanced_dedicated_campaign", "disable_skan_campaign"] }, refresh)
     .catch(() => ({ rows: [] })); // ngân sách là phụ: lỗi thì hiện spend TB/ngày
@@ -1099,6 +1113,8 @@ async function loadAll(refresh = false, silent = false) {
     results[gi] = res;
     rebuild(gi);
     render();
+    // Còn tài khoản lỗi vì rate limit → 1 phút sau tự kéo lại (giữ số đã có)
+    if (res.errors.some(e => e.err?.code === "tt_rate_limited")) setTimeout(() => { if (view === "groups" && activeTab === gi) loadAll(false, true); }, 60000);
     if (campDlg.open && campView) { renderCamps(); loadCampGeo(campView.acc); loadCampSetup(campView.acc); }
   } finally {
     if (prevRes) prevRes.updating = false;
@@ -1106,16 +1122,17 @@ async function loadAll(refresh = false, silent = false) {
   }
 }
 
-// Tự cập nhật khi khoảng ngày có hôm nay (số còn chạy): 3 phút/lần, chỉ khi tab đang mở
-const AUTO_MS = 180000;
+// Tự cập nhật khi khoảng ngày có hôm nay (số còn chạy): 3 phút/lần, chỉ khi tab đang mở. Không ép gọi lại:
+// report hôm nay hết hạn sau 1 phút nên vẫn mới; danh sách camp dùng lại trong 5 phút. Tab Camp mới: 10 phút/lần.
+const AUTO_MS = 180000, NC_AUTO_MS = 600000;
 const isLive = () => (range?.end || "") >= ymd(addDays(new Date(), -1));
 function autoRefresh() {
   if (document.hidden) return;
-  if (view === "newcamps") { if (!nc.loading && Date.now() - (nc.loadedAt || 0) >= AUTO_MS - 5000) loadNewCamps(true, true); return; }
+  if (view === "newcamps") { if (!nc.loading && Date.now() - (nc.loadedAt || 0) >= NC_AUTO_MS - 5000) loadNewCamps(false, true); return; }
   if (!isLive()) return;
   const r = results[activeTab];
   if (!r || r.status !== "ok" || r.progress || Date.now() - (r.loadedAt || 0) < AUTO_MS - 5000) return;
-  loadAll(true, true);
+  loadAll(false, true);
 }
 setInterval(autoRefresh, 30000);
 document.addEventListener("visibilitychange", autoRefresh);
